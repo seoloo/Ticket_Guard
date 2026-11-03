@@ -1,0 +1,26 @@
+{
+  "description": "지금과 24시간 넘게 차이 나는 시각 · 과거 · 미래",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now_minus_25_hours}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now_plus_25_hours}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    400,
+    400
+  ]
+}

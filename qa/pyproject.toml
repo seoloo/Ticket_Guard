@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ticket-guard-qa"
+version = "0.1.0"
+description = "티켓가드 자동화 QA · 시험 실행 · 정답표 · QA 대시보드"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx==0.28.1",
+    "pydantic-settings==2.6.1",
+    "SQLAlchemy==2.0.36",
+]
+
+[project.optional-dependencies]
+dashboard = [
+    "fastapi==0.115.6",
+    "uvicorn==0.34.0",
+    "jinja2==3.1.5",
+    "python-multipart==0.0.20",
+]
+load = ["locust==2.32.4"]
+browser = ["playwright==1.49.1"]
+live = ["pymongo==4.10.1", "confluent-kafka==2.6.1"]
+dev = ["pytest==8.3.4"]
+
+[project.scripts]
+ticket-guard-qa = "ticket_guard_qa.command_line:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ticket_guard_qa = ["dashboard/templates/*.html", "dashboard/static/css/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

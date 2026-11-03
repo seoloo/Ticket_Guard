@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block title %}02 시험 설정 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-title">시험 설정 <span class="muted">시험 설정 → 실행 → 결과</span></h1>
+{% if error_message %}<p class="error-notice">{{ error_message }}</p>{% endif %}
+{% if active_run_id %}
+<p class="notice">다른 시험이 실행 중이라 시작할 수 없어요: <a href="/runs/{{ active_run_id }}/live">{{ active_run_id }}</a></p>
+{% endif %}
+<form method="post" action="/runs" class="card is-qa">
+  <div class="form-row">
+    <label>시험 대상</label>
+    {% for target_kind in target_kinds %}
+    <label><input type="radio" name="target_kind" value="{{ target_kind.value }}" {{ 'checked' if loop.first }}> {{ target_kind.value }}</label>
+    {% endfor %}
+  </div>
+  <div class="form-row">
+    <label>시험 묶음</label>
+    {% for suite in suites %}
+    <label><input type="checkbox" name="suite_names" value="{{ suite.suite_name }}" {{ 'checked' if suite.suite_name == 'self_check' }}> {{ suite.title }} <span class="muted">{{ suite.suite_name }}</span></label>
+    {% endfor %}
+  </div>
+  <div class="form-row">
+    <label for="virtual_user_count">가상 사용자 수</label>
+    <input id="virtual_user_count" name="virtual_user_count" type="number" value="200" min="1">
+  </div>
+  <div class="form-row">
+    <label for="duration_sec">시험 시간 (초)</label>
+    <input id="duration_sec" name="duration_sec" type="number" value="300" min="10">
+  </div>
+  <!-- TODO(트래픽 생성기 구현 후): 트래픽 구성 · 오픈 몰림 · 결과 알림 -->
+  <button class="button is-qa" type="submit" {{ 'disabled' if active_run_id }}>시험 시작</button>
+</form>
+<h2>합격 기준 <span class="muted">읽기 전용 · 기획서 21쪽</span></h2>
+<table class="result-table">
+  <tr><th>기준</th><th>값</th></tr>
+  {% for criterion in pass_criteria %}
+  <tr><td>{{ criterion.title }}</td><td>{{ criterion.comparison.value }} {{ criterion.threshold }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

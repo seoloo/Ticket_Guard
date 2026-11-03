@@ -29,7 +29,7 @@
 | 카드 · 버튼 · 칩 | 흰 카드 둥글기 18px · 버튼 10px · 칩은 알약 모양 |
 | 봇 색 | 사람 `#3B7BF5` · A `#7C5CE0` · B `#A78BFA` · C `#0EA5A4` · D `#E5484D` · 새 유형 `#64748B` (주황은 DB 전용이라 봇에 쓰지 않음) |
 
-색 값은 `src/tgqa/web/static/css/tokens.css` 한 곳에만 두고, 화면에서는 변수로만 써요.
+색 값은 `src/ticket_guard_qa/dashboard/static/css/theme_tokens.css` 한 곳에만 두고, 화면에서는 변수로만 써요.
 
 ## 3. 화면 명세 (확정)
 

@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+{% block title %}04 결과 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-title">
+  통과한 합격 기준 {{ summary.passed_criteria_count }} / {{ criteria_total }}
+  <span class="status-pill is-{{ summary.status.value | lower }}">{{ summary.status.value }}</span>
+</h1>
+<p class="muted">{{ summary.run_id }} · 대상 {{ summary.run_config.target_kind.value }}</p>
+
+<h2>합격 기준</h2>
+<div class="card-grid">
+  {% for result in summary.criterion_results %}
+  <section class="card">
+    <h3>{{ title_by_criterion_id[result.criterion_id] }}</h3>
+    {% if result.is_passed is none %}
+    <span class="status-pill is-not-measured">측정 안 됨</span>
+    {% else %}
+    <p>{{ '%.2f' | format(result.measured_value) }}</p>
+    <span class="status-pill {{ 'is-passed' if result.is_passed else 'is-failed' }}">{{ '통과' if result.is_passed else '실패' }}</span>
+    {% if not result.is_passed %}<a class="button is-db" href="/db?run_id={{ summary.run_id }}">DB 대시보드에서 원인 보기</a>{% endif %}
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+
+<h2>시험 묶음</h2>
+<table class="result-table">
+  <tr><th>묶음</th><th>결과</th><th>메시지</th></tr>
+  {% for result in summary.suite_results %}
+  <tr>
+    <td>{{ result.suite_name }}</td>
+    <td><span class="status-pill is-{{ result.outcome.value | lower }}">{{ result.outcome.value }}</span></td>
+    <td class="muted">{{ result.message }}</td>
+  </tr>
+  {% endfor %}
+</table>
+<p>
+  <a class="button is-qa" href="/runs/new">설정 바꿔 다시 실행</a>
+  <a class="button is-plain" href="/runs/{{ summary.run_id }}/bots">봇별 보기</a>
+</p>
+<!-- TODO(판정 정확도 시험 동작 후): 정답과 다른 판정 목록 · 지난 실행과 비교 -->
+{% endblock %}

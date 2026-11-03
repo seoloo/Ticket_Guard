@@ -1,0 +1,16 @@
+{
+  "description": "eventId 없음 · 저장 0건",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    400
+  ]
+}

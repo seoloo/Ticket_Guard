@@ -1,0 +1,43 @@
+/* 화면 공통 배치 · 색 값은 theme_tokens.css 변수만 */
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-family); color: var(--text-color); background: var(--page-background); }
+a { color: inherit; }
+
+.top-bar { display: flex; align-items: center; gap: 24px; padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--line-color); }
+.brand { font-weight: 800; letter-spacing: -0.03em; }
+.main-tabs { display: flex; gap: 18px; }
+.main-tabs a { text-decoration: none; padding: 6px 2px; color: var(--muted-text-color); font-weight: 700; }
+.main-tabs a.is-active { color: var(--qa-blue-text); border-bottom: 3px solid var(--qa-blue); }
+.main-tabs a.is-active-db { color: var(--db-orange-text); border-bottom: 3px solid var(--db-orange); }
+.target-status { margin-left: auto; font-size: 13px; color: var(--muted-text-color); }
+
+.sub-tabs { display: flex; gap: 8px; padding: 12px 24px 0; }
+.sub-tabs a { text-decoration: none; padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--line-color); font-size: 14px; }
+.sub-tabs a.is-active { background: var(--qa-blue-light); color: var(--qa-blue-text); border-color: var(--qa-blue-light); }
+
+.page { max-width: 1200px; margin: 0 auto; padding: 20px 24px 40px; }
+.page-title { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin: 8px 0 16px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.card { background: #fff; border: 1px solid var(--line-color); border-radius: var(--card-radius); padding: 18px; }
+.card.is-qa { border-top: 4px solid var(--qa-blue); }
+.card.is-db { border-top: 4px solid var(--db-orange); }
+.muted { color: var(--muted-text-color); font-size: 14px; }
+
+.button { display: inline-block; border: 0; border-radius: var(--button-radius); padding: 10px 16px; font-weight: 700; cursor: pointer; text-decoration: none; }
+.button.is-qa { background: var(--qa-blue); color: #fff; }
+.button.is-db { background: var(--db-orange); color: #fff; }
+.button.is-plain { background: #fff; border: 1px solid var(--line-color); }
+
+.status-pill { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 700; }
+.status-pill.is-passed { background: #DCFCE7; color: var(--pass-green); }
+.status-pill.is-failed, .status-pill.is-error { background: #FEE2E2; color: var(--fail-red); }
+.status-pill.is-skipped, .status-pill.is-not-measured { background: var(--page-background); color: var(--muted-text-color); }
+
+.notice { background: var(--db-orange-light); color: var(--db-orange-text); border-radius: var(--button-radius); padding: 12px 14px; }
+.error-notice { background: #FEE2E2; color: var(--fail-red); border-radius: var(--button-radius); padding: 12px 14px; }
+table.result-table { width: 100%; border-collapse: collapse; background: #fff; }
+.result-table th, .result-table td { text-align: left; padding: 10px; border-bottom: 1px solid var(--line-color); font-size: 14px; }
+.form-row { margin-bottom: 14px; }
+.form-row label { font-weight: 700; display: block; margin-bottom: 6px; }
+.progress-log { list-style: none; padding: 0; margin: 0; }
+.progress-log li { padding: 8px 0; border-bottom: 1px solid var(--line-color); }

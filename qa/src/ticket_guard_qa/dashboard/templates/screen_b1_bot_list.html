@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %}B1 봇 목록 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-title">봇 목록 <span class="muted">우리 앱(웹 · API)에만 접속</span></h1>
+<div class="card-grid">
+  {% for profile in profiles %}
+  <section class="card" style="border-top: 4px solid var(--bot-{{ profile.actor_type.value | lower | replace('bot_', '') }})">
+    <h2>{{ profile.display_name }}</h2>
+    <p class="muted">{{ profile.tool_name }} · v{{ profile.version_number }}</p>
+    <p class="muted">진입 {{ profile.entry_delay_after_open_ms }}ms · 클릭 간격 {{ profile.click_interval_mean_ms }} ± {{ profile.click_interval_deviation_ms }}ms · 기기당 {{ profile.sessions_per_device }}세션</p>
+    {% if profile.is_locked %}
+    <span class="status-pill is-not-measured">평가 전용 · 잠김</span>
+    {% else %}
+    <a class="button is-plain" href="/bots/{{ profile.actor_type.value | lower }}/edit">설정</a>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

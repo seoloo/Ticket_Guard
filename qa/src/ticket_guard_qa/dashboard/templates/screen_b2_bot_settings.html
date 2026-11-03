@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %}B2 봇 설정 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-title">{{ profile.display_name }} 설정 <span class="muted">v{{ profile.version_number }}</span></h1>
+<div class="card-grid">
+  <section class="card is-qa">
+    <h2>행동</h2>
+    <p>① 진입 시점: 오픈 후 {{ profile.entry_delay_after_open_ms }}ms</p>
+    <p>② 클릭 간격: {{ profile.click_interval_mean_ms }} ± {{ profile.click_interval_deviation_ms }}ms</p>
+    <p>③ 화면 흐름 · ⑤ 좌석 없을 때: 준비 중</p>
+    <p>④ 기기당 세션: {{ profile.sessions_per_device }}</p>
+  </section>
+  <section class="card">
+    <h2>R1 ~ R6 예상 결과</h2>
+    <p class="muted">판정 규칙 정의 대기</p>
+  </section>
+</div>
+<!-- TODO(판정 규칙 확정 후): 편집 폼 · 가짜 대상 1세션 돌려보기 · 버전 저장 -->
+{% endblock %}

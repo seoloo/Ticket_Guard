@@ -1,0 +1,8 @@
+# 사례 형식 · 파일 이름: E??_무엇을_확인하는지.yaml
+related_code: E00          # E01 ~ E22 · T1 ~ T2
+title: 무엇을 확인하는지
+source: 기획서 ??쪽
+input:
+  description: 어떤 요청 · 상태에서
+expected:
+  description: 시스템이 어떻게 해야 하는지

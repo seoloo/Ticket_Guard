@@ -1,0 +1,17 @@
+{
+  "description": "없는 공연",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "no-such-show"
+    }
+  ],
+  "expected_status_codes": [
+    400
+  ]
+}

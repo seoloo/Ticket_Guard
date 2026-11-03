@@ -1,0 +1,16 @@
+{
+  "description": "pageInstanceId 없음",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    400
+  ]
+}

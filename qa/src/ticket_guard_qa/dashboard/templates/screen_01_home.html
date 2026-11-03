@@ -1,0 +1,34 @@
+{% extends "layout.html" %}
+{% block title %}01 홈 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-title">무엇을 확인할까요?</h1>
+{% if active_run_id %}
+<p class="notice">지금 실행 중: <a href="/runs/{{ active_run_id }}/live">{{ active_run_id }}</a></p>
+{% endif %}
+<div class="card-grid">
+  <section class="card is-qa">
+    <h2>시험하기</h2>
+    <p class="muted">시험 설정 → 실행 → 결과</p>
+    <a class="button is-qa" href="/runs/new">시험 설정으로</a>
+  </section>
+  <section class="card is-db">
+    <h2>확인하기</h2>
+    <p class="muted">정답과 다른 판정 → 세션 추적 → DB 기록</p>
+    <a class="button is-db" href="/db">DB 대시보드로</a>
+  </section>
+</div>
+<h2>이어서 하기</h2>
+<table class="result-table">
+  <tr><th>실행 번호</th><th>대상</th><th>결과</th><th>합격 기준</th></tr>
+  {% for summary in recent_summaries %}
+  <tr>
+    <td><a href="/runs/{{ summary.run_id }}">{{ summary.run_id }}</a></td>
+    <td>{{ summary.run_config.target_kind.value }}</td>
+    <td><span class="status-pill is-{{ summary.status.value | lower }}">{{ summary.status.value }}</span></td>
+    <td>{{ summary.passed_criteria_count }} / 7</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">아직 실행 기록이 없어요.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+{% block title %}03 실행 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-title">실행 중 <span class="muted">{{ run_id }}</span></h1>
+<section class="card is-qa">
+  <ul id="progress-log" class="progress-log"></ul>
+  <form method="post" action="/runs/{{ run_id }}/cancel">
+    <button class="button is-plain" type="submit">시험 중지</button>
+  </form>
+</section>
+<!-- TODO(실제 대상 연결 후): 실시간 수치 4개 · 예외 카드 -->
+<script>
+  const progressLog = document.getElementById("progress-log");
+  const progressEvents = new EventSource("/runs/{{ run_id }}/events");
+  progressEvents.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    const item = document.createElement("li");
+    item.textContent = message.text;
+    progressLog.appendChild(item);
+    if (message.is_finished) {
+      progressEvents.close();
+      window.location.href = "/runs/{{ run_id }}";  // 끝나면 04로 자동 이동
+    }
+  };
+</script>
+{% endblock %}

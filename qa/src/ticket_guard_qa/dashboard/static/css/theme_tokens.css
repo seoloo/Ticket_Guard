@@ -1,0 +1,31 @@
+/* 색 · 글꼴 · 모양 한 곳 · 화면에서는 변수만 사용 · docs/ui.md 2장 */
+:root {
+  --font-family: "Pretendard", system-ui, sans-serif;
+
+  --qa-blue: #1A56E8;
+  --qa-blue-dark: #1546C7;
+  --qa-blue-light: #E8F0FE;
+  --qa-blue-text: #1D4ED8;
+
+  --db-orange: #F26B1D;  /* DB 전용 · 봇에 쓰지 않음 */
+  --db-orange-light: #FFF1E6;
+  --db-orange-text: #C2410C;
+
+  --fail-red: #E5484D;
+  --pass-green: #16A34A;
+
+  --text-color: #111827;
+  --muted-text-color: #6B7280;
+  --page-background: #F2F5FA;
+  --line-color: #E3E8F0;
+
+  --bot-human: #3B7BF5;
+  --bot-a: #7C5CE0;
+  --bot-b: #A78BFA;
+  --bot-c: #0EA5A4;
+  --bot-d: #E5484D;
+  --bot-new: #64748B;
+
+  --card-radius: 18px;
+  --button-radius: 10px;
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}티켓가드 QA{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="/static/css/theme_tokens.css">
+  <link rel="stylesheet" href="/static/css/screen_layout.css">
+</head>
+<body>
+  <header class="top-bar">
+    <span class="brand">티켓가드 QA</span>
+    <nav class="main-tabs">
+      <a href="/" class="{{ 'is-active' if active_tab == 'home' }}">홈</a>
+      <a href="/runs/new" class="{{ 'is-active' if active_tab == 'qa' }}">QA 대시보드</a>
+      <a href="/db" class="{{ 'is-active-db' if active_tab == 'db' }}">DB 대시보드</a>
+    </nav>
+    <span class="target-status">{% block target_status %}{% endblock %}</span>
+  </header>
+  {% if active_tab == 'qa' %}
+  <nav class="sub-tabs">
+    <a href="/runs/new" class="{{ 'is-active' if active_subtab != 'bots' }}">시험 실행</a>
+    <a href="/bots" class="{{ 'is-active' if active_subtab == 'bots' }}">매크로 봇</a>
+    <a href="#" title="준비 중">사례 · 정답표</a>
+  </nav>
+  {% endif %}
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

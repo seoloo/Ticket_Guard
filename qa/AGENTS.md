@@ -12,6 +12,7 @@
 
 | 문서 | 언제 보나 |
 |---|---|
+| [`docs/implementation_guide.md`](docs/implementation_guide.md) | 기능을 만들거나 추가할 때 · 폴더별 책임 · 실행 흐름 · 추가 방법 · 구현 현황 |
 | [`docs/ui.md`](docs/ui.md) | 화면을 만들거나 고칠 때 · UI 기준 · 테마 · 화면 명세 · 주소 |
 | [`docs/contracts.md`](docs/contracts.md) | 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 |
 
@@ -49,7 +50,20 @@ main ← develop ← qa   (qa/ 만)
 
 - **develop을 거쳐서만 합쳐요.** qa는 develop에 PR로 넣고, 필요하면 develop을 qa로 받아와요. qa ↔ db 직접 merge는 하지 않아요.
 - **폴더 주인**: qa는 `qa/`만 고쳐요. `qa/` 밖이 바뀌어야 하면 Issue로 요청해요.
+  - 예외: `.github/workflows/qa.yml` 하나. GitHub Actions는 이 위치에서만 동작해요.
 - **아직 develop에 안 들어간 다른 브랜치를 시험할 때**: merge 하지 않고, 그 브랜치를 별도 폴더(`git worktree`)로 꺼내 컨테이너를 띄운 뒤 QA의 시험 대상 주소만 바꿔요.
+- **포트**: 한 PC에서 팀 대시보드와 QA를 같이 띄우므로 QA는 **8800번대만** 써요.
+
+  | 포트 | 무엇 | 누구 것 |
+  |---|---|---|
+  | 8000 | 팀 대시보드 · 예매 웹 (develop의 Django) | 팀 · QA는 시험하러 **접속만** |
+  | 8800 | QA 대시보드 | QA |
+  | 8801 | 가짜 판정 서버 (`fake_targets/fake_verdict_server.py`) | QA |
+  | 8802 | 일부러 틀리는 대상 (`fake_targets/always_wrong_target.py`) | QA |
+
+  - QA는 **8000을 열지 않아요.** `TICKET_GUARD_QA_SYSTEM_BASE_URL`의 8000은 시험 대상 주소예요.
+  - **`uvicorn`을 직접 실행하지 않아요.** 기본 포트가 8000이라 팀 대시보드와 충돌해요. `ticket-guard-qa dashboard`로만 띄워요.
+  - 8800번대가 이미 쓰이고 있으면 코드 대신 `.env`의 `TICKET_GUARD_QA_DASHBOARD_PORT`만 바꿔요. 확인: `netstat -ano | findstr ":8000 :8800 :8801 :8802"`
 - **커밋 제목**: `[QA] 무엇을 했는지` (예: `[QA] add fake verdict api`)
 - **PR 체크리스트**
   - [ ] 정답표 · 봇 설정이 포함되지 않았다
@@ -107,7 +121,7 @@ main ← develop ← qa   (qa/ 만)
 |---|---|---|
 | 1 | 요청 사항 (위 표) | Issue · 라벨 `db` |
 | 2 | 발견한 결함 (eventId 중복 저장 · 재시작 후 두 번 집계 · 격리 누락 · TTL 미적용 · 재고 동시 차감 오류 등) | Issue · 라벨 `db` `qa-finding` · 결함 하나에 Issue 하나 |
-| 3 | 계약 시험 데이터 (올바른 · 틀린 이벤트 샘플) | `qa/cases/contracts/` · db 팀이 가져다 씀 |
+| 3 | 계약 시험 데이터 (올바른 · 틀린 이벤트 샘플) | `qa/case_data/event_contracts/` · db 팀이 가져다 씀 |
 | 4 | 결과 요약 | QA 대시보드 · 실행 보고서 (6장 공유 단계를 따름) |
 
 **결함 Issue에 꼭 적는 것**
@@ -142,9 +156,13 @@ main ← develop ← qa   (qa/ 만)
 ## 10. 코드 규칙
 
 ### 이름
-- 현업 엔지니어가 짓는 것처럼 지어요. 영어 · 파이썬 관례(snake_case 함수 · PascalCase 클래스 · UPPER 상수).
-- 함수는 동사로 시작(`build_answer_key`, `fetch_gold_counts`) · 클래스는 명사(`RunService`, `BotRegistry`).
-- 참 / 거짓은 `is_` · `has_` · 단위는 이름 끝(`latency_ms`, `timeout_sec`, `p95_sec`).
+- 현업 엔지니어가 짓는 것처럼, **사람이 이름만 보고 무엇인지 알 수 있게** 지어요. 영어 · 파이썬 관례(snake_case 함수 · PascalCase 클래스 · UPPER 상수).
+- 패키지 이름은 `ticket_guard_qa`예요.
+- **줄임말을 쓰지 않아요.** (`cfg` → `run_config`, `db.py` → `database.py`) 허용하는 약어: `id` · `url` · `api` · `http` · `json` · `html` · `p95`
+- 폴더는 무엇을 모아 둔 곳인지(`system_targets`, `macro_bots`), 파일은 안에 든 것 하나(`confusion_matrix.py`), 시험 묶음은 무엇을 확인하는지(`pipeline_latency.py`)로 지어요.
+- 화면 파일은 시안 번호를 앞에 붙여요. (`screen_01_home.html`, `screen_b4_detection_result.html`)
+- 함수는 동사로 시작(`build_answer_key`, `calculate_detection_rate`) · 클래스는 명사(`RunService`, `LiveDjangoSystem`).
+- 참 / 거짓은 `is_` · `has_` · 단위는 이름 끝(`latency_ms`, `timeout_sec`, `detection_rate_percent`).
 
 | 기획서 용어 | 코드 이름 |
 |---|---|
@@ -165,37 +183,19 @@ main ← develop ← qa   (qa/ 만)
 - 근거가 기획서에 있으면 쪽수 · E 코드를 붙여요.
 
 ```python
-SEAT_HOLD_TTL_SEC = 300          # 좌석 점유 5분 · E16
+SEAT_HOLD_TIMEOUT_SEC = 300      # 좌석 점유 5분 · E16
 # QA DB 전용 · 시스템 접근 금지
 # 탐지 = CHALLENGE 이상
 ```
 
+- 폴더 · 파일 첫 줄, `TODO` 형식은 [`docs/implementation_guide.md`](docs/implementation_guide.md) 6장을 따라요.
+
 ### 구조
 
-```
-qa/
-├─ AGENTS.md · CLAUDE.md
-├─ docs/             # ui · contracts
-├─ src/tgqa/
-│  ├─ settings.py · cli.py
-│  ├─ domain/        # enums · models · criteria
-│  ├─ targets/       # base(Protocol) · fake · live
-│  ├─ answer_key/    # expected · repository
-│  ├─ bots/          # registry · rule_preview
-│  ├─ suites/        # selfcheck · contract · verdict · pipeline · concurrency · load · recovery
-│  ├─ scoring/       # metrics · confusion
-│  ├─ runs/          # service · repository · progress
-│  ├─ storage/       # QA DB
-│  ├─ reporting/     # json · html
-│  └─ web/           # FastAPI + Jinja2 + HTMX
-├─ traffic/          # Locust · Playwright(봇 C)
-├─ fakes/            # 가짜 판정 서버 · 일부러 틀리는 대상
-├─ cases/            # E01 ~ E22 · T1 ~ T2 · contracts/
-└─ tests/            # unit · boundary
-```
+폴더 트리 · 폴더별 책임 · 실행 흐름 · 추가 방법은 [`docs/implementation_guide.md`](docs/implementation_guide.md) 한 곳에만 있어요.
 
 ### 테스트
-- 새 시험은 E 코드 · T 코드 하나 이상에 연결해요. 연결이 없으면 `cases/`에 먼저 사례를 추가해요.
+- 새 시험은 E 코드 · T 코드 하나 이상에 연결해요. 연결이 없으면 `case_data/`에 먼저 사례를 추가해요.
 - 가짜 대상에서 먼저 통과시키고, 실제 대상은 5장 표에서 "가능"인 것만 돌려요.
 - 시간 · 난수는 고정값을 넣을 수 있게 만들어요. 같은 입력이면 같은 정답표가 나와야 해요.
 

@@ -1,0 +1,20 @@
+name: ticket-guard-qa
+
+services:
+  qa-dashboard:
+    build: .
+    ports:
+      - "127.0.0.1:8800:8800"  # QA는 8800번대만 · AGENTS.md 4장
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TICKET_GUARD_QA_DASHBOARD_HOST: 0.0.0.0
+      TICKET_GUARD_QA_SYSTEM_BASE_URL: ${TICKET_GUARD_QA_SYSTEM_BASE_URL:-http://host.docker.internal:8000}
+      TICKET_GUARD_QA_QA_DATABASE_URL: sqlite:////qa/qa_data/qa.db
+      TICKET_GUARD_QA_REPORT_OUTPUT_DIR: /qa/qa_data/reports
+    volumes:
+      - qa-data:/qa/qa_data
+
+volumes:
+  qa-data:
