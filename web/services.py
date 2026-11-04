@@ -19,6 +19,22 @@ SHOWS = {
         price=35000, kind='general', kind_label='자유석', poster='open-air.png',
         tagline='도심을 벗어나, 하늘 아래 펼쳐지는 특별한 라이브.',
         description='노을빛 하늘, 선선한 바람, 그리고 음악. 탁 트인 야외 무대에서 좋아하는 사람과 함께 특별한 시간을 보내세요.')
+    , 'spring-concert': dict(id='spring-concert', title='봄날의 콘서트', english='SPRING CONCERT',
+        genre='콘서트', venue='올림픽공원 올림픽홀', date='2026.04.19', time='19:00', price=65000,
+        kind='reserved', kind_label='지정석', poster='hero.png', tagline='따뜻한 봄바람과 함께하는 특별한 라이브.',
+        description='봄의 시작을 알리는 싱어송라이터들의 따뜻한 무대입니다.')
+    , 'city-night': dict(id='city-night', title='도시의 밤', english='CITY NIGHT',
+        genre='뮤지컬', venue='세빛섬 컨벤션홀', date='2026.05.24', time='20:00', price=48000,
+        kind='reserved', kind_label='지정석', poster='blue-hour.png', tagline='빛나는 도시의 밤, 새로운 이야기.',
+        description='도시의 불빛 아래 펼쳐지는 감각적인 음악과 퍼포먼스입니다.')
+    , 'starlight': dict(id='starlight', title='별빛 아래', english='UNDER THE STARLIGHT',
+        genre='페스티벌', venue='서울숲 야외무대', date='2026.06.06', time='18:30', price=42000,
+        kind='general', kind_label='자유석', poster='open-air.png', tagline='별빛 아래 함께 듣는 한여름의 음악.',
+        description='자연과 음악이 만나는 야외 페스티벌에서 특별한 밤을 즐겨보세요.')
+    , 'summer-rhythm': dict(id='summer-rhythm', title='여름의 리듬', english='SUMMER RHYTHM',
+        genre='콘서트', venue='잠실실내체육관', date='2026.07.18', time='19:30', price=58000,
+        kind='reserved', kind_label='지정석', poster='hero.png', tagline='뜨거운 계절을 깨우는 리듬.',
+        description='여름밤을 가득 채울 에너지 넘치는 라이브 콘서트입니다.')
 }
 
 

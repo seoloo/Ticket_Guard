@@ -172,7 +172,8 @@ class WebTests(SimpleTestCase):
             self.assertEqual(self.post('login', username='qa-admin', password='').status_code, 401)
 
     def test_login_fail_anonymous_and_csrf(self):
-        self.assertRedirects(self.client.get('/'), '/login/', fetch_redirect_response=False)
+        self.assertEqual(self.client.get('/').status_code, 200)
+        self.assertRedirects(self.client.get('/detail/blue-hour/'), '/login/', fetch_redirect_response=False)
         self.assertEqual(self.post('login', username='ticketguard', password='bad').status_code, 401)
         self.assertEqual(self.post('start', showId='blue-hour', pageId='tab-one').status_code, 401)
         secure_client = Client(enforce_csrf_checks=True)

@@ -43,7 +43,9 @@ def page(request, screen, identifier=None):
     if screen not in {'login', 'shows', 'detail', 'queue', 'captcha', 'select', 'complete', 'history'}:
         raise Http404
     user = request.session.get('user')
-    if not user and screen != 'login':
+    # The show listing is the public landing page.  Guests can browse it;
+    # starting a booking and all subsequent steps still require a login.
+    if not user and screen not in {'login', 'shows'}:
         return redirect('/login/')
     if user and screen == 'login':
         return redirect(ADMIN_HOME_URL if request.session.get('role') == 'admin' else '/')
@@ -55,7 +57,7 @@ def page(request, screen, identifier=None):
                 query, genre = request.GET.get('q', '')[:100], request.GET.get('genre', '전체')
                 context.update(query=query, genre=genre, shows=[s for s in SHOWS.values()
                     if (not query or query.casefold() in (s['title'] + s['venue']).casefold())
-                    and (genre == '전체' or s['genre'] == genre)])
+                    and (genre == '전체' or s['genre'] == genre)], featured_shows=list(SHOWS.values())[:5])
             elif screen == 'detail':
                 if identifier not in SHOWS:
                     raise Http404

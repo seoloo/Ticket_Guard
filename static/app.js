@@ -111,6 +111,16 @@
   $('#search')?.closest('form').addEventListener('submit', () => event('search_change', true));
   document.querySelectorAll('[data-genre]').forEach(el => el.addEventListener('click', () => event('genre_change', true)));
   document.querySelectorAll('[data-show-link]').forEach(el => el.addEventListener('click', () => event('show_select', true)));
+  document.querySelectorAll('.featured-show-card').forEach(card => card.addEventListener('mouseenter', () => {
+    const hero = $('#featured-hero');
+    hero.style.setProperty('--hero-image', `url('${card.dataset.heroImage}')`);
+    $('#hero-title').innerHTML = card.dataset.heroTitle;
+    $('#hero-tagline').textContent = card.dataset.heroTagline;
+    $('#hero-show-meta').textContent = card.dataset.heroMeta;
+    $('#hero-show-description').textContent = card.dataset.heroDescription;
+    $('#hero-show-detail').hidden = false;
+    document.querySelectorAll('.featured-show-card').forEach(item => item.classList.toggle('is-active', item === card));
+  }));
   ['#date-select', '#time-select'].forEach(id => $(id)?.addEventListener('change', () => event('schedule_select')));
 
   function countdown() {

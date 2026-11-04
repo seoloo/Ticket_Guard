@@ -48,6 +48,11 @@
         <button class="button full" type="submit">
           로그인 <span aria-hidden="true">→</span>
         </button>
+        <nav class="login-links" aria-label="계정 지원 메뉴">
+          <a href="#">아이디 찾기</a>
+          <a href="#">비밀번호 찾기</a>
+          <a href="#">회원가입</a>
+        </nav>
       </form>
       <div class="demo-note">
         <span aria-hidden="true">ⓘ</span> 개발용 계정으로 이용하는 모의 예매
@@ -71,19 +76,24 @@
       <input type="hidden" name="genre" value="{{ genre }}" />
       <button type="submit" aria-label="검색">→</button>
     </form>
+    <nav class="shows-account-links" aria-label="계정 메뉴">
+      <a href="/login/">로그인</a>
+      <a href="#">회원가입</a>
+    </nav>
   </div>
-  <section class="hero">
+  <div class="featured-layout"><section class="hero" id="featured-hero" style="--hero-image:url('/static/images/hero.png')"><div class="hero-blur" aria-hidden="true"></div><div class="hero-art" aria-hidden="true"></div>
     <div class="hero-content">
       <div class="eyebrow light">YOUR NEXT LIVE MOMENT</div>
-      <h1>
-        당신의 다음 무대를
-        <br />
-        찾아보세요<span class="hero-dot">.</span>
-      </h1>
-      <p>음악이 시작되는 곳, 티켓가드</p>
+      <h1 id="hero-title">당신의 다음 무대를<br />찾아보세요<span class="hero-dot">.</span></h1>
+      <p id="hero-tagline">음악이 시작되는 곳, 티켓가드</p>
+      <div class="hero-show-detail" id="hero-show-detail" hidden><span id="hero-show-meta"></span><p id="hero-show-description"></p></div>
     </div>
     <span class="hero-counter">01 <i></i> 02</span>
   </section>
+  <aside class="featured-shows" aria-label="추천 공연">
+    {% for featured in featured_shows %}<a class="featured-show-card{% if forloop.first %} is-active{% endif %}" href="/detail/{{ featured.id }}/" style="--card-image:url('{% static 'images/' %}{{ featured.poster }}')" data-hero-title="{{ featured.title }}" data-hero-tagline="{{ featured.tagline }}" data-hero-description="{{ featured.description }}" data-hero-meta="{{ featured.date }} · {{ featured.venue }}" data-hero-image="/static/images/{{ featured.poster }}"><span>{{ featured.title }}</span></a>{% endfor %}
+  </aside>
+  </div>
   <div class="genre-list" aria-label="장르 필터">
     {% for item in genres %}
       <a class="chip {% if genre == item %}selected{% endif %}"
@@ -91,15 +101,6 @@
          data-genre="{{ item }}"
          {% if genre == item %}aria-current="true"{% endif %}>{{ item }}</a>
     {% endfor %}
-  </div>
-  <div class="section-heading">
-    <div>
-      <h2>
-        {% if query %} ‘{{ query }}’ 검색 결과 {% else %} 우리, 함께하고 싶은 공연
-        {% endif %}
-      </h2>
-    </div>
-    <span class="count">총 {{ shows|length }}개 공연</span>
   </div>
   <div class="concert-grid">
     {% for show in shows %}
