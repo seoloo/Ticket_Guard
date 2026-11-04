@@ -1,4 +1,4 @@
-"""B2 돌려보기 · 저장 전 행동 값을 가짜 대상에 몇 세션 보내 판정 분포 확인 · 정답표 저장 안 함"""
+"""B2 모의 판정 · 저장 전 행동 값을 가짜 대상에 몇 세션 보내 판정 분포 확인 · 정답표 저장 안 함"""
 from dataclasses import dataclass
 
 from ticket_guard_qa.domain.enums import VerdictStage

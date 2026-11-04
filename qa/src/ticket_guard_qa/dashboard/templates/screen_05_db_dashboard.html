@@ -1,16 +1,16 @@
 {% extends "layout.html" %}
-{% block title %}05 DB 대시보드 · 티켓가드 QA{% endblock %}
+{% block title %}DB 대시보드 | TicketGuard QA{% endblock %}
 {% block content %}
 <h1 class="page-heading">DB 대시보드 <span class="muted">읽기 전용{% if run_id %} · {{ run_id }}{% endif %}</span></h1>
 <p class="notice is-db">{{ not_ready_message }}</p>
 <div class="card-grid">
   <section class="card card-padding">
-    <h2>정답과 다른 세션</h2>
-    <p class="muted">전체 · 놓친 봇 · 오탐</p>
+    <h2>오분류 세션</h2>
+    <p class="muted">전체 · 미탐(FN) · 오탐(FP)</p>
   </section>
   <section class="card card-padding">
     <h2>세션 추적{% if session_key %} · {{ session_key }}{% endif %}</h2>
-    <p class="muted">QA 정답 VS 시스템 판정 · 예매 단계별 흐름 · DB 기록</p>
+    <p class="muted">Ground Truth vs 시스템 판정 · 예매 퍼널 · DB 기록</p>
   </section>
 </div>
 <!-- TODO(MongoDB 연결 후): Bronze · 격리 · Silver · Gold 건수 줄 · QA 사례로 저장 -->

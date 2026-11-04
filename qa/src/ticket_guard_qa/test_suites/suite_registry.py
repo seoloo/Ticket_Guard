@@ -26,5 +26,5 @@ def list_suites() -> list[QaSuite]:
 
 def get_suite(suite_name: str) -> QaSuite:
     if suite_name not in SUITE_BY_NAME:
-        raise KeyError(f"없는 시험 묶음: {suite_name} · 가능: {', '.join(SUITE_BY_NAME)}")
+        raise KeyError(f"없는 Suite: {suite_name} · 가능: {', '.join(SUITE_BY_NAME)}")
     return SUITE_BY_NAME[suite_name]

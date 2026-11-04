@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from ticket_guard_qa.domain.models import SessionBehavior
 
 RULE_IDS: tuple[str, ...] = ("R1", "R2", "R3", "R4", "R5", "R6")
-RULE_PENDING_REASON = "판정 규칙 확정 대기"
+RULE_PENDING_REASON = "룰셋 미정"
 
 RuleCheck = Callable[[SessionBehavior], tuple[bool, str]]  # (걸리나, 이유)
 

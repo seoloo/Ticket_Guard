@@ -7,7 +7,7 @@ from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 class PipelineLatencySuite:
     suite_name = "pipeline_latency"
-    title = "Gold 반영 시간"
+    title = "Gold 반영 지연"
     related_codes: tuple[str, ...] = ()
 
     def run(self, context: SuiteContext) -> SuiteResult:

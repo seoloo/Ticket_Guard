@@ -1,4 +1,4 @@
-"""B1 봇 목록 · B2 봇 설정 · B3 봇 라이브 · B4 탐지 결과 · 봇 설정값은 QA DB에만"""
+"""B1 봇 프로필 목록 · B2 봇 프로필 편집 · B3 봇 트래픽 모니터 · B4 탐지 성능 리포트 · 봇 설정값은 QA DB에만"""
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -45,9 +45,9 @@ from ticket_guard_qa.test_suites.verdict_accuracy import PLANNED_PROGRESS_KEY, V
 BOT_SCREEN_CONTEXT = {"active_tab": "qa", "active_subtab": "bots"}
 SESSION_STEP_TITLES = {
     SessionStep.ENTERED: "진입",
-    SessionStep.SEAT_SELECTED: "좌석 선택",
+    SessionStep.SEAT_SELECTED: "좌석",
     SessionStep.CONFIRMED: "확정",
-    SessionStep.VERDICT_RECEIVED: "판정 받음",
+    SessionStep.VERDICT_RECEIVED: "판정",
 }
 ENTRY_BUCKET_MS = 500  # B3 진입 분포 한 칸
 ENTRY_BUCKET_COUNT = 12  # 마지막 칸 = 5.5초 이후 전부
@@ -71,14 +71,14 @@ class DetectionTargetCard:
 def find_bot_type_or_404(bot_id: str) -> BotTypeInfo:
     type_info = find_bot_type_by_slug(bot_id)
     if type_info is None:
-        raise HTTPException(status_code=404, detail="없는 봇")
+        raise HTTPException(status_code=404, detail="봇 프로필 없음")
     return type_info
 
 
 def find_summary_or_404(run_service: RunService, run_id: str) -> RunSummary:
     summary = run_service.run_repository.get_summary(run_id)
     if summary is None:
-        raise HTTPException(status_code=404, detail="없는 실행 번호")
+        raise HTTPException(status_code=404, detail="Run 없음")
     return summary
 
 
@@ -112,7 +112,7 @@ def render_bot_settings(
 ) -> HTMLResponse:
     registry = store.load_current_registry()
     current_profile = registry.get_profile(type_info.actor_type)
-    shown_behavior = behavior or current_profile.behavior  # 돌려보기 · 오류 때는 입력값 유지
+    shown_behavior = behavior or current_profile.behavior  # 모의 판정 · 오류 때는 입력값 유지
     return render_screen(request, "screen_b2_bot_settings.html", {
         **BOT_SCREEN_CONTEXT,
         "type_info": type_info,

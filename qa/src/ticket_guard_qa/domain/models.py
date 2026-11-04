@@ -21,7 +21,7 @@ class TrafficMix:
 
     def __post_init__(self) -> None:
         if sum(self.percent_by_actor_type().values()) != 100:
-            raise ValueError("트래픽 구성 합계는 100이어야 해요.")
+            raise ValueError("트래픽 구성 합계 오류 · 100% 필요")
 
     def percent_by_actor_type(self) -> dict[ActorType, int]:
         return {

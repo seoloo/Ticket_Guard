@@ -20,13 +20,13 @@ class PassCriterion:
 
 
 PASS_CRITERIA: tuple[PassCriterion, ...] = (
-    PassCriterion("api_latency", "판정 API p95", "api_latency_p95_sec", 3.0, Comparison.AT_MOST),
+    PassCriterion("api_latency", "판정 API p95 지연", "api_latency_p95_sec", 3.0, Comparison.AT_MOST),
     PassCriterion("api_error_rate", "판정 API 오류율", "api_error_rate_percent", 0.0, Comparison.AT_MOST),
-    PassCriterion("gold_latency", "Gold 반영 p95", "gold_latency_p95_sec", 10.0, Comparison.AT_MOST),
-    PassCriterion("recovery_time", "장애 복구 시간", "recovery_time_sec", 60.0, Comparison.AT_MOST),
+    PassCriterion("gold_latency", "Gold 반영 p95 지연", "gold_latency_p95_sec", 10.0, Comparison.AT_MOST),
+    PassCriterion("recovery_time", "장애 복구 시간(RTO)", "recovery_time_sec", 60.0, Comparison.AT_MOST),
     PassCriterion("bot_abd_detection", "봇 A · B · D 탐지율", "bot_abd_detection_rate_percent", 90.0, Comparison.AT_LEAST),
     PassCriterion("bot_c_detection", "봇 C 탐지율", "bot_c_detection_rate_percent", 70.0, Comparison.AT_LEAST),
-    PassCriterion("human_false_positive", "사람 오탐률", "human_false_positive_rate_percent", 1.0, Comparison.AT_MOST),
+    PassCriterion("human_false_positive", "오탐률(FPR)", "human_false_positive_rate_percent", 1.0, Comparison.AT_MOST),
 )
 
 PASS_CRITERION_BY_ID = {criterion.criterion_id: criterion for criterion in PASS_CRITERIA}

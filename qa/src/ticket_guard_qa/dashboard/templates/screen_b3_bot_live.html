@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from "screen_parts.html" import bot_screen_header, actor_chip %}
-{% block title %}B3 봇 라이브 · 티켓가드 QA{% endblock %}
+{% block title %}봇 트래픽 모니터 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
   .run-strip { display: flex; align-items: center; gap: 12px; padding: 14px 20px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -21,29 +21,29 @@
 </style>
 {% endblock %}
 {% block content %}
-{{ bot_screen_header("봇 라이브", "실행 중 봇과 사람이 어디까지 갔는지 · 오픈 직후 언제 들어오는지") }}
+{{ bot_screen_header("봇 트래픽 모니터", "유형별 퍼널 진행 · 진입 타이밍 분포") }}
 {% set run_config = summary.run_config %}
 
 <section class="card run-strip">
   {% if is_running %}<span class="live-badge" id="live-badge">LIVE</span>{% endif %}
-  <span>실행 <b class="mono">{{ summary.run_id }}</b> · 가상 사용자 {{ run_config.virtual_user_count }}명 · {{ '오픈 몰림' if run_config.is_open_burst else '일반 진입' }}</span>
+  <span>Run <b class="mono">{{ summary.run_id }}</b> · VU {{ run_config.virtual_user_count }} · {{ '버스트' if run_config.is_open_burst else '분산 진입' }}</span>
   <span class="row" style="gap:6px">{% for actor_value, version_number in bot_versions.items() %}{{ actor_chip(actor_value | bot_type_info, version_number) }}{% endfor %}</span>
   <span class="spacer"></span>
-  {% if is_running %}<a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/live"><i data-lucide="gauge"></i>03 실행</a>{% endif %}
-  <a class="button is-small" id="detection-link" href="{{ base_path }}/runs/{{ summary.run_id }}/bots" {{ 'hidden' if is_running }}><i data-lucide="grid-3x3"></i>B4 탐지 결과</a>
+  {% if is_running %}<a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/live"><i data-lucide="gauge"></i>Run 모니터</a>{% endif %}
+  <a class="button is-small" id="detection-link" href="{{ base_path }}/runs/{{ summary.run_id }}/bots" {{ 'hidden' if is_running }}><i data-lucide="grid-3x3"></i>탐지 리포트</a>
 </section>
 
 {% if not has_verdict_suite %}
-<div class="notice is-db" style="margin-bottom:18px"><i data-lucide="info"></i>이 실행에는 판정 정확도 시험이 없어서 봇 트래픽을 보내지 않아요. 진입 분포는 계획 기준이에요.</div>
+<div class="notice is-db" style="margin-bottom:18px"><i data-lucide="info"></i>봇 트래픽 미발생 · 계획 분포만 표시</div>
 {% endif %}
-<div class="notice is-qa" id="finished-notice" style="margin-bottom:18px" {{ 'hidden' if is_running }}><i data-lucide="circle-check"></i>실행이 끝났어요. 종류별로 얼마나 잡았는지는 B4 탐지 결과에서 봐요.</div>
+<div class="notice is-qa" id="finished-notice" style="margin-bottom:18px" {{ 'hidden' if is_running }}><i data-lucide="circle-check"></i>Run 종료 · 탐지 리포트 생성 완료</div>
 
 <div class="bot-live-grid">
   <div>
     <section class="card panel">
-      <div class="row"><h2 class="section-heading">종류별 진행</h2><span class="spacer"></span><span class="muted" id="progress-updated">{{ '실시간' if is_running else '최종' }}</span></div>
+      <div class="row"><h2 class="section-heading">유형별 퍼널</h2><span class="spacer"></span><span class="muted" id="progress-updated">{{ 'Live' if is_running else 'Final' }}</span></div>
       <table class="result-table" style="margin-top:12px">
-        <tr><th>종류</th><th>계획</th>{% for step, title in session_step_titles.items() %}<th>{{ title }}</th>{% endfor %}</tr>
+        <tr><th>유형</th><th>계획</th>{% for step, title in session_step_titles.items() %}<th>{{ title }}</th>{% endfor %}</tr>
         {% for info in bot_type_catalog if info.actor_type.value in actor_progress %}
         {% set progress = actor_progress[info.actor_type.value] %}
         {% set planned_count = progress[planned_progress_key] %}
@@ -60,21 +60,21 @@
         </tr>
         {% endfor %}
       </table>
-      <div class="muted" style="margin-top:10px;font-size:12.5px">‘-’ = 아직 측정하지 않는 단계 · 좌석 선택 · 확정은 트래픽 생성기 연결 후 채워져요</div>
+      <div class="muted" style="margin-top:10px;font-size:12.5px">‘-’ = 미수집 지표</div>
     </section>
 
     <section class="card panel">
-      <h2 class="section-heading">봇 행동 기록</h2>
+      <h2 class="section-heading">이벤트 로그</h2>
       <ul class="behavior-log" id="behavior-log" aria-live="polite">
-        {% if not is_running %}<li>끝난 실행이에요 · 기록은 실행 중에만 보여요</li>{% endif %}
+        {% if not is_running %}<li>실시간 로그 종료</li>{% endif %}
       </ul>
     </section>
   </div>
 
   <aside>
     <section class="card panel">
-      <div class="row"><h2 class="section-heading">오픈 직후 진입 분포</h2><span class="spacer"></span><span class="pill is-skipped">계획 기준</span></div>
-      <div class="sub-text">봇 설정의 진입 시점 값으로 뽑은 시각 · {{ entry_bucket_ms }}ms 한 칸</div>
+      <div class="row"><h2 class="section-heading">진입 타이밍 히스토그램</h2><span class="spacer"></span><span class="pill is-skipped">시뮬레이션 값</span></div>
+      <div class="sub-text">버킷 {{ entry_bucket_ms }}ms</div>
       {% set bucket_count = (entry_histogram.values() | first | length) if entry_histogram else 0 %}
       {% set ns = namespace(max_total=1) %}
       {% for index in range(bucket_count) %}
@@ -97,13 +97,13 @@
       </svg>
       <div class="entry-legend">
         {% for actor_value in entry_histogram %}{{ actor_chip(actor_value | bot_type_info) }}{% endfor %}
-        <span class="spacer"></span><span class="muted">가로 = 오픈 후 초</span>
+        <span class="spacer"></span><span class="muted">X축 · T0 기준 초</span>
       </div>
     </section>
 
     <section class="card panel">
-      <div class="row"><h2 class="section-heading">봇 C 화면 캡처</h2><span class="spacer"></span>{{ actor_chip('BOT_C' | bot_type_info) }}</div>
-      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">Playwright 봇을 붙인 뒤 화면 캡처가 여기에 쌓여요</div></div>
+      <div class="row"><h2 class="section-heading">봇 C 스크린샷</h2><span class="spacer"></span>{{ actor_chip('BOT_C' | bot_type_info) }}</div>
+      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">스크린샷 수집 미구현</div></div>
     </section>
   </aside>
 </div>
@@ -123,7 +123,7 @@
         cell.querySelector(".progress-bar i").style.width = `${Math.min(count / plannedCount, 1) * 100}%`;
       });
     });
-    document.getElementById("progress-updated").textContent = `갱신 ${new Date().toLocaleTimeString()}`;
+    document.getElementById("progress-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
   }
 
   function addLog(text) {

@@ -52,7 +52,7 @@ class BotProfile:
 
 def build_default_profiles() -> tuple[BotProfile, ...]:
     return tuple(
-        BotProfile(actor_type, behavior, change_note="기본값")
+        BotProfile(actor_type, behavior, change_note="초기값")
         for actor_type, behavior in DEFAULT_BEHAVIOR_BY_ACTOR_TYPE.items()
     )
 

@@ -26,15 +26,15 @@ VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)
 DEFAULT_SUITE_NAMES = ("self_check", "event_contract", "verdict_accuracy", "pipeline_latency")
 TRAFFIC_FIELD_NAMES = ("human_percent", "bot_a_percent", "bot_b_percent", "bot_c_percent", "bot_d_percent")
-ALERT_POLICY_TITLES = {AlertPolicy.NEVER: "알림 없음", AlertPolicy.ON_FAILURE: "실패할 때만", AlertPolicy.ALWAYS: "항상"}
+ALERT_POLICY_TITLES = {AlertPolicy.NEVER: "알림 없음", AlertPolicy.ON_FAILURE: "FAIL 시 알림", AlertPolicy.ALWAYS: "항상 알림"}
 NEXT_ACTION_BY_CRITERION_ID = {
-    "api_latency": "판정 API 응답 지연 구간 확인 → 백엔드",
-    "api_error_rate": "오류 응답 로그 확인 → 백엔드",
-    "gold_latency": "Spark 판정 작업 묶음 간격 확인 → 인프라 · 백엔드",
-    "recovery_time": "checkpoint · 재시작 절차 확인 → 인프라",
-    "bot_abd_detection": "놓친 봇 세션이 안 걸린 규칙 확인 → 판정 규칙 보완 제안",
-    "bot_c_detection": "놓친 봇 C 세션의 화면 흐름 확인 → 판정 규칙 보완 제안",
-    "human_false_positive": "오탐 세션의 규칙 확인 → 기준 완화 검토",
+    "api_latency": "판정 API 지연 구간 분석 → 백엔드",
+    "api_error_rate": "오류 응답 로그 분석 → 백엔드",
+    "gold_latency": "Spark 판정 배치 간격 점검 → 인프라 · 백엔드",
+    "recovery_time": "checkpoint · 재기동 절차 점검 → 인프라",
+    "bot_abd_detection": "미탐 세션 미적용 룰 분석 → 판정 룰 보완 제안",
+    "bot_c_detection": "봇 C 미탐 세션 페이지 흐름 분석 → 판정 룰 보완 제안",
+    "human_false_positive": "오탐 세션 적용 룰 분석 → 임계값 완화 검토",
 }
 
 router = APIRouter()
@@ -110,7 +110,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
         fallback_config = RunConfig(run_service.settings.target_kind, suite_names or DEFAULT_SUITE_NAMES)
         return _render_test_setup(request, run_service, fallback_config, str(error), status_code=400)
     if not suite_names:
-        return _render_test_setup(request, run_service, run_config, "시험 묶음을 하나 이상 골라 주세요.", status_code=400)
+        return _render_test_setup(request, run_service, run_config, "Suite 미선택 · 1개 이상 선택 필요", status_code=400)
     try:
         run_id = run_service.start_in_background(run_config)
     except RunAlreadyActiveError as error:
@@ -122,7 +122,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
 def show_test_running(request: Request, run_id: str, run_service: RunService = Depends(get_run_service)):
     summary = run_service.run_repository.get_summary(run_id)
     if summary is None:
-        raise HTTPException(status_code=404, detail="없는 실행 번호")
+        raise HTTPException(status_code=404, detail="Run 없음")
     if summary.status is not RunStatus.RUNNING:
         return redirect_to_page(request, f"/runs/{run_id}")  # 이미 끝난 실행 → 04
     return render_screen(request, "screen_03_test_running.html", {
@@ -172,7 +172,7 @@ def build_criterion_comparisons(summary: RunSummary, previous_summary: RunSummar
 def show_test_result(request: Request, run_id: str, run_service: RunService = Depends(get_run_service)):
     summary = run_service.run_repository.get_summary(run_id)
     if summary is None:
-        raise HTTPException(status_code=404, detail="없는 실행 번호")
+        raise HTTPException(status_code=404, detail="Run 없음")
     if summary.status is RunStatus.RUNNING:
         return redirect_to_page(request, f"/runs/{run_id}/live")  # 아직 실행 중 → 03
     result_by_criterion_id = {result.criterion_id: result for result in summary.criterion_results}
@@ -198,8 +198,8 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
 @router.get("/runs/{run_id}/report.{report_format}")
 def download_report(run_id: str, report_format: str, run_service: RunService = Depends(get_run_service)) -> FileResponse:
     if report_format not in ("html", "json") or run_service.run_repository.get_summary(run_id) is None:
-        raise HTTPException(status_code=404, detail="없는 보고서")
+        raise HTTPException(status_code=404, detail="리포트 없음")
     report_path = run_service.settings.report_output_dir / f"{run_id}.{report_format}"
     if not report_path.exists():
-        raise HTTPException(status_code=404, detail="보고서 파일 없음")
+        raise HTTPException(status_code=404, detail="리포트 파일 없음")
     return FileResponse(report_path)

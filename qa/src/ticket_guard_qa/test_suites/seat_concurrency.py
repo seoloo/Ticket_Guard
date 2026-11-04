@@ -5,7 +5,7 @@ from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 class SeatConcurrencySuite:
     suite_name = "seat_concurrency"
-    title = "좌석 동시 확정"
+    title = "좌석 동시성"
     related_codes: tuple[str, ...] = ("E12", "E16", "E20")
 
     def run(self, context: SuiteContext) -> SuiteResult:

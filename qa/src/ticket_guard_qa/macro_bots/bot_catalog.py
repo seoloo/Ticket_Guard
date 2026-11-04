@@ -1,4 +1,4 @@
-"""봇 종류 소개 · 이름 · 용도 · 도구 · 색 · 버전과 상관없는 고정 정보 · 새 봇은 여기 한 줄부터"""
+"""봇 종류 소개 · 이름 · 용도 · 트래픽 종류 · 색 · 버전과 상관없는 고정 정보 · 새 봇은 여기 한 줄부터"""
 from dataclasses import dataclass
 
 from ticket_guard_qa.domain.enums import ActorType
@@ -10,7 +10,7 @@ class BotTypeInfo:
     display_name: str
     short_name: str  # 표 · 칩
     purpose: str
-    tool_name: str
+    traffic_channel: str  # 화면 태그 · 도구 이름(Locust 등)은 화면에 쓰지 않음
     color_token: str  # theme_tokens.css 변수 이름 · docs/ui.md 2장
     is_locked: bool = False  # 새 유형 · 평가 전용 · 설정 못 바꿈
 
@@ -19,13 +19,17 @@ class BotTypeInfo:
         return self.actor_type.value.lower()  # 주소 /bots/{slug}
 
 
+HTTP_TRAFFIC = "HTTP 트래픽"  # Locust
+BROWSER_TRAFFIC = "브라우저 트래픽"  # Playwright
+
+
 BOT_TYPE_CATALOG: tuple[BotTypeInfo, ...] = (
-    BotTypeInfo(ActorType.HUMAN, "가상 사람", "사람", "오탐 기준선 · 사람다운 속도와 흔들림", "Locust", "bot-human"),
-    BotTypeInfo(ActorType.BOT_A, "봇 A · 오픈 즉시형", "봇 A", "오픈 순간 일정한 간격으로 빠르게 진입", "Locust", "bot-a"),
-    BotTypeInfo(ActorType.BOT_B, "봇 B · 사람 흉내형", "봇 B", "사람 속도를 흉내 내지만 간격이 일정함", "Locust", "bot-b"),
-    BotTypeInfo(ActorType.BOT_C, "봇 C · 브라우저 자동화", "봇 C", "실제 브라우저로 화면을 따라 움직임", "Playwright", "bot-c"),
-    BotTypeInfo(ActorType.BOT_D, "봇 D · 다중 세션", "봇 D", "한 기기에서 여러 세션을 동시에 엶", "Locust", "bot-d"),
-    BotTypeInfo(ActorType.BOT_NEW, "새 유형", "새 유형", "규칙을 만들 때 보지 않은 행동 · 결과만 공개", "Locust", "bot-new", is_locked=True),
+    BotTypeInfo(ActorType.HUMAN, "정상 트래픽", "정상", "오탐률 기준 트래픽 · 진입 시각 분산 · 클릭 간격 분산 큼", HTTP_TRAFFIC, "bot-human"),
+    BotTypeInfo(ActorType.BOT_A, "봇 A · 고속 반복 매크로", "A", "오픈 시각 고정 진입 · 고속 정주기 요청", HTTP_TRAFFIC, "bot-a"),
+    BotTypeInfo(ActorType.BOT_B, "봇 B · 위장 매크로", "B", "사람 수준 요청 속도 · 낮은 간격 분산", HTTP_TRAFFIC, "bot-b"),
+    BotTypeInfo(ActorType.BOT_C, "봇 C · 브라우저 자동화 매크로", "C", "헤드리스 브라우저 기반 화면 흐름 재현", BROWSER_TRAFFIC, "bot-c"),
+    BotTypeInfo(ActorType.BOT_D, "봇 D · 세션 복제 매크로", "D", "단일 기기 다중 세션 병렬 접속", HTTP_TRAFFIC, "bot-d"),
+    BotTypeInfo(ActorType.BOT_NEW, "미학습 유형 봇", "미학습", "미학습 행동 패턴 · 일반화 성능 측정용", HTTP_TRAFFIC, "bot-new", is_locked=True),
 )
 
 BOT_TYPE_INFO_BY_ACTOR_TYPE = {info.actor_type: info for info in BOT_TYPE_CATALOG}

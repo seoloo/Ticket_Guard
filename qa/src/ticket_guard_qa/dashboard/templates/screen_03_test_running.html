@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from "screen_parts.html" import test_steps %}
-{% block title %}03 실행 · 티켓가드 QA{% endblock %}
+{% block title %}Run 모니터 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
   .running-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 36px 40px; }
@@ -35,36 +35,36 @@
 {% set run_config = summary.run_config %}
 <section class="card running-grid">
   <div class="running-left">
-    <h1>시험이 진행 중이에요</h1>
-    <div class="sub-text" style="font-size:17px">가상 사용자 {{ run_config.virtual_user_count }}명이 예매 {{ '오픈 상황을' if run_config.is_open_burst else '상황을' }} 재현하고 있어요.
-      {% if run_config.target_kind.value == 'fake' %}<span class="pill is-skipped">가짜 대상 · 예시 수치</span>{% endif %}</div>
+    <h1>Run 진행 중</h1>
+    <div class="sub-text" style="font-size:17px">VU {{ run_config.virtual_user_count }} · {{ '예매 오픈 버스트 재현' if run_config.is_open_burst else '예매 시나리오 재현' }}
+      {% if run_config.target_kind.value == 'fake' %}<span class="pill is-skipped">Mock · 예시 수치</span>{% endif %}</div>
     <div class="time-box">
-      <div><div class="time-label">진행한 시간</div><span class="elapsed-number" id="elapsed-number">0</span><span class="elapsed-total"> / {{ measurement_window_sec | int }}초</span></div>
-      <div><div class="time-label">예상 남은 시간</div><span class="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
+      <div><div class="time-label">경과 시간</div><span class="elapsed-number" id="elapsed-number">0</span><span class="elapsed-total"> / {{ measurement_window_sec | int }}초</span></div>
+      <div><div class="time-label">남은 시간(예상)</div><span class="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
     </div>
     <div class="progress-bar"><i id="progress-fill"></i></div>
-    <div class="connection-line" id="connection-line"><span class="status-dot" id="connection-dot"></span><b id="connection-text">정상 연결 중</b><span class="muted">|</span>끝나면 결과 화면으로 자동 이동해요.</div>
+    <div class="connection-line" id="connection-line"><span class="status-dot" id="connection-dot"></span><b id="connection-text">연결 정상</b><span class="muted">|</span>종료 시 Run 리포트 자동 이동</div>
     <form method="post" action="{{ base_path }}/runs/{{ summary.run_id }}/cancel">
-      <button class="button is-outline" type="submit" style="width:280px">시험 중지</button>
+      <button class="button is-outline" type="submit" style="width:280px">Run 중지</button>
     </form>
     <ul class="progress-log" id="progress-log" aria-live="polite"></ul>
   </div>
 
   <div class="running-right">
-    <div class="row"><span class="tag is-qa"><i data-lucide="activity"></i>실시간 수치</span><span class="spacer"></span>
-      <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots/live"><i data-lucide="bot"></i>봇 보기</a><span class="live-badge">LIVE</span></div>
-    <h2 class="section-heading" style="font-size:22px;margin-top:12px;line-height:1.35">실행 {{ summary.run_id[-11:] }} · {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}</h2>
+    <div class="row"><span class="tag is-qa"><i data-lucide="activity"></i>실시간 지표</span><span class="spacer"></span>
+      <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots/live"><i data-lucide="bot"></i>봇 트래픽 모니터</a><span class="live-badge">LIVE</span></div>
+    <h2 class="section-heading" style="font-size:22px;margin-top:12px;line-height:1.35">Run {{ summary.run_id[-11:] }} · {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}</h2>
     <div class="live-metrics">
       {% set live_cards = [
-        ("api_latency_p95_sec", "판정 API p95", "초"),
+        ("api_latency_p95_sec", "판정 API p95 지연", "초"),
         ("api_error_rate_percent", "API 오류율", "%"),
-        ("events_per_sec", "초당 이벤트", ""),
-        ("gold_latency_p95_sec", "Gold 반영 p95", "초"),
+        ("events_per_sec", "이벤트 처리량(EPS)", ""),
+        ("gold_latency_p95_sec", "Gold 반영 p95 지연", "초"),
       ] %}
       {% for metric_name, title, unit in live_cards %}
       <div class="metric-card" data-live-metric="{{ metric_name }}" data-unit="{{ unit }}" data-limit="{{ threshold_by_metric_name.get(metric_name, '') }}">
-        <div class="metric-label">{{ title }}{% if metric_name in threshold_by_metric_name %}<span class="metric-limit">기준 {{ '%g' % threshold_by_metric_name[metric_name] }}{{ unit }}</span>{% endif %}</div>
-        <div class="metric-value">측정 전</div>
+        <div class="metric-label">{{ title }}{% if metric_name in threshold_by_metric_name %}<span class="metric-limit">기준선 {{ '%g' % threshold_by_metric_name[metric_name] }}{{ unit }}</span>{% endif %}</div>
+        <div class="metric-value">수집 전</div>
         <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline fill="none" stroke="var(--qa-blue)" stroke-width="2" points=""/></svg>
       </div>
       {% endfor %}
@@ -76,15 +76,15 @@
 <div class="state-grid">
   <section class="state-card" id="state-disconnected" hidden>
     <span class="state-icon" style="background:var(--fail-red-light);color:var(--fail-red)"><i data-lucide="wifi-off"></i></span>
-    <div><h4>대상 연결이 끊겼어요</h4><p>진행 상황을 받지 못하고 있어요. 시험은 서버에서 계속될 수 있어요.</p><button class="button is-small" type="button" onclick="location.reload()">다시 연결</button></div>
+    <div><h4>대상 연결 끊김</h4><p>진행 상황 수신 불가 · 서버 측 Run은 계속 진행 가능</p><button class="button is-small" type="button" onclick="location.reload()">재연결</button></div>
   </section>
   <section class="state-card" id="state-recovering" hidden>
     <span class="state-icon" style="background:var(--qa-blue-light);color:var(--qa-blue)"><i data-lucide="loader"></i></span>
-    <div><h4>복구 시험 중이에요</h4><p>서비스를 멈췄다가 다시 켜는 중이에요. 곧 측정이 이어져요.</p></div>
+    <div><h4>장애 복구 테스트 진행 중</h4><p>서비스 중지 후 재기동 중 · 측정 곧 재개</p></div>
   </section>
   <section class="state-card" id="state-timeout" hidden>
     <span class="state-icon" style="background:var(--db-orange-light);color:var(--db-orange)"><i data-lucide="clock-alert"></i></span>
-    <div><h4>시간이 많이 지났어요</h4><p>예상 시간을 넘겼어요. 계속 기다리거나 조건을 줄여 다시 설정해 주세요.</p><a class="button is-small" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}">설정으로 돌아가기</a></div>
+    <div><h4>예상 시간 초과</h4><p>대기 지속 또는 조건 축소 후 재설정</p><a class="button is-small" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}">Run 재구성</a></div>
   </section>
 </div>
 {% endblock %}
@@ -126,7 +126,7 @@
     });
     const warning = document.getElementById("limit-warning");
     warning.hidden = overLimitTitles.length === 0;
-    warning.querySelector("span").textContent = `기준을 넘은 수치: ${overLimitTitles.join(" · ")} · 끝까지 측정한 뒤 결과에 기록해요`;
+    warning.querySelector("span").textContent = `기준선 초과 지표: ${overLimitTitles.join(" · ")} · Run 종료 후 리포트 기록`;
   }
 
   function addLog(text) {
@@ -163,7 +163,7 @@
   };
   progressEvents.onopen = () => {
     document.getElementById("connection-dot").classList.remove("is-down");
-    document.getElementById("connection-text").textContent = "정상 연결 중";
+    document.getElementById("connection-text").textContent = "연결 정상";
     document.getElementById("connection-line").classList.remove("is-down");
   };
   setInterval(() => {

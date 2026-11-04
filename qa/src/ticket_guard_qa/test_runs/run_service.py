@@ -109,7 +109,7 @@ class RunService:
         run_config = replace(run_config, bot_version_numbers=current_versions)
         with self._lock:  # 동시 실행 금지 · 02 화면 시작 잠금
             if self._active_run_id is not None:
-                raise RunAlreadyActiveError(f"이미 실행 중: {self._active_run_id}")
+                raise RunAlreadyActiveError(f"Run 실행 중: {self._active_run_id}")
             started_at = datetime.now(timezone.utc)
             run_id = create_run_id(started_at)
             self._active_run_id = run_id
@@ -151,7 +151,7 @@ class RunService:
             write_json_report(summary, self.settings.report_output_dir)
             write_html_report(summary, self.settings.report_output_dir)
             self.progress_stream.publish(
-                run_id, f"끝 · {summary.status.value}", is_finished=True, final_status=summary.status.value
+                run_id, f"Run 종료 · {summary.status.value}", is_finished=True, final_status=summary.status.value
             )
             with self._lock:
                 self._active_run_id = None

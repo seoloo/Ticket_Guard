@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from "screen_parts.html" import bot_screen_header, actor_chip %}
-{% block title %}B1 봇 목록 · 티켓가드 QA{% endblock %}
+{% block title %}봇 프로필 목록 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
   .latest-strip { display: flex; align-items: center; gap: 12px; padding: 14px 20px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -18,18 +18,18 @@
 </style>
 {% endblock %}
 {% block content %}
-{{ bot_screen_header("봇 목록", "사람 · 봇 종류별 행동과 최근 탐지율 · 저장한 버전은 다음 시험부터 쓰여요") }}
+{{ bot_screen_header("봇 프로필 목록", "봇 프로필별 행동 파라미터 · 최근 탐지 성능 · 다음 실행부터 버전 반영") }}
 
 <section class="card latest-strip">
   <i data-lucide="history" style="color:var(--qa-blue)"></i>
   {% if latest_summary %}
-  <span>최근 탐지 결과 기준 <b class="mono">{{ latest_summary.run_id }}</b> · {{ latest_summary.finished_at | time_ago }}</span>
+  <span>기준 Run <b class="mono">{{ latest_summary.run_id }}</b> · {{ latest_summary.finished_at | time_ago }}</span>
   <span class="spacer"></span>
-  <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ latest_summary.run_id }}/bots"><i data-lucide="grid-3x3"></i>B4 탐지 결과</a>
+  <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ latest_summary.run_id }}/bots"><i data-lucide="grid-3x3"></i>탐지 리포트</a>
   {% else %}
-  <span class="muted">아직 판정 정확도 시험 결과가 없어요. 시험을 돌리면 카드마다 탐지율이 채워져요.</span>
+  <span class="muted">탐지 결과 없음 · 판정 정확도 시험 후 표시</span>
   <span class="spacer"></span>
-  <a class="button is-small" href="{{ base_path }}/runs/new"><i data-lucide="play"></i>시험 설정</a>
+  <a class="button is-small" href="{{ base_path }}/runs/new"><i data-lucide="play"></i>새 Run 설정</a>
   {% endif %}
 </section>
 
@@ -42,12 +42,12 @@
     <div class="row">
       <h2>{{ info.display_name }}</h2>
       <span class="spacer"></span>
-      {% if info.is_locked %}<span class="pill is-not-measured"><i data-lucide="lock" style="width:13px;height:13px"></i>평가 전용</span>{% endif %}
+      {% if info.is_locked %}<span class="pill is-not-measured"><i data-lucide="lock" style="width:13px;height:13px"></i>평가 전용 · 수정 불가</span>{% endif %}
     </div>
     <div class="sub-text" style="margin:0">{{ info.purpose }}</div>
     <div class="bot-meta">
-      <span class="tag is-qa"><i data-lucide="wrench"></i>{{ info.tool_name }}</span>
-      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">v{{ profile.version_number }} · {{ profile.saved_at | time_ago if profile.saved_at else '기본값' }}</span>
+      <span class="tag is-qa"><i data-lucide="{{ 'globe' if info.traffic_channel == '브라우저 트래픽' else 'network' }}"></i>{{ info.traffic_channel }}</span>
+      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">v{{ profile.version_number }} · {{ profile.saved_at | time_ago if profile.saved_at else '초기값' }}</span>
     </div>
     <ul class="behavior-lines">
       {% for group_title, specs in field_groups.items() %}
@@ -59,34 +59,34 @@
       {% if row and row.session_count %}
       {% set target = row.target %}
       <div class="row">
-        <span class="muted">{{ '오탐률' if not info.actor_type.is_bot else '탐지율' }} · 세션 {{ row.session_count }}개</span>
+        <span class="muted">{{ '오탐률' if not info.actor_type.is_bot else '탐지율' }} · n={{ row.session_count }}</span>
         <span class="spacer"></span>
-        {% if row.is_meeting_target is true %}<span class="pill is-passed">목표 달성</span>
-        {% elif row.is_meeting_target is false %}<span class="pill is-failed">목표 미달</span>
-        {% else %}<span class="pill is-not-measured">목표 없음</span>{% endif %}
+        {% if row.is_meeting_target is true %}<span class="pill is-passed">PASS</span>
+        {% elif row.is_meeting_target is false %}<span class="pill is-failed">FAIL</span>
+        {% else %}<span class="pill is-not-measured">N/A</span>{% endif %}
       </div>
       <div class="detection-rate">{{ row.detection_rate_percent | metric('rate_percent') }}</div>
       {% if target %}
       {% set criterion = target.criterion %}
-      <div class="target-bar" title="목표 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}">
+      <div class="target-bar" title="기준선 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}">
         <i style="width:{{ [row.detection_rate_percent, 100] | min }}%;background:var(--{{ info.color_token }})"></i>
         <b style="left:{{ criterion.threshold }}%"></b>
       </div>
-      <div class="muted" style="margin-top:6px;font-size:12.5px">목표 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }} · {{ criterion.title }}</div>
+      <div class="muted" style="margin-top:6px;font-size:12.5px">기준선 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}{% if target.actor_types | length > 1 %} ({% for actor_type in target.actor_types %}{{ (actor_type | bot_type_info).short_name }}{{ ' · ' if not loop.last }}{% endfor %} 합산){% endif %}</div>
       {% else %}
-      <div class="muted" style="font-size:12.5px">새 유형은 목표 없이 결과만 공개해요.</div>
+      <div class="muted" style="font-size:12.5px">기준선 없음 · 참고 지표</div>
       {% endif %}
       {% else %}
-      <span class="muted">탐지 결과 없음</span>
+      <span class="muted">데이터 없음</span>
       {% endif %}
     </div>
 
     <div class="bot-actions">
       {% if row and row.is_meeting_target is false %}
-      <a class="button is-db is-small" href="{{ base_path }}/db?run_id={{ latest_summary.run_id }}"><i data-lucide="database"></i>{{ '놓친 세션' if info.actor_type.is_bot else '오탐 세션' }} DB 보기</a>
+      <a class="button is-db is-small" href="{{ base_path }}/db?run_id={{ latest_summary.run_id }}"><i data-lucide="database"></i>{{ '미탐 세션 분석' if info.actor_type.is_bot else '오탐 세션 분석' }}</a>
       {% endif %}
       <a class="button {{ 'is-outline' if info.is_locked else 'is-soft' }} is-small" href="{{ base_path }}/bots/{{ info.slug }}/edit">
-        <i data-lucide="{{ 'eye' if info.is_locked else 'sliders-horizontal' }}"></i>{{ '설정 보기' if info.is_locked else '설정' }}</a>
+        <i data-lucide="{{ 'eye' if info.is_locked else 'sliders-horizontal' }}"></i>{{ '프로필 조회' if info.is_locked else '프로필 편집' }}</a>
     </div>
   </section>
   {% endfor %}

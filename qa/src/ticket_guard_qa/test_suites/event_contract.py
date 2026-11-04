@@ -60,7 +60,7 @@ def build_placeholder_values(now: datetime) -> dict[str, str]:
 
 class EventContractSuite:
     suite_name = "event_contract"
-    title = "이벤트 형식 계약"
+    title = "이벤트 계약 테스트"
     related_codes: tuple[str, ...] = ()
 
     def run(self, context: SuiteContext) -> SuiteResult:
@@ -76,13 +76,13 @@ class EventContractSuite:
             actual_status_codes = [booking_api.submit_browser_event(request).status_code for request in requests]
             if actual_status_codes != case.expected_status_codes:
                 failed_case_names.append(f"{case.case_name}({actual_status_codes})")
-            context.report_progress(f"계약 사례 {case.case_name} 확인")
+            context.report_progress(f"계약 케이스 {case.case_name} 검증")
 
         message_parts = []
         if failed_case_names:
-            message_parts.append("실패: " + ", ".join(failed_case_names))
+            message_parts.append("FAIL: " + ", ".join(failed_case_names))
         if skipped_case_names:
-            message_parts.append("건너뜀: " + ", ".join(skipped_case_names))
+            message_parts.append("SKIP: " + ", ".join(skipped_case_names))
         return SuiteResult(
             suite_name=self.suite_name,
             outcome=SuiteOutcome.FAILED if failed_case_names else SuiteOutcome.PASSED,

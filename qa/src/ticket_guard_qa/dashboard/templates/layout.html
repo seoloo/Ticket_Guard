@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}티켓가드 QA{% endblock %}</title>
+  <title>{% block title %}TicketGuard QA{% endblock %}</title>
   {# 글꼴 · 아이콘은 인터넷(CDN)에서 · 인터넷 없는 서버면 static으로 옮김 #}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <link rel="stylesheet" href="{{ base_path }}/static/css/theme_tokens.css?v={{ static_version }}">
@@ -29,16 +29,16 @@
     <div class="top-bar-right">
       <span class="target-chip">
         <span class="status-dot {{ '' if target_status.is_connected else 'is-down' }}"></span>
-        {{ target_status.label }} · {{ '정상 연결' if target_status.is_connected else '연결 안 됨' }}
+        {{ target_status.label }} · {{ '연결 정상' if target_status.is_connected else '연결 끊김' }}
       </span>
       <span class="admin-user"><i data-lucide="user-round"></i>{{ admin_user }}</span>
     </div>
   </header>
   {% if active_tab == 'qa' %}
   <nav class="sub-tabs">
-    <a href="{{ base_path }}/runs/new" class="{{ 'is-active' if active_subtab != 'bots' }}"><i data-lucide="play"></i>시험 실행</a>
-    <a href="{{ base_path }}/bots" class="{{ 'is-active' if active_subtab == 'bots' }}"><i data-lucide="bot"></i>매크로 봇</a>
-    <a class="is-disabled" title="준비 중"><i data-lucide="list-checks"></i>사례 · 정답표</a>
+    <a href="{{ base_path }}/runs/new" class="{{ 'is-active' if active_subtab != 'bots' }}"><i data-lucide="play"></i>테스트 실행</a>
+    <a href="{{ base_path }}/bots" class="{{ 'is-active' if active_subtab == 'bots' }}"><i data-lucide="bot"></i>매크로 봇 시뮬레이션</a>
+    <a class="is-disabled" title="미구현"><i data-lucide="list-checks"></i>테스트 케이스 · Ground Truth</a>
   </nav>
   {% endif %}
   {% block steps %}{% endblock %}

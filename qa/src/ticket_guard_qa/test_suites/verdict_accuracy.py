@@ -51,7 +51,7 @@ def send_virtual_user_traffic(
         if index % PROGRESS_REPORT_EVERY_SESSION_COUNT == 0 or index == len(planned_users):
             # TODO(트래픽 생성기 구현 후): 좌석 선택 · 확정 단계도 같이 보고
             context.report_progress(
-                f"진입 {index} / {len(planned_users)}",
+                f"Entered {index}/{len(planned_users)}",
                 actor_progress=build_actor_progress(planned_users, {SessionStep.ENTERED: entered_count_by_actor}),
             )
     return session_key_by_label, session_results
@@ -85,15 +85,15 @@ class VerdictAccuracySuite:
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config
         planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
-        context.report_progress(f"가상 사용자 {len(planned_users)}명 접속")
+        context.report_progress(f"VU {len(planned_users)} 접속")
         session_key_by_label, session_results = send_virtual_user_traffic(context, planned_users)
 
         answer_key = build_answer_key(planned_users, session_key_by_label)
         context.answer_key_repository.save(context.run_id, answer_key)  # QA DB만
-        context.report_progress(f"정답표 저장 · 세션 {len(answer_key)}개")
+        context.report_progress(f"Ground Truth 저장 · {len(answer_key)}세션")
 
         system_verdicts = context.system_target.verdict_reader.read_session_verdicts(context.run_id)
-        context.report_progress(f"판정 받음 · 세션 {len(system_verdicts)}개", actor_progress=build_actor_progress(planned_users, {
+        context.report_progress(f"Verdict {len(system_verdicts)}", actor_progress=build_actor_progress(planned_users, {
             SessionStep.ENTERED: Counter(answer_key.values()),
             SessionStep.VERDICT_RECEIVED: Counter(answer_key[key] for key in answer_key if key in system_verdicts),
         }))

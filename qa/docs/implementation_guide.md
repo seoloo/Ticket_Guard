@@ -58,7 +58,7 @@ qa/
 | `domain/` | 용어(enum) · 데이터 모양 · 합격 기준 7개 | 다른 폴더 import · DB · HTTP |
 | `system_targets/` | 시스템과 연결하는 유일한 곳 · Protocol과 fake / live 구현 | 정답표 · 점수 계산 · 시스템 코드 import |
 | `answer_key/` | 정답표 만들기 · QA DB에 저장 | 시스템 쪽으로 내보내는 코드 |
-| `macro_bots/` | 봇 종류 소개 · 행동 값 · 버전 저장(QA DB) · 행동 값 → 대기 시간 식 · 돌려보기 · 걸릴 규칙 미리 보기 | 실제 트래픽 보내기(→ `traffic_generators`) · 시스템 쪽으로 봇 설정 내보내기 |
+| `macro_bots/` | 봇 종류 소개 · 행동 값 · 버전 저장(QA DB) · 행동 값 → 대기 시간 식 · 모의 판정 · 룰 매칭 예측 | 실제 트래픽 보내기(→ `traffic_generators`) · 시스템 쪽으로 봇 설정 내보내기 |
 | `test_suites/` | 시험 묶음 하나 = 파일 하나 · 입력 → 결과 수집 → 점수 → 판정 | 화면 코드 · 직접 HTTP 호출 |
 | `scoring/` | p95 · 오류율 · 탐지율 · 오탐률 · 정답 × 판정 표 | 입출력(DB · HTTP · 파일) |
 | `test_runs/` | 실행 시작 · 중지 · 동시 실행 잠금 · 진행 상황 전달 | 시험 내용 |
@@ -109,7 +109,7 @@ qa/
 1. [`ui.md`](ui.md)에 화면 명세와 번호를 먼저 적어요. (시안이 필요하면 PNG 시안부터)
 2. `dashboard/templates/screen_<번호>_<이름>.html`을 만들어요. 색은 `static/css/theme_tokens.css` 변수만 써요.
 3. `dashboard/routes/`에서 알맞은 파일에 주소를 추가해요. 계산은 하지 않고 `test_runs` · `answer_key` 등을 호출만 해요.
-4. [`ui.md`](ui.md) 4장 주소 표를 고쳐요.
+4. [`ui.md`](ui.md) 5장 주소 표를 고쳐요. 화면 문구는 3장 문구 규칙을 따라요.
 
 ### 새 시험 대상 (예: MongoDB 연결)
 1. [`contracts.md`](contracts.md)에 형식이 있는지 확인해요. 없으면 db 팀에 Issue로 요청해요.
@@ -121,7 +121,7 @@ qa/
 ### 새 봇
 빠뜨리면 `tests/unit_tests/test_macro_bots.py`가 실패해요.
 1. `domain/enums.py`의 `ActorType`에 이름을 추가해요.
-2. `macro_bots/bot_catalog.py`에 소개 한 줄(이름 · 용도 · 도구 · 색 변수)을 추가해요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
+2. `macro_bots/bot_catalog.py`에 소개 한 줄(이름 · 설명 · 트래픽 종류 · 색 변수)을 추가해요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
 3. `macro_bots/bot_profiles.py`의 `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 시작 행동 값을 추가해요. 이후 값은 B2 화면에서 버전으로 바꿔요.
 4. 목표가 있으면 `domain/pass_criteria.py`에 기준, `domain/detection_targets.py`에 묶음 한 줄을 추가해요. B1 · B4 · 점수 계산이 같이 따라와요.
 5. 트래픽 구성에 넣으려면 `domain/models.py`의 `TrafficMix`와 02 화면 입력 칸을 고쳐요.
@@ -154,7 +154,7 @@ qa/
 | 보고서 | `reports/` | 동작 | | |
 | 화면 01 ~ 04 | `dashboard/` | 동작 (시안 기준 · 가짜 대상 숫자) | 실제 대상 실시간 수치 없음 | 결과 알림 보내기 |
 | 화면 05 | `dashboard/` | 껍데기 | 시스템 DB 없음 | |
-| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 돌려보기 · 실시간 진행) | 규칙별 결과 · 좌석 선택 · 확정 단계 · 봇 C 캡처 없음 | 판정 규칙 · 트래픽 생성기 연결 |
+| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 모의 판정 · 실시간 진행) · 문구는 ui.md 3장 문구 규칙 | 규칙별 결과 · 좌석 선택 · 확정 단계 · 봇 C 캡처 없음 | 판정 규칙 · 트래픽 생성기 연결 |
 | 관리자 확인 (A안) | `dashboard/dependencies.py` | 동작 (팀 입구가 붙인 `X-Admin-User`만) | | |
 | 판정 정확도 | `test_suites/verdict_accuracy.py` | 가짜만 동작 (행동 값으로 가짜 판정 · 정답표 저장 · 탐지율 · 오탐률) | 실제 대상: 시스템 판정 없음 · 저장 위치 미정 | |
 | Gold 반영 시간 | `test_suites/pipeline_latency.py` · `live_mongo_reader.py` | 가짜만 동작 | Kafka · Spark · MongoDB 없음 | 시험 이벤트 먼저 보내기 |

@@ -23,7 +23,7 @@ def require_admin(request: Request) -> None:
     """팀 입구(nginx)가 Django에 확인하고 붙인 헤더만 믿음 · A안"""
     admin_user = request.headers.get(ADMIN_USER_HEADER, "").strip()
     if not admin_user:
-        raise HTTPException(status_code=403, detail="관리자만 들어올 수 있어요.")
+        raise HTTPException(status_code=403, detail="관리자 권한 필요")
     request.state.admin_user = admin_user
 
 
@@ -46,10 +46,10 @@ class TargetStatusChecker:
         if self._cached_status and time.monotonic() - self._checked_at < TARGET_STATUS_CACHE_SEC:
             return self._cached_status
         if self.settings.target_kind is TargetKind.FAKE:
-            status = TargetStatus(TargetKind.FAKE, "가짜 대상", True)
+            status = TargetStatus(TargetKind.FAKE, "Mock", True)
         else:
             is_connected = build_system_target(self.settings).booking_api.check_health()
-            status = TargetStatus(TargetKind.LIVE, "실제 대상", is_connected)
+            status = TargetStatus(TargetKind.LIVE, "Live", is_connected)
         self._cached_status, self._checked_at = status, time.monotonic()
         return status
 

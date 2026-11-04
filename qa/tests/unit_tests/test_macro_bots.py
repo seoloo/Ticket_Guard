@@ -40,7 +40,7 @@ def test_bot_slug_lookup():
 
 def test_behavior_form_rejects_out_of_range_value():
     form = behavior_to_dict(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]) | {"sessions_per_device": "0"}
-    with pytest.raises(BehaviorInputError, match="기기당"):
+    with pytest.raises(BehaviorInputError, match="디바이스당"):
         parse_behavior_form(form)
 
 

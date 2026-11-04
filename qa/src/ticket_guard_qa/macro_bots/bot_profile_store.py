@@ -96,7 +96,7 @@ class BotProfileStore:
         self, actor_type: ActorType, behavior: SessionBehavior, change_note: str, saved_at: datetime
     ) -> BotProfile:
         if BotProfile(actor_type, behavior).type_info.is_locked:
-            raise BotProfileLockedError("새 유형은 평가 전용이라 설정을 바꿀 수 없어요.")
+            raise BotProfileLockedError("읽기 전용 프로필")
         with self.session_factory.begin() as session:
             latest_version = session.scalar(
                 select(func.max(BotVersionRecord.version_number)).where(BotVersionRecord.actor_type == actor_type.value)

@@ -11,7 +11,7 @@ def render_html_report(summary: RunSummary) -> str:
     criterion_rows = "".join(
         f"<tr><td>{escape(title_by_criterion_id[result.criterion_id])}</td>"
         f"<td>{'-' if result.measured_value is None else f'{result.measured_value:.2f}'}</td>"
-        f"<td>{'측정 안 됨' if result.is_passed is None else ('통과' if result.is_passed else '실패')}</td></tr>"
+        f"<td>{'N/A' if result.is_passed is None else ('PASS' if result.is_passed else 'FAIL')}</td></tr>"
         for result in summary.criterion_results
     )
     suite_rows = "".join(
@@ -23,9 +23,9 @@ def render_html_report(summary: RunSummary) -> str:
         "<!doctype html><html lang='ko'><meta charset='utf-8'>"
         f"<title>{escape(summary.run_id)}</title>"
         f"<h1>{escape(summary.run_id)} · {summary.status.value}</h1>"
-        f"<p>대상 {summary.run_config.target_kind.value} · 합격 기준 {summary.passed_criteria_count} / {len(PASS_CRITERIA)}</p>"
-        f"<h2>합격 기준</h2><table border='1'><tr><th>기준</th><th>측정값</th><th>결과</th></tr>{criterion_rows}</table>"
-        f"<h2>시험 묶음</h2><table border='1'><tr><th>묶음</th><th>결과</th><th>메시지</th></tr>{suite_rows}</table>"
+        f"<p>대상 {summary.run_config.target_kind.value} · PASS {summary.passed_criteria_count} / {len(PASS_CRITERIA)}</p>"
+        f"<h2>합격 기준</h2><table border='1'><tr><th>기준</th><th>측정값</th><th>판정</th></tr>{criterion_rows}</table>"
+        f"<h2>Suite 결과</h2><table border='1'><tr><th>Suite</th><th>결과</th><th>메시지</th></tr>{suite_rows}</table>"
         "</html>"
     )
 

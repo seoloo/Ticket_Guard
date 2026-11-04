@@ -1,7 +1,7 @@
 {# 여러 화면이 같이 쓰는 조각 #}
 
 {% macro test_steps(current_step_number) %}
-{% set step_titles = ["시험 설정", "실행", "결과"] %}
+{% set step_titles = ["Run 설정", "Run 모니터", "Run 리포트"] %}
 <div class="steps">
   {% for title in step_titles %}
   {% set step_number = loop.index %}
@@ -21,7 +21,7 @@
     <div class="sub-text">{{ description }}</div>
   </div>
   <span class="spacer"></span>
-  <span class="bot-scope"><i data-lucide="shield-check"></i>우리 앱(웹 · API)에만 접속</span>
+  <span class="bot-scope"><i data-lucide="shield-check"></i>테스트 범위 · 자사 서비스 한정(티켓가드)</span>
 </div>
 {% endmacro %}
 

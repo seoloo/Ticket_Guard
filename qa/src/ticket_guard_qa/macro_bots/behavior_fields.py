@@ -23,15 +23,15 @@ class BehaviorFieldSpec:
 
 
 BEHAVIOR_FIELD_SPECS: tuple[BehaviorFieldSpec, ...] = (
-    BehaviorFieldSpec("entry_delay_after_open_ms", "① 진입 시점", "오픈 후 첫 진입", "ms", 0, 600_000, "0 = 오픈 순간"),
-    BehaviorFieldSpec("entry_delay_deviation_ms", "① 진입 시점", "진입 흔들림", "ms", 0, 600_000, "사람은 크고 봇은 작음"),
-    BehaviorFieldSpec("click_interval_mean_ms", "② 클릭 간격", "평균", "ms", 10, 60_000),
-    BehaviorFieldSpec("click_interval_deviation_ms", "② 클릭 간격", "흔들림", "ms", 0, 60_000, "평균의 30% 미만이면 일정한 간격"),
-    BehaviorFieldSpec("sessions_per_device", "④ 기기당 세션 수", "동시 세션", "개", 1, 50),
+    BehaviorFieldSpec("entry_delay_after_open_ms", "① 진입 타이밍", "진입 지연(평균)", "ms", 0, 600_000, "0 = 오픈 시각(T0)"),
+    BehaviorFieldSpec("entry_delay_deviation_ms", "① 진입 타이밍", "진입 지연 표준편차", "ms", 0, 600_000, "편차 작음 = 기계적 진입"),
+    BehaviorFieldSpec("click_interval_mean_ms", "② 요청 간격", "평균 간격", "ms", 10, 60_000),
+    BehaviorFieldSpec("click_interval_deviation_ms", "② 요청 간격", "간격 표준편차", "ms", 0, 60_000, "변동계수(CV) 0.3 미만 = 정주기"),
+    BehaviorFieldSpec("sessions_per_device", "④ 디바이스당 세션", "병렬 세션", "개", 1, 50),
 )
 
 # 아직 행동 값이 없는 항목 · 트래픽 생성기 구현 후 SessionBehavior에 추가
-PENDING_BEHAVIOR_GROUPS: tuple[str, ...] = ("③ 화면 흐름", "⑤ 좌석 없을 때")
+PENDING_BEHAVIOR_GROUPS: tuple[str, ...] = ("③ 페이지 흐름", "⑤ 재고 없음 대응")
 
 
 @dataclass(frozen=True)
@@ -41,9 +41,9 @@ class BehaviorPreset:
     behavior: SessionBehavior
 
 
-BEHAVIOR_PRESETS: tuple[BehaviorPreset, ...] = (  # 기본 봇 값에서 시작 · "직접"은 화면에서 손으로 입력
-    BehaviorPreset("open_instant", "오픈 즉시형", DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]),
-    BehaviorPreset("human_like", "사람 흉내형", DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_B]),
+BEHAVIOR_PRESETS: tuple[BehaviorPreset, ...] = (  # 기본 봇 값에서 시작 · 이름은 봇 이름과 같게
+    BehaviorPreset("high_speed_repeat", "고속 반복 매크로", DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]),
+    BehaviorPreset("disguised", "위장 매크로", DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_B]),
 )
 
 
@@ -62,9 +62,9 @@ def parse_behavior_form(form_values: Mapping[str, str]) -> SessionBehavior:
         try:
             value = int(raw_value)
         except ValueError:
-            raise BehaviorInputError(f"{spec.group_title} {spec.title}: 숫자를 넣어 주세요.") from None
+            raise BehaviorInputError(f"{spec.group_title} {spec.title} · 형식 오류(숫자)") from None
         if not spec.minimum <= value <= spec.maximum:
-            raise BehaviorInputError(f"{spec.group_title} {spec.title}: {spec.minimum:,} ~ {spec.maximum:,}{spec.unit} 사이로 넣어 주세요.")
+            raise BehaviorInputError(f"{spec.group_title} {spec.title} · 범위 오류({spec.minimum:,} ~ {spec.maximum:,}{spec.unit})")
         values[spec.field_name] = value
     return SessionBehavior(**values)
 

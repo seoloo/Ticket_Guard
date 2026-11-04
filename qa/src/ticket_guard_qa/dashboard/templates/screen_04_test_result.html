@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from "screen_parts.html" import test_steps %}
-{% block title %}04 결과 · 티켓가드 QA{% endblock %}
+{% block title %}Run 리포트 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
   .result-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -47,23 +47,23 @@
   <section class="card result-main">
     <div class="result-head">
       <div class="spacer">
-        <h1 class="page-heading" style="font-size:38px">시험이 끝났어요</h1>
-        <div class="sub-text" style="font-size:16px">실행 {{ summary.run_id }} ·
+        <h1 class="page-heading" style="font-size:38px">Run 리포트</h1>
+        <div class="sub-text" style="font-size:16px">Run {{ summary.run_id }} ·
           {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}
-          · {{ '가짜 대상' if run_config.target_kind.value == 'fake' else '실제 대상' }} · {{ run_config.virtual_user_count }}명</div>
+          · {{ 'Mock' if run_config.target_kind.value == 'fake' else 'Live' }} · VU {{ run_config.virtual_user_count }}</div>
       </div>
-      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color);padding:7px 12px"><i data-lucide="file-check"></i>보고서 자동 저장됨</span>
+      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color);padding:7px 12px"><i data-lucide="file-check"></i>리포트 자동 저장</span>
     </div>
 
     <div class="score-box">
-      <div><div class="score-label">통과한 합격 기준</div><span class="score-number">{{ summary.passed_criteria_count }}</span><span class="score-total"> / {{ criterion_cards | length }}개</span></div>
-      <div><div class="score-label">최종 결과</div>
+      <div><div class="score-label">PASS 합격 기준</div><span class="score-number">{{ summary.passed_criteria_count }}</span><span class="score-total"> / {{ criterion_cards | length }}</span></div>
+      <div><div class="score-label">최종 판정</div>
         {% if summary.status.value == 'FAILED' %}
-        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>실패 {{ summary.failed_criteria_count }}건</span>
+        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>FAIL {{ summary.failed_criteria_count }}건</span>
         {% elif summary.status.value == 'PASSED' %}
-        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>통과</span>
+        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>PASS</span>
         {% else %}
-        <span class="final-pill is-other"><i data-lucide="circle-alert"></i>{{ '중지됨' if summary.status.value == 'CANCELLED' else '오류' }}</span>
+        <span class="final-pill is-other"><i data-lucide="circle-alert"></i>{{ 'CANCELLED' if summary.status.value == 'CANCELLED' else 'ERROR' }}</span>
         {% endif %}
       </div>
     </div>
@@ -73,7 +73,7 @@
       {% set result = card.result %}
       <div class="metric-card {{ 'is-not-measured' if result.is_passed is none else ('is-passed' if result.is_passed else 'is-failed') }}">
         <div class="metric-label">{{ card.criterion.title }}</div>
-        <div class="metric-value">{{ result.measured_value | metric(card.criterion.metric_name) if result.measured_value is not none else '측정 안 됨' }}</div>
+        <div class="metric-value">{{ result.measured_value | metric(card.criterion.metric_name) if result.measured_value is not none else 'N/A' }}</div>
         <div class="metric-check">
           {% if result.is_passed is none %}<i data-lucide="minus"></i>{% elif result.is_passed %}<i data-lucide="check"></i>{% else %}<i data-lucide="x"></i>{% endif %}
           {{ card.criterion.comparison.value | threshold(card.criterion.threshold, card.criterion.metric_name) }}
@@ -81,7 +81,7 @@
       </div>
       {% endfor %}
       <div class="metric-card report-card">
-        <div class="metric-label">보고서</div>
+        <div class="metric-label">리포트</div>
         <div class="report-links">
           <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.html" target="_blank">HTML</a>
           <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.json" target="_blank">JSON</a>
@@ -89,13 +89,13 @@
       </div>
     </div>
 
-    <h3 class="section-heading" style="margin:26px 0 10px;font-size:16px">시험 묶음</h3>
+    <h3 class="section-heading" style="margin:26px 0 10px;font-size:16px">Suite 결과</h3>
     <table class="result-table">
-      <tr><th>묶음</th><th>결과</th><th>메시지</th></tr>
+      <tr><th>Suite</th><th>결과</th><th>메시지</th></tr>
       {% for result in summary.suite_results %}
       <tr>
         <td>{{ suite_title_by_name.get(result.suite_name, result.suite_name) }}</td>
-        <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': '통과', 'FAILED': '실패', 'SKIPPED': '건너뜀', 'ERROR': '오류'}[result.outcome.value] }}</span></td>
+        <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': 'PASS', 'FAILED': 'FAIL', 'SKIPPED': 'SKIP', 'ERROR': 'ERROR'}[result.outcome.value] }}</span></td>
         <td class="muted">{{ result.message or '-' }}</td>
       </tr>
       {% endfor %}
@@ -107,43 +107,43 @@
     <section class="card side-card failure-card">
       <div class="failure-head">
         <span class="failure-icon"><i data-lucide="circle-alert"></i></span>
-        <div><h2 class="section-heading" style="font-size:24px">{{ first_failed_card.criterion.title }} · 기준 미달</h2>
+        <div><h2 class="section-heading" style="font-size:24px">{{ first_failed_card.criterion.title }} · FAIL</h2>
           <div class="sub-text" style="font-size:16px"><b style="color:var(--fail-red-text)">{{ first_failed_card.result.measured_value | metric(first_failed_card.criterion.metric_name) }}</b>
-            · 기준 {{ first_failed_card.criterion.comparison.value | threshold(first_failed_card.criterion.threshold, first_failed_card.criterion.metric_name) }}</div></div>
+            · 기준선 {{ first_failed_card.criterion.comparison.value | threshold(first_failed_card.criterion.threshold, first_failed_card.criterion.metric_name) }}</div></div>
       </div>
-      <a class="button is-db is-wide" style="font-size:17px" href="{{ base_path }}/db?run_id={{ summary.run_id }}"><i data-lucide="database"></i>DB 대시보드에서 원인 보기<i data-lucide="chevron-right"></i></a>
-      <a class="button is-outline is-wide" style="font-size:17px;margin-top:12px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="sliders-horizontal"></i>설정 바꿔 다시 실행</a>
+      <a class="button is-db is-wide" style="font-size:17px" href="{{ base_path }}/db?run_id={{ summary.run_id }}"><i data-lucide="database"></i>DB 원인 분석<i data-lucide="chevron-right"></i></a>
+      <a class="button is-outline is-wide" style="font-size:17px;margin-top:12px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="sliders-horizontal"></i>Run 재구성</a>
     </section>
     {% else %}
     <section class="card side-card pass-card">
-      <h2 class="section-heading" style="font-size:24px"><i data-lucide="circle-check" style="color:var(--pass-green)"></i>측정한 합격 기준을 모두 넘었어요</h2>
-      <div class="sub-text">측정 안 된 기준은 해당 시험 묶음이 아직 껍데기이거나 이번에 고르지 않은 경우예요.</div>
-      <a class="button is-outline is-wide" style="font-size:17px;margin-top:16px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="refresh-cw"></i>같은 조건으로 다시 실행</a>
+      <h2 class="section-heading" style="font-size:24px"><i data-lucide="circle-check" style="color:var(--pass-green)"></i>측정 기준 전체 PASS</h2>
+      <div class="sub-text">N/A = 미구현 Suite 또는 미선택 Suite</div>
+      <a class="button is-outline is-wide" style="font-size:17px;margin-top:16px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="refresh-cw"></i>동일 조건 재실행</a>
     </section>
     {% endif %}
 
     <section class="card side-card" style="margin-top:20px">
-      <div class="row"><h2 class="section-heading">정답과 다른 판정</h2><span class="spacer"></span><span class="tag is-db">DB에서 추적</span></div>
+      <div class="row"><h2 class="section-heading">오분류 판정</h2><span class="spacer"></span><span class="tag is-db">DB 분석</span></div>
       {% if verdict_details %}
       <div class="mismatch-grid">
-        <div class="mismatch-box"><span class="muted">놓친 봇</span><b>{{ verdict_details.missed_bot_count }}</b></div>
-        <div class="mismatch-box"><span class="muted">사람 오탐</span><b>{{ verdict_details.false_positive_count }}</b></div>
+        <div class="mismatch-box"><span class="muted">미탐(FN)</span><b>{{ verdict_details.missed_bot_count }}</b></div>
+        <div class="mismatch-box"><span class="muted">오탐(FP)</span><b>{{ verdict_details.false_positive_count }}</b></div>
       </div>
       <div class="row">
-        <a style="color:var(--db-orange-text);font-weight:800" href="{{ base_path }}/db?run_id={{ summary.run_id }}">{{ verdict_details.missed_bot_count + verdict_details.false_positive_count }}개 세션 추적하기 ›</a>
+        <a style="color:var(--db-orange-text);font-weight:800" href="{{ base_path }}/db?run_id={{ summary.run_id }}">오분류 세션 {{ verdict_details.missed_bot_count + verdict_details.false_positive_count }}건 추적 ›</a>
         <span class="spacer"></span>
-        <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots"><i data-lucide="bot"></i>봇별 보기</a>
+        <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots"><i data-lucide="bot"></i>탐지 리포트</a>
       </div>
       {% else %}
-      <div class="sub-text" style="margin-top:12px">이번 실행에 판정 정확도 시험이 없거나 건너뛰었어요.</div>
+      <div class="sub-text" style="margin-top:12px">판정 정확도 Suite 미실행</div>
       {% endif %}
     </section>
   </aside>
 </div>
 
 <div class="compare-row">
-  <div class="card"><b style="font-size:18px">지난 실행과 비교</b>
-    <div class="muted" style="margin-top:4px">{{ '같은 조건의 바로 앞 실행' if comparisons else '같은 조건의 지난 실행이 없어요' }}</div></div>
+  <div class="card"><b style="font-size:18px">이전 Run 비교</b>
+    <div class="muted" style="margin-top:4px">{{ '동일 조건 직전 Run' if comparisons else '동일 조건 이전 Run 없음' }}</div></div>
   {% for comparison in comparisons[:4] %}
   <div class="card">
     <div class="muted">{{ comparison.criterion.title }}</div>
@@ -158,16 +158,16 @@
 <div class="info-row">
   <section class="card info-card">
     <span class="info-icon" style="background:var(--pass-green-light);color:var(--pass-green)"><i data-lucide="database-zap"></i></span>
-    <div>{% if verdict_details %}<b>정답표를 저장했어요</b><span class="muted">QA DB · 세션 {{ verdict_details.session_count }}개 (사람 {{ verdict_details.human_session_count }} · 봇 {{ verdict_details.bot_session_count }})</span>
-      {% else %}<b>정답표 없음</b><span class="muted">판정 정확도 시험을 고르면 함께 저장돼요</span>{% endif %}</div>
+    <div>{% if verdict_details %}<b>Ground Truth 저장 완료</b><span class="muted">QA DB · {{ verdict_details.session_count }}세션 (정상 {{ verdict_details.human_session_count }} · 봇 {{ verdict_details.bot_session_count }})</span>
+      {% else %}<b>Ground Truth 없음</b><span class="muted">판정 정확도 Suite 선택 시 자동 저장</span>{% endif %}</div>
   </section>
   <section class="card info-card">
     <span class="info-icon" style="background:var(--qa-blue-light);color:var(--qa-blue)"><i data-lucide="send"></i></span>
-    <div><b>결과 알림</b><span class="muted">설정: {{ alert_policy_titles[run_config.alert_policy] }} · 알림 보내기는 준비 중</span></div>
+    <div><b>결과 알림</b><span class="muted">정책: {{ alert_policy_titles[run_config.alert_policy] }} · 발송 기능 미구현</span></div>
   </section>
   <section class="card info-card">
     <span class="info-icon" style="background:var(--db-orange-light);color:var(--db-orange)"><i data-lucide="list-todo"></i></span>
-    <div><b>다음에 할 일</b><span class="muted">{{ next_actions | join(' · ') if next_actions else '없음 · 같은 조건으로 한 번 더 돌려 안정성 확인' }}</span></div>
+    <div><b>후속 조치</b><span class="muted">{{ next_actions | join(' · ') if next_actions else '없음 · 동일 조건 재실행으로 안정성 확인' }}</span></div>
   </section>
 </div>
 {% endblock %}

@@ -5,7 +5,7 @@ from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 class LoadCapacitySuite:
     suite_name = "load_capacity"
-    title = "부하"
+    title = "부하 테스트"
     related_codes: tuple[str, ...] = ("T1", "T2")
 
     def run(self, context: SuiteContext) -> SuiteResult:
