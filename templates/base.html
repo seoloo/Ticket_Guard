@@ -1,7 +1,7 @@
 {% load static %}<!doctype html>
 <html lang="ko">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}티켓가드 · 좋아하는 무대와 만나는 순간{% endblock %}</title><meta name="description" content="좋아하는 무대와 만나는 순간. 티켓가드 공연 예매 시뮬레이션."><link rel="stylesheet" href="{% static 'app.css' %}"><script src="{% static 'app.js' %}" defer></script></head>
-<body data-screen="{{ screen }}" data-attempt="{{ attempt_id|default:'' }}" data-show="{{ show.id|default:'' }}" data-price="{{ show.price|default:0 }}" data-kind="{{ show.kind|default:'' }}" data-sequence="{{ sequence|default:0 }}">
+<body data-result-count="{{ shows|length }}" data-screen="{{ screen }}" data-attempt="{{ attempt_id|default:'' }}" data-show="{{ show.id|default:'' }}" data-price="{{ show.price|default:0 }}" data-kind="{{ show.kind|default:'' }}" data-sequence="{{ sequence|default:0 }}">
 <a class="skip" href="#main">본문 바로가기</a>
 <header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="티켓가드 홈"><span class="brand-mark" aria-hidden="true">T<span>✓</span></span><span>티켓가드<small>TICKET GUARD</small></span></a>{% if screen != 'login' %}<nav aria-label="주 메뉴"><a href="/" {% if screen == 'shows' or screen == 'detail' %}aria-current="page"{% endif %}>공연 찾기</a><a href="/history/" {% if screen == 'history' %}aria-current="page"{% endif %}>예매 내역</a></nav>{% endif %}{% if user %}<div class="account"><span>{{ user }} 님</span><button class="text-button" id="logout">로그아웃</button></div>{% endif %}</div></header>
 <div id="notification" class="notification" role="alert" tabindex="-1" hidden><span id="notification-text"></span><a id="notification-link" class="button small" hidden>돌아가기</a><button type="button" class="dismiss" aria-label="알림 닫기">×</button></div>
@@ -10,3 +10,4 @@
 <footer class="site-footer"><div><strong>티켓가드</strong><span>좋아하는 무대와 만나는 순간</span></div><small>© 2026 Ticket Guard. Demo experience.</small></footer>
 <form hidden>{% csrf_token %}</form>
 </body></html>
+

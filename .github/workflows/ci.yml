@@ -6,6 +6,8 @@ permissions:
   contents: read
 jobs:
   django:
+    env:
+      EVENT_PUBLISHER: mock
     runs-on: ubuntu-latest
     container: python:3.13.15-slim-trixie
     steps:

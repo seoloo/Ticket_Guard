@@ -1,6 +1,6 @@
 # Ticket Guard · 티켓가드
 
-공연 예매 웹과 실시간 이벤트 처리 파이프라인 프로젝트. **현재 구현 범위: 1단계 Django 웹 시뮬레이션**입니다. Kafka·Spark·MongoDB는 최종 필수 구성이고 아직 연결하지 않았습니다.
+공연 예매 웹과 실시간 이벤트 처리 파이프라인 프로젝트. **현재 구현 범위: Django 웹 + 실제 Kafka 이벤트 발행 + MongoDB 실행 환경**입니다. Spark 원본 적재 코드와 비적재 점검을 추가했습니다. 실제 적재·복구 실험은 미실행입니다. [Spark 문서](docs/spark.md)를 확인하세요. 자세한 구성·스키마·실행 명령은 [Kafka 연결 문서](docs/kafka.md)를 확인하세요.
 
 ## 실행
 
@@ -21,7 +21,7 @@ docker compose ps
 
 두 계정은 예매 내역과 입장 권한이 분리되고 공연 재고는 공유됩니다. 실제 계정 체계가 아닌 개발용 로그인입니다. 외부에 배포하지 마세요.
 
-계정과 설정을 바꾸려면 `.env.example`을 `.env`로 복사해 수정한 뒤 `docker compose up -d`로 재생성합니다. `.env`는 Git에서 제외됩니다. `.env.example`의 비밀번호는 공개된 데모 값입니다.
+신규 환경에서 `.env`가 없을 때만 `.env.example`을 `.env`로 복사하고 수정한 뒤 `docker compose up -d`로 재생성합니다. `.env`는 Git에서 제외됩니다. `.env.example`의 비밀번호는 공개된 데모 값입니다.
 
 ```powershell
 Copy-Item .env.example .env
@@ -29,7 +29,7 @@ docker compose up -d
 docker compose logs --tail 50 web
 ```
 
-`compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. Kafka·Spark·MongoDB 없이 1단계 웹만 실행됩니다.
+`compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. 기본 Compose는 Kafka와 토픽 초기화를 함께 실행합니다. MongoDB는 별도 mongo 프로필로 추가했습니다. 같은 이름을 쓰는 이전 폴더 자원과 충돌하지 않도록 MongoDB 명령에는 `-p ticket-guard-workspace-db`를 반드시 사용합니다. 실행·초기화·검증은 [MongoDB 문서](docs/mongodb.md)를 따릅니다. Spark는 별도 `ticket-guard-workspace-pipeline` 프로젝트와 spark 프로필로 빌드·점검합니다. 실제 적재 명령은 [Spark 문서](docs/spark.md)를 먼저 확인하세요. 기존 `.env`를 복사 명령으로 덮어쓰지 마세요.
 
 ## 사용 흐름
 
@@ -63,8 +63,8 @@ docker compose logs --tail 50 web
 ## 테스트
 
 ```powershell
-docker compose exec -T web python manage.py check
-docker compose exec -T web python manage.py test web -v 2
+docker compose exec -e EVENT_PUBLISHER=mock -T web python manage.py check
+docker compose exec -e EVENT_PUBLISHER=mock -T web python manage.py test web -v 2
 ```
 
 시스템 검사와 핵심 회귀 테스트를 제공합니다. DB가 없는 `SimpleTestCase`로 서비스 원자성·중복 요청·오답·접근 제한·CSRF·이벤트 검증을 확인합니다. GitHub Actions도 같은 Python 이미지로 실행합니다. 워크플로 파일을 만들었지만 원격 실행은 push 후 확인해야 합니다.
@@ -86,7 +86,7 @@ CSS·JS·템플릿 변경은 브라우저 새로고침으로 확인합니다. �
 - Django 기본 DB 인증 대신 개발 계정 검증과 서명 쿠키 세션을 사용합니다. 관계형 DB/SQLite는 추가하지 않았습니다.
 - 서명 쿠키는 암호화되지 않으며 사용자 식별자만 넣습니다. 로그아웃된 쿠키의 서버 측 폐기나 실서비스 인증을 보장하지 않습니다. 실제 인증과 공유 세션은 2단계 이후 교체해야 합니다.
 - 브라우저 이벤트의 이탈 수집은 best effort입니다. 브라우저 종료 시 유실될 수 있습니다.
-- 이벤트 최대 1,000건, 클라이언트 eventId 중복 기억 최대 2,000건입니다. 24시간 TTL, 영속 발행 재시도, Kafka 전달 보장은 아직 구현하지 않았습니다.
+- 개발 로그 뷰어는 메모리에 최근 1,000건을 보관합니다. Kafka 전달 완료는 별도 callback/receipt로 구분하며, receipt는 최대 2,000건/15분입니다. Kafka 데이터는 named volume에 유지됩니다. 프로세스 종료 전 미전달 이벤트의 영속 재시도와 MongoDB TTL은 아직 구현하지 않았습니다.
 
 ## 구조
 
@@ -111,9 +111,10 @@ docs/architecture.md    필수 후속 데이터 파이프라인 설계
 
 ## 필수 후속 작업
 
-1. Python 3.13.15 기반 Kafka 클라이언트와 Kafka 서비스 연결.
+1. 완료: Python 3.13.15 기반 실제 Kafka 발행·Consumer 검증. [구현·검증 내역](docs/kafka.md).
 2. Kafka 소비 → PySpark Structured Streaming 검증/정규화/집계.
 3. MongoDB 예매·재고 저장과 이벤트 적재, TTL/인덱스.
 4. checkpoint와 장애 재처리, 전체 Docker 통합 검증, 다중 노드 별도 검증.
 
 상세 기준은 [후속 아키텍처](docs/architecture.md)를 참고하세요.
+
