@@ -3,6 +3,8 @@ import json
 from datetime import datetime,timezone
 from unittest.mock import patch
 from uuid import uuid4
+from time import monotonic
+from django.conf import settings
 from django.test import SimpleTestCase,override_settings
 from .events import EventDispatcher,build_event,publisher
 from .event_schema import validate_event,EventValidationError
@@ -57,7 +59,12 @@ class DeliveryTests(SimpleTestCase):
             dispatcher.publish(build_event('one','login_success'))
             with self.assertRaises(BufferError): dispatcher.publish(build_event('one','login_success'))
         record=next(iter(dispatcher.receipts.values()))
-        record.update(state='failed',updated=0)
+        
+
+        record.update(
+            state='failed',
+            updated=monotonic() - settings.EVENT_RECEIPT_TTL_SECONDS - 1,
+        )
         self.assertIsNone(dispatcher.status(record['event']['eventId'],'one'))
 
     def test_terminal_failure_does_not_retry(self):
