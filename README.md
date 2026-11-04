@@ -1,1 +1,119 @@
-# Ticket_Guard
+# Ticket Guard · 티켓가드
+
+공연 예매 웹과 실시간 이벤트 처리 파이프라인 프로젝트. **현재 구현 범위: 1단계 Django 웹 시뮬레이션**입니다. Kafka·Spark·MongoDB는 최종 필수 구성이고 아직 연결하지 않았습니다.
+
+## 실행
+
+Docker Desktop에서 Linux containers를 실행한 뒤 PowerShell에서:
+
+```powershell
+cd C:\workspace\Ticket_Guard
+docker compose up -d --build
+docker compose ps
+```
+
+접속: http://localhost:8000
+
+| 개발용 계정 | 비밀번호 |
+|---|---|
+| ticketguard | ticketguard-demo |
+| guest | ticketguard-demo |
+
+두 계정은 예매 내역과 입장 권한이 분리되고 공연 재고는 공유됩니다. 실제 계정 체계가 아닌 개발용 로그인입니다. 외부에 배포하지 마세요.
+
+계정과 설정을 바꾸려면 `.env.example`을 `.env`로 복사해 수정한 뒤 `docker compose up -d`로 재생성합니다. `.env`는 Git에서 제외됩니다. `.env.example`의 비밀번호는 공개된 데모 값입니다.
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d
+docker compose logs --tail 50 web
+```
+
+`compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. Kafka·Spark·MongoDB 없이 1단계 웹만 실행됩니다.
+
+## 사용 흐름
+
+로그인 → 공연 검색/필터 → 공연 상세 → 대기열(약 12초) → 보안문자 → 지정석/자유석 선택 → 예매 확정 → 완료/내역.
+
+- 지정석: A~J × 1~10, 최대 4석. 자유석: 잔여 수량 이내 1~4명.
+- 선택만으로 재고를 점유하지 않습니다. 확정 요청에서 서버가 가격·재고·입장 권한을 확인합니다.
+- 보안문자 정답은 서버 메모리에만 존재하고 PNG로 표시합니다. 오답 5회 시 대기열부터 다시 진행합니다.
+- 현재 탭을 유지하며 새로고침할 수 있습니다. 상단 메뉴로 나가면 취소 확인을 제공합니다. 닫힌 탭은 마지막 heartbeat부터 60초 후 권한이 만료됩니다.
+- 다른 탭에서 같은 계정으로 예매를 시작하면 기존 탭을 유지합니다. BroadcastChannel로 복제 탭 식별자 중복을 줄이지만 실제 다중 브라우저의 세션·접속 제어는 후속 서버 설계 대상입니다.
+- 확정 결과 재요청은 같은 예매를 반환합니다. 미확정의 오래된 sequence는 거부합니다.
+- UI의 시안 날짜는 표시용 고정 데이터이며 기본적으로 예매 가능합니다. 서버의 개발용 오픈 시간 설정으로 시작 전 상태를 재현합니다.
+- 실제 결제, 소셜 로그인, 회원가입, 추가 인증, 봇 판정은 없습니다.
+
+## 개발용 시나리오
+
+페이지 아래 **개발 시나리오**를 펼치세요. 기본적으로 DEBUG에서만 활성화됩니다. `SHOW_SCENARIOS=0`이면 패널·조작 API·로그 조회가 비활성화됩니다.
+
+| 화면 | 재현 방법 |
+|---|---|
+| 공연 상세 | 30초 뒤 오픈 / 지금 오픈 |
+| 대기열 | 즉시 입장, 연결 끊김, 입장 만료 |
+| 보안문자 | 오답 4회 상태 후 틀린 답 제출 → 5회 실패; 검증 통신 오류는 다음 제출을 클라이언트에서 실패시켜 오답 불변 확인 |
+| 지정석 | 좌석 선택 → 선택 좌석 먼저 판매 → 확정 → 재선택 안내 |
+| 자유석 | 2명 이상 선택 → 잔여 수량 1명 → 확정 → 인원 변경 안내 |
+| 선택 공통 | 동일 확정 요청 2회 / 오래된 요청 재현 |
+| 공통 | 내 이벤트 확인: 현재 로그인 사용자 이벤트만 최근 100개, 화면에는 마지막 15개 |
+
+재고 시나리오는 다른 사용자와 공유되는 모의 재고를 변경합니다. '오래된 요청'은 높은 sequence를 잘못된 선택으로 먼저 접수한 뒤 같은 sequence를 재전송하여 거부를 확인합니다. 실제 네트워크 응답 역전은 자동 테스트/후속 통합 테스트로 구분해야 합니다.
+
+## 테스트
+
+```powershell
+docker compose exec -T web python manage.py check
+docker compose exec -T web python manage.py test web -v 2
+```
+
+시스템 검사와 핵심 회귀 테스트를 제공합니다. DB가 없는 `SimpleTestCase`로 서비스 원자성·중복 요청·오답·접근 제한·CSRF·이벤트 검증을 확인합니다. GitHub Actions도 같은 Python 이미지로 실행합니다. 워크플로 파일을 만들었지만 원격 실행은 push 후 확인해야 합니다.
+
+개발 서버는 `--noreload` 단일 프로세스입니다. Python 코드 변경 후:
+
+```powershell
+docker compose restart web
+```
+
+CSS·JS·템플릿 변경은 브라우저 새로고침으로 확인합니다. 의존성 변경 시 `docker compose up -d --build`로 재빌드합니다.
+
+## 모의 저장소의 한계와 초기화
+
+- 예매·재고·대기열·보안문자·오픈시간·이벤트는 모두 서버 프로세스 메모리입니다.
+- **서버 재시작 시 위 데이터가 전부 초기화됩니다.** 완료된 예매도 재시작 뒤에는 조회할 수 없습니다.
+- 초기화 명령은 `docker compose restart web`입니다. 디스크나 실제 DB의 데이터를 삭제하지 않습니다.
+- 프로세스 내부 RLock으로 확정을 직렬화합니다. 여러 프로세스·컨테이너 사이 정합성을 보장하지 않습니다.
+- Django 기본 DB 인증 대신 개발 계정 검증과 서명 쿠키 세션을 사용합니다. 관계형 DB/SQLite는 추가하지 않았습니다.
+- 서명 쿠키는 암호화되지 않으며 사용자 식별자만 넣습니다. 로그아웃된 쿠키의 서버 측 폐기나 실서비스 인증을 보장하지 않습니다. 실제 인증과 공유 세션은 2단계 이후 교체해야 합니다.
+- 브라우저 이벤트의 이탈 수집은 best effort입니다. 브라우저 종료 시 유실될 수 있습니다.
+- 이벤트 최대 1,000건, 클라이언트 eventId 중복 기억 최대 2,000건입니다. 24시간 TTL, 영속 발행 재시도, Kafka 전달 보장은 아직 구현하지 않았습니다.
+
+## 구조
+
+```text
+config/                 Django 설정, URL, ASGI
+web/services.py         예매 서비스, MockRepository, 모의 공연 데이터
+web/events.py           EventPublisher 계약, MockEventPublisher, 이벤트 생성
+web/views.py            요청 검증·화면 렌더링·API
+web/tests.py            서비스·HTTP 회귀 테스트
+templates/              화면과 공통 컴포넌트
+static/                 CSS, JavaScript, 공연 이미지
+docs/architecture.md    필수 후속 데이터 파이프라인 설계
+```
+
+## 개발 환경과 운영 환경
+
+현재 Compose는 로컬 개발 전용이며 127.0.0.1에만 포트를 노출합니다. 운영에서는 Django runserver와 모의 저장소를 사용하면 안 됩니다. 별도 운영 설정, WSGI/ASGI 서버, TLS, 정적 파일 배포, 실제 인증·공유 상태 저장소, 권한·모니터링 구성이 필요합니다. DEBUG=0일 때 안전한 SECRET_KEY가 없으면 기동을 거부합니다. HTTPS용 secure cookie를 켭니다. 이 설정만으로 운영 배포가 준비되었다는 의미는 아닙니다.
+
+## GitHub
+
+기존 remote `https://github.com/seoloo/Ticket_Guard.git`을 유지합니다. 원격 push와 PR 생성은 수행하지 않습니다. 팀원은 저장소를 clone한 뒤 같은 Compose 명령으로 실행할 수 있습니다. 소스·이미지 자산은 공유되지만 실행 중 메모리 데이터는 공유되지 않습니다.
+
+## 필수 후속 작업
+
+1. Python 3.13.15 기반 Kafka 클라이언트와 Kafka 서비스 연결.
+2. Kafka 소비 → PySpark Structured Streaming 검증/정규화/집계.
+3. MongoDB 예매·재고 저장과 이벤트 적재, TTL/인덱스.
+4. checkpoint와 장애 재처리, 전체 Docker 통합 검증, 다중 노드 별도 검증.
+
+상세 기준은 [후속 아키텍처](docs/architecture.md)를 참고하세요.

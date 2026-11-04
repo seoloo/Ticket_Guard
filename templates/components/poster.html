@@ -1,0 +1,1 @@
+{% load static %}<img class="poster {{ poster_class }}" src="{% static 'images/' %}{{ show.poster }}" alt="{{ show.title }} 공연 포스터" {% if lazy %}loading="lazy"{% endif %}>

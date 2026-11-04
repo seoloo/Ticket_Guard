@@ -1,0 +1,32 @@
+name: ticket-guard
+
+services:
+  web:
+    image: ticket-guard-web:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-demo-only-change-before-deployment-ticket-guard}
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DEMO_USERNAME: ${DEMO_USERNAME:-ticketguard}
+      DEMO_SECOND_USERNAME: ${DEMO_SECOND_USERNAME:-guest}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-ticketguard-demo}
+      SHOW_SCENARIOS: ${SHOW_SCENARIOS:-1}
+      PYTHONUNBUFFERED: "1"
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000", "--noreload"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    init: true
+    stdin_open: true
+    tty: true

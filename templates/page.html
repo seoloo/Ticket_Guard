@@ -1,0 +1,550 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+{% if screen == "login" %}
+  <section class="login-layout">
+    <div class="login-visual">
+      <div class="eyebrow light">TICKET GUARD</div>
+      <h1>
+        좋아하는 무대와
+        <br />
+        만나는 순간<span class="accent-line"></span>
+      </h1>
+      <p>
+        설레는 첫 음부터 마지막 앙코르까지.
+        <br />
+        당신의 특별한 순간을 함께해요.
+      </p>
+      <div class="visual-foot">CONCERT · LIVE · FESTIVAL</div>
+    </div>
+    <div class="login-form-wrap">
+      <span class="eyebrow">WELCOME BACK</span>
+      <h2>
+        티켓가드에 오신 것을
+        <br />
+        환영해요
+      </h2>
+      <p class="muted">로그인하고 다음 무대를 만나보세요.</p>
+      <form id="login-form">
+        <label for="username">아이디</label><input id="username"
+                                                name="username"
+                                                autocomplete="username"
+                                                placeholder="아이디를 입력해 주세요"
+                                                maxlength="100"
+                                                required /><label for="password">비밀번호</label>
+        <div class="password-wrap">
+          <input id="password"
+                 type="password"
+                 name="password"
+                 autocomplete="current-password"
+                 placeholder="비밀번호를 입력해 주세요"
+                 maxlength="200"
+                 required /><button type="button"
+                                    id="toggle-password"
+                                    aria-label="비밀번호 표시"
+                                    aria-pressed="false">보기</button>
+        </div>
+        <p id="login-error" class="field-error" role="alert" hidden></p>
+        <button class="button full" type="submit">
+          로그인 <span aria-hidden="true">→</span>
+        </button>
+        <nav class="login-links" aria-label="계정 지원 메뉴">
+          <a href="#">아이디 찾기</a>
+          <a href="#">비밀번호 찾기</a>
+          <a href="/signup/">회원가입</a>
+        </nav>
+      </form>
+      <div class="demo-note">
+        <span aria-hidden="true">ⓘ</span> 개발용 계정으로 이용하는 모의 예매
+        서비스예요.
+        <br />
+        계정과 비밀번호는 프로젝트 README를 확인해 주세요.
+      </div>
+    </div>
+  </section>
+{% elif screen == "signup" %}
+  <section class="login-layout signup-layout">
+    <div class="login-visual">
+      <div class="eyebrow light">TICKET GUARD</div>
+      <h1>새로운 무대를<br />만나보세요<span class="accent-line"></span></h1>
+      <p>간단한 정보만 입력하고<br />티켓가드를 시작해요.</p>
+      <div class="visual-foot">CONCERT · LIVE · FESTIVAL</div>
+    </div>
+    <div class="login-form-wrap">
+      <span class="eyebrow">CREATE ACCOUNT</span>
+      <h2>회원가입</h2>
+      <p class="muted">아이디와 비밀번호를 입력해 주세요.</p>
+      <form id="signup-form">
+        <label for="signup-username">아이디</label>
+        <input id="signup-username" name="username" autocomplete="username" placeholder="아이디를 입력해 주세요" maxlength="100" required />
+        <label for="signup-password">비밀번호</label>
+        <div class="password-wrap">
+          <input id="signup-password" type="password" name="password" autocomplete="new-password" placeholder="비밀번호를 입력해 주세요" maxlength="200" required />
+          <button type="button" id="toggle-signup-password" aria-label="비밀번호 표시" aria-pressed="false">보기</button>
+        </div>
+        <p class="signup-note">가입 기능은 서버 계정 저장 단계에서 연결됩니다.</p>
+        <button class="button full" type="submit">회원가입 <span aria-hidden="true">→</span></button>
+        <nav class="login-links" aria-label="계정 메뉴"><a href="/login/">로그인으로 돌아가기</a></nav>
+      </form>
+    </div>
+  </section>
+{% elif screen == "shows" %}
+  <div class="shows-search-row">
+    <form class="search-form" method="get">
+      <label for="search" class="sr-only">공연명이나 장소 검색</label>
+      <span aria-hidden="true">⌕</span>
+      <input type="search"
+             id="search"
+             name="q"
+             value="{{ query }}"
+             placeholder="공연명이나 장소를 검색해 보세요"
+             maxlength="100" />
+      <input type="hidden" name="genre" value="{{ genre }}" />
+      <button type="submit" aria-label="검색">→</button>
+    </form>
+    <nav class="shows-account-links" aria-label="계정 메뉴">
+      <a href="/login/">로그인</a>
+      <a href="/signup/">회원가입</a>
+    </nav>
+  </div>
+  <div class="featured-layout"><section class="hero" id="featured-hero" style="--hero-image:url('/static/images/hero.png')"><div class="hero-blur" aria-hidden="true"></div><div class="hero-art" aria-hidden="true"></div>
+    <div class="hero-content">
+      <div class="eyebrow light">YOUR NEXT LIVE MOMENT</div>
+      <h1 id="hero-title">당신의 다음 무대를<br />찾아보세요<span class="hero-dot">.</span></h1>
+      <p id="hero-tagline">음악이 시작되는 곳, 티켓가드</p>
+      <div class="hero-show-detail" id="hero-show-detail" hidden><span id="hero-show-meta"></span><p id="hero-show-description"></p></div>
+    </div>
+    <span class="hero-counter">01 <i></i> 02</span>
+  </section>
+  <aside class="featured-shows" aria-label="추천 공연">
+    {% for featured in featured_shows %}<a class="featured-show-card{% if forloop.first %} is-active{% endif %}" href="/detail/{{ featured.id }}/" style="--card-image:url('{% static 'images/' %}{{ featured.poster }}')" data-hero-title="{{ featured.title }}" data-hero-tagline="{{ featured.tagline }}" data-hero-description="{{ featured.description }}" data-hero-meta="{{ featured.date }} · {{ featured.venue }}" data-hero-image="/static/images/{{ featured.poster }}"><span>{{ featured.title }}</span></a>{% endfor %}
+  </aside>
+  </div>
+  <div class="genre-list" aria-label="장르 필터">
+    {% for item in genres %}
+      <a class="chip {% if genre == item %}selected{% endif %}"
+         href="/?q={{ query|urlencode }}&amp;genre={{ item|urlencode }}"
+         data-genre="{{ item }}"
+         {% if genre == item %}aria-current="true"{% endif %}>{{ item }}</a>
+    {% endfor %}
+  </div>
+  <div class="concert-grid">
+    {% for show in shows %}
+      <article class="concert-card">
+        <a class="poster-link"
+           href="/detail/{{ show.id }}/"
+           data-show-link="{{ show.id }}">
+          {% include "components/poster.html" with lazy=True %}
+          <span class="poster-tag">{{ show.kind_label }}</span>
+          <span class="poster-cta">공연 자세히 보기 ↗</span>
+        </a>
+        <div class="concert-info">
+          <span class="category">{{ show.genre }}</span>
+          <h3>
+            <a href="/detail/{{ show.id }}/">{{ show.title }}</a>
+          </h3>
+          <p>{{ show.date }} (토) {{ show.time }}</p>
+          <p class="venue">{{ show.venue }}</p>
+          <div class="card-bottom">
+            <strong>{{ show.price }}<small>원</small></strong>
+            <a href="/detail/{{ show.id }}/"
+               class="round-arrow"
+               aria-label="{{ show.title }} 상세 보기">↗</a>
+          </div>
+        </div>
+      </article>
+    {% empty %}
+      <section class="empty-state card">
+        <div class="empty-icon">⌕</div>
+        <h2>검색 결과가 없어요</h2>
+        <p>검색어나 필터를 변경하고 다시 찾아보세요.</p>
+        <a class="button outline" href="/">전체 공연 보기</a>
+      </section>
+    {% endfor %}
+  </div>
+  <section class="discovery-note">
+    <span class="note-icon">✦</span>
+    <div>
+      <strong>좋은 공연의 시작, 편안한 예매</strong>
+      <p>공연을 고르고, 원하는 자리를 선택해 보세요.</p>
+    </div>
+    <span class="tag">TICKET GUARD</span>
+  </section>
+{% elif screen == "detail" %}
+  <div class="breadcrumb"><a href="/">공연 찾기</a><span>›</span>공연 상세</div>
+  <section class="detail-layout">
+    <div class="detail-poster">
+      {% include "components/poster.html" %}
+      <div class="poster-caption">{{ show.english }}</div>
+    </div>
+    <div class="detail-main">
+      <span class="category">{{ show.genre }}</span>
+      <h1>{{ show.title }}</h1>
+      <p class="english-title">{{ show.english }}</p>
+      <dl class="info-list">
+        <div>
+          <dt>공연 일시</dt>
+          <dd>
+            {{ show.date }} (토) {{ show.time }}
+          </dd>
+        </div>
+        <div>
+          <dt>공연 장소</dt>
+          <dd>
+            {{ show.venue }}
+          </dd>
+        </div>
+        <div>
+          <dt>좌석 유형</dt>
+          <dd>
+            {{ show.kind_label }}
+          </dd>
+        </div>
+        <div>
+          <dt>관람 금액</dt>
+          <dd>
+            1인 {{ show.price }}원
+          </dd>
+        </div>
+      </dl>
+      <div class="intro">
+        <span class="eyebrow">ABOUT THE SHOW</span>
+        <h2>{{ show.tagline }}</h2>
+        <p>{{ show.description }}</p>
+      </div>
+      <div class="notice-box">
+        <strong>예매 전 확인해 주세요</strong>
+        <p>
+          한 번에 최대 4명까지 예매할 수 있어요.
+          <br />
+          선택한 좌석과 수량은 예매
+          확정 전까지 확보되지 않아요.
+        </p>
+      </div>
+    </div>
+    <aside class="booking-panel card">
+      <h2>예매하기</h2>
+      <label for="date-select">관람 날짜</label><select id="date-select">
+        <option value="{{ show.date }}">{{ show.date }} (토)</option>
+      </select><label for="time-select">회차 선택</label><select id="time-select">
+        <option value="{{ show.time }}">{{ show.time }}</option>
+      </select>
+      <div class="selection-meta">
+        <span>{{ show.kind_label }}</span><strong>1인 {{ show.price }}원</strong>
+      </div>
+      <div class="schedule-summary">
+        <small>선택한 일정</small><strong>{{ show.date }} (토)
+          <br />
+        {{ show.time }} · {{ show.venue }}</strong>
+      </div>
+      <p id="countdown" class="warning" data-opens-at="{{ opens_at }}" hidden></p>
+      <button id="start-booking" class="button full">
+        예매하기 <span>→</span>
+      </button>
+      <p class="fine-print">대기열과 보안 확인 후 예매가 진행돼요.</p>
+    </aside>
+  </section>
+{% elif screen == "queue" %}
+  {% include "components/progress.html" %}
+  <section class="queue-layout card">
+    <div class="queue-main">
+      <div class="eyebrow">JUST A LITTLE MOMENT</div>
+      <h1>조금만 기다려 주세요</h1>
+      <p class="muted">공연을 기다리는 마음, 순서대로 연결하고 있어요.</p>
+      <div class="queue-stats">
+        <div>
+          <span>현재 대기 순번</span><strong id="queue-rank">{{ rank }}</strong>
+        </div>
+        <div>
+          <span>예상 대기 시간</span><b id="queue-wait">약 12초</b><small>모의 대기열 기준</small>
+        </div>
+      </div>
+      <div class="queue-track">
+        <div id="queue-bar"></div>
+      </div>
+      <p class="connection" id="connection-state">
+        ● 정상 연결 중 <span>순서가 되면 자동으로 이동해요.</span>
+      </p>
+      <button class="button outline"
+              id="cancel-booking">대기 취소</button><button class="button"
+                                                        id="reconnect"
+                                                        hidden>다시 연결</button>
+    </div>
+    <aside class="queue-show">
+      {% include "components/poster.html" %}
+      <div>
+        <span class="category">{{ show.kind_label }}</span>
+        <h2>{{ show.title }}</h2>
+        <p>{{ show.date }} (토) {{ show.time }}</p>
+        <p>{{ show.venue }}</p>
+        <strong>{{ show.price }}원</strong>
+      </div>
+    </aside>
+  </section>
+  <p class="under-note">
+    새로고침하거나 다른 페이지로 이동해도 순번이 빨라지지 않아요. 연결이 오래
+    끊기면 입장 권한이 만료돼요.
+  </p>
+{% elif screen == "captcha" %}
+  {% include "components/progress.html" %}
+  <section class="verify-card card">
+    <div class="security-icon">✓</div>
+    <span class="eyebrow">ONE MORE STEP</span>
+    <h1>보안문자를 입력해 주세요</h1>
+    <p class="muted">
+      아래 이미지에 보이는 문자를 입력하면
+      <br />
+      원하는 좌석을 선택할 수 있어요.
+    </p>
+    <form id="captcha-form">
+      <div class="captcha-image-wrap">
+        <img id="captcha-image"
+             alt="입력할 보안문자 이미지"
+             width="300"
+             height="94" /><button type="button"
+                                   id="refresh-captcha"
+                                   class="text-button">↻ 문제 바꾸기</button>
+      </div>
+      <label for="captcha-answer">보안문자</label><input id="captcha-answer"
+                                                     autocomplete="off"
+                                                     autocapitalize="characters"
+                                                     spellcheck="false"
+                                                     maxlength="12"
+                                                     placeholder="보이는 문자를 입력해 주세요"
+                                                     required
+                                                     aria-describedby="captcha-help captcha-error" />
+      <p id="captcha-help" class="fine-print">영문 대소문자는 구분하지 않아요. 최대 5회 시도할 수 있어요.</p>
+      <p id="captcha-error" class="field-error" role="alert" hidden></p>
+      <button class="button full" type="submit">확인하고 계속하기 →</button>
+    </form>
+    <button class="text-button cancel-link" id="cancel-booking">예매 진행 취소</button>
+  </section>
+{% elif screen == "select" %}
+  {% include "components/progress.html" %}
+  <div class="section-heading">
+    <div>
+      <span class="eyebrow">MAKE IT YOUR MOMENT</span>
+      <h1>
+        {% if show.kind == "reserved" %}원하는 좌석을 선택해 주세요{% else %}관람
+          인원을 선택해 주세요{% endif %}
+      </h1>
+      <p class="muted">{{ show.title }} · {{ show.date }} (토) {{ show.time }}</p>
+    </div>
+    <button class="text-button" id="cancel-booking">예매 진행 취소</button>
+  </div>
+  <div class="selection-layout">
+    <section class="card selection-main">
+      {% if show.kind == "reserved" %}
+        <div class="map-title">
+          <h2>좌석 선택</h2>
+          <span class="tag">최대 4석</span>
+        </div>
+        <div class="stage">STAGE <small>무대</small></div>
+        <p class="seat-hint">원하는 좌석을 선택하세요. 좌석도는 가로로 스크롤할 수 있어요.</p>
+        <div class="seat-scroll" tabindex="0" aria-label="좌석도 스크롤 영역">
+          <div class="seat-map">
+            <div class="seat-row headings">
+              <span></span>{% for seat in rows.0.seats %}<span {% if forloop.counter == 6 %}class="aisle"{% endif %}>{{ seat.number }}</span>{% endfor %}
+            </div>
+            {% for row in rows %}
+              <div class="seat-row">
+                <b>{{ row.label }}</b>{% for seat in row.seats %}<button type="button"
+                                                                         class="seat {% if seat.sold %}sold{% endif %} {% if forloop.counter == 6 %}aisle{% endif %}"
+                                                                         data-seat="{{ seat.id }}"
+                                                                         aria-label="{{ row.label }}열 {{ seat.number }}번 {% if seat.sold %}판매 완료{% else %}선택 가능{% endif %}"
+                                                                         aria-pressed="false"
+                                                                         {% if seat.sold %}disabled{% endif %}>
+                {% if seat.sold %}×{% endif %}</button>{% endfor %}
+              </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="seat-legend">
+    <span><i></i>선택 가능</span><span><i class="chosen">✓</i>선택됨</span><span><i class="sold">×</i>판매 완료</span>
+  </div>
+{% else %}
+  <div class="general-selection">
+    {% include "components/poster.html" %}
+    <div>
+      <span class="category">자유석</span>
+      <h2>{{ show.title }}</h2>
+      <p class="muted">공연장 내 자유롭게 관람하는 티켓이에요.</p>
+      <p class="stock">
+        현재 잔여 수량 <strong id="remaining">{{ remaining }}</strong>명
+      </p>
+      <label class="quantity-label" for="quantity-value">관람 인원</label>
+      <div class="quantity-control">
+        <button id="quantity-minus" aria-label="인원 줄이기" disabled>−</button><output id="quantity-value"
+                         aria-live="polite">1</output><span>명</span><button id="quantity-plus"
+                                                                            aria-label="인원 늘리기">+</button>
+      </div>
+      <p class="fine-print">1~4명 중 잔여 수량 이내로 선택해 주세요.</p>
+    </div>
+  </div>
+{% endif %}
+<div class="notice-box inline-note">ⓘ 선택한 좌석과 수량은 예매 확정 전까지 확보되지 않아요.</div>
+<p id="selection-error"
+   class="field-error"
+   role="alert"
+   tabindex="-1"
+   hidden></p>
+</section>
+<aside class="booking-panel card selection-summary">
+  <h2>예매 요약</h2>
+  <div class="summary-show">
+    {% include "components/poster.html" %}
+    <div>
+      <h3>{{ show.title }}</h3>
+      <p>
+        {{ show.date }} (토)
+        <br />
+        {{ show.time }}
+      </p>
+      <p>{{ show.venue }}</p>
+    </div>
+  </div>
+  <dl class="info-list">
+    <div>
+      <dt>좌석 유형</dt>
+      <dd>
+        {{ show.kind_label }}
+      </dd>
+    </div>
+    <div>
+      <dt>선택 내역</dt>
+      <dd id="selected-label">
+        {% if show.kind == "reserved" %}좌석을 선택해 주세요{% else %}자유석
+          1명{% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt>수량</dt>
+      <dd>
+        <span id="selected-count">{% if show.kind == "reserved" %}0{% else %}1{% endif %}</span>매
+      </dd>
+    </div>
+  </dl>
+  <div class="confirm-bar">
+    <div class="total">
+      <span>총금액</span><strong id="total-amount">{% if show.kind == "reserved" %}0{% else %}35,000{% endif %}<small>원</small></strong>
+    </div>
+    <button id="confirm-booking"
+            class="button full"
+            {% if show.kind == "reserved" %}disabled{% endif %}>예매 확정 →</button>
+  </div>
+  <p class="fine-print">확정 시점에 좌석과 잔여 수량을 다시 확인해요.</p>
+</aside>
+</div>
+{% elif screen == "complete" %}
+{% include "components/progress.html" %}
+<section class="completion">
+  <div class="success-icon">✓</div>
+  <span class="eyebrow">SEE YOU AT THE SHOW</span>
+  <h1>예매가 완료되었어요</h1>
+  <p class="muted">당신의 특별한 순간을 기다릴게요.</p>
+  <article class="ticket-card">
+    <div class="ticket-poster">{% include "components/poster.html" %}</div>
+    <div class="ticket-info">
+      <span class="status-badge">✓ 예매 확정</span>
+      <p class="booking-number">{{ booking.id }}</p>
+      <h2>{{ show.title }}</h2>
+      <p class="english-title">{{ show.english }}</p>
+      <dl class="info-list">
+        <div>
+          <dt>공연 일시</dt>
+          <dd>
+            {{ show.date }} (토) {{ show.time }}
+          </dd>
+        </div>
+        <div>
+          <dt>공연 장소</dt>
+          <dd>
+            {{ show.venue }}
+          </dd>
+        </div>
+        <div>
+          <dt>좌석</dt>
+          <dd>
+            {% for seat in booking.seats %}{{ seat }}{% if not forloop.last %} ·
+            {% endif %}{% empty %}자유석{% endfor %}
+          </dd>
+        </div>
+        <div>
+          <dt>관람 인원</dt>
+          <dd>
+            {{ booking.quantity }}명
+          </dd>
+        </div>
+      </dl>
+      <div class="total">
+        <span>총금액</span><strong class="money">{{ booking.total }}<small>원</small></strong>
+      </div>
+    </div>
+  </article>
+  <div class="completion-actions">
+    <a class="button" href="/history/">예매 내역 보기 →</a><a class="button outline" href="/">공연 목록으로</a>
+  </div>
+</section>
+{% elif screen == "history" %}
+<div class="section-heading history-heading">
+  <div>
+    <span class="eyebrow">MY TICKETS</span>
+    <h1>나의 예매 내역</h1>
+    <p class="muted">다가올 무대, 설레는 순간을 확인해 보세요.</p>
+  </div>
+  <span class="count">예매 확정 {{ bookings|length }}건</span>
+</div>
+<div class="history-list">
+  {% for booking in bookings %}
+    <article class="history-card card">
+      {% include "components/poster.html" with show=booking.show %}
+      <div class="history-content">
+        <span class="status-badge">✓ 예매 확정</span><span class="booking-number">{{ booking.id }}</span>
+        <h2>{{ booking.show.title }}</h2>
+        <p>
+          {{ booking.show.date }} (토) {{ booking.show.time }} · {{
+            booking.show.venue }}
+        </p>
+        <p class="muted">
+          {% for seat in booking.seats %}{{ seat }}{% if not forloop.last %} · {% endif %}{% empty %}자유석{% endfor %} · {{ booking.quantity }}명
+        </p>
+            <details class="booking-details">
+              <summary>상세 정보 보기 <span>＋</span></summary>
+              <dl class="info-list">
+                <div>
+                  <dt>예매번호</dt>
+                  <dd>
+                    {{ booking.id }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>좌석 유형</dt>
+                  <dd>
+                    {{ booking.show.kind_label }}
+                  </dd>
+                </div>
+                <div>
+                  <dt>티켓 단가</dt>
+                  <dd class="money">
+                    {{ booking.show.price }}원
+                  </dd>
+                </div>
+              </dl>
+              <a class="text-button" href="/complete/{{ booking.id }}/">예매 확인서 보기 →</a>
+            </details>
+            </div>
+            <div class="history-amount">
+              <small>{{ booking.quantity }}명</small><strong class="money">{{ booking.total }}원</strong>
+            </div>
+            </article>
+          {% empty %}
+            <section class="empty-state card">
+              <div class="empty-icon">♧</div>
+              <h2>아직 예매한 공연이 없어요</h2>
+              <p>당신을 기다리는 새로운 무대를 찾아보세요.</p>
+              <a class="button" href="/">공연 둘러보기 →</a>
+            </section>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endblock %}
