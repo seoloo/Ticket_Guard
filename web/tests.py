@@ -155,6 +155,22 @@ class WebTests(SimpleTestCase):
         self.repo.verify('ticketguard', 'tab-one', a['id'], answer)
         return a
 
+    @override_settings(DEMO_ADMIN_USERNAME='qa-admin', DEMO_ADMIN_PASSWORD='admin-password')
+    def test_admin_login_goes_to_qa_dashboard(self):
+        self.assertEqual(self.client.get('/auth/check-admin/').status_code, 401)
+        response = self.post('login', username='qa-admin', password='admin-password')
+        self.assertEqual(response.json()['redirect'], '/qa/')
+        check = self.client.get('/auth/check-admin/')
+        self.assertEqual((check.status_code, check['X-Admin-User']), (200, 'qa-admin'))
+        self.assertRedirects(self.client.get('/login/'), '/qa/', fetch_redirect_response=False)
+
+    def test_customer_is_not_admin_and_empty_admin_password_disables_admin(self):
+        self.login()
+        self.assertEqual(self.client.get('/auth/check-admin/').status_code, 401)
+        self.client = Client()
+        with override_settings(DEMO_ADMIN_USERNAME='qa-admin', DEMO_ADMIN_PASSWORD=''):
+            self.assertEqual(self.post('login', username='qa-admin', password='').status_code, 401)
+
     def test_login_fail_anonymous_and_csrf(self):
         self.assertRedirects(self.client.get('/'), '/login/', fetch_redirect_response=False)
         self.assertEqual(self.post('login', username='ticketguard', password='bad').status_code, 401)
