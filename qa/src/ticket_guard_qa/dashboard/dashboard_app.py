@@ -1,4 +1,4 @@
-"""대시보드 앱 조립 · ticket-guard-qa dashboard로만 실행 · 안쪽 8800 · 밖은 팀 입구 /qa/ · AGENTS.md 4장"""
+"""대시보드 앱 조립 · 팀 입구 127.0.0.1:8000/qa/ 뒤에서만 · AGENTS.md 4장"""
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,6 +37,7 @@ def create_dashboard_app(settings: Settings | None = None) -> FastAPI:
 
     templates = Jinja2Templates(directory=DASHBOARD_DIR / "templates")
     templates.env.globals["base_path"] = base_path  # 링크 앞에 /qa
+    templates.env.globals["static_version"] = int(datetime.now(timezone.utc).timestamp())  # 다시 띄우면 CSS 새로 받음
     register_screen_filters(templates.env)
     app.state.templates = templates
 

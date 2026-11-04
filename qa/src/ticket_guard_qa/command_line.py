@@ -10,6 +10,9 @@ from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunService
 from ticket_guard_qa.test_suites.suite_registry import list_suites
 
+CONTAINER_HOST = "0.0.0.0"
+CONTAINER_PORT = 8000
+
 EXIT_CODE_BY_STATUS = {
     RunStatus.PASSED: 0,
     RunStatus.FAILED: 1,
@@ -30,8 +33,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("list-suites", help="시험 묶음 목록")
 
-    dashboard_command = commands.add_parser("dashboard", help="QA 대시보드 띄우기 · 기본 포트 8800")
-    dashboard_command.add_argument("--port", dest="dashboard_port", type=int)
+    commands.add_parser("dashboard", help="QA 대시보드 띄우기 · 팀 compose 컨테이너 안에서만")
     return parser
 
 
@@ -60,14 +62,13 @@ def print_suites() -> int:
     return 0
 
 
-def start_dashboard(arguments: argparse.Namespace) -> int:
+def start_dashboard() -> int:
     import uvicorn  # dashboard 묶음 설치 시에만
 
     from ticket_guard_qa.dashboard.dashboard_app import create_dashboard_app
 
-    settings = load_settings()
-    port = arguments.dashboard_port or settings.dashboard_port  # 8000 금지 · AGENTS.md 4장
-    uvicorn.run(create_dashboard_app(settings), host=settings.dashboard_host, port=port)
+    # 컨테이너 안쪽 주소 · 밖에서는 팀 입구 127.0.0.1:8000/qa/로만 · AGENTS.md 4장
+    uvicorn.run(create_dashboard_app(load_settings()), host=CONTAINER_HOST, port=CONTAINER_PORT)
     return 0
 
 
@@ -77,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_suites(arguments)
     if arguments.command == "list-suites":
         return print_suites()
-    return start_dashboard(arguments)
+    return start_dashboard()
 
 
 if __name__ == "__main__":

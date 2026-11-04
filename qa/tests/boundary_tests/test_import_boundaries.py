@@ -4,10 +4,9 @@ from pathlib import Path
 
 from ticket_guard_qa.settings import QA_ROOT_DIR
 
-QA_CODE_DIRS = ("src", "traffic_generators", "fake_targets")
+QA_CODE_DIRS = ("src", "traffic_generators")
 SYSTEM_TOP_LEVEL_MODULES = {"django", "config", "web"}  # 시스템 Django 프로젝트 · 앱 이름
 ANSWER_KEY_MODULE = "ticket_guard_qa.answer_key"
-MODULES_THAT_MUST_NOT_SEE_ANSWER_KEY = ("system_targets", "traffic_generators", "fake_targets")
 
 
 def iter_imported_modules(python_file: Path) -> list[str]:
@@ -36,7 +35,7 @@ def test_qa_code_never_imports_system_code():
 
 
 def test_answer_key_stays_out_of_system_side_code():
-    target_files = iter_qa_python_files("traffic_generators", "fake_targets") + list(
+    target_files = iter_qa_python_files("traffic_generators") + list(
         (QA_ROOT_DIR / "src" / "ticket_guard_qa" / "system_targets").rglob("*.py")
     )
     violations = [

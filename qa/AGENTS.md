@@ -57,15 +57,13 @@ main ← develop ← qa   (qa/ 만)
   | 포트 | 무엇 | 밖에서 접속 |
   |---|---|---|
   | 8000 | 팀 입구(nginx) · 유일한 입구 · `/`는 Django, `/qa/`는 QA 대시보드 | O |
-  | 안쪽 8000 | Django 예매 웹 · 로그인 (develop) | X |
-  | 안쪽 8800 | QA 대시보드 | X |
-  | 8801 · 8802 | 가짜 판정 서버 · 일부러 틀리는 대상 (`fake_targets/`) | 내 PC만 |
+  | `web` 컨테이너 안 8000 | Django 예매 웹 · 로그인 (develop) | X |
+  | `qa-dashboard` 컨테이너 안 8000 | QA 대시보드 | X |
 
   - 관리자로 로그인하면 Django가 `/qa/`로 보내요. 팀 입구가 Django `/auth/check-admin/`에 물어보고, 관리자일 때만 `X-Admin-User` 헤더를 붙여 QA로 넘겨요. 브라우저가 보낸 같은 헤더는 팀 입구가 지워요.
-  - QA 설정: 팀 입구 뒤에서는 `TICKET_GUARD_QA_ADMIN_CHECK_MODE=gateway_header` · `TICKET_GUARD_QA_DASHBOARD_BASE_PATH=/qa`. 팀 입구가 생기기 전 혼자 개발할 때는 기본값(`local_only` · 빈 값)으로 `127.0.0.1:8800`에서 직접 띄워요.
-  - QA는 **8000을 열지 않아요.** `TICKET_GUARD_QA_SYSTEM_BASE_URL`의 8000은 시험 대상 주소예요.
-  - **`uvicorn`을 직접 실행하지 않아요.** 기본 포트가 8000이라 충돌해요. `ticket-guard-qa dashboard`로만 띄워요.
-  - 8800번대가 이미 쓰이고 있으면 코드 대신 `.env`의 `TICKET_GUARD_QA_DASHBOARD_PORT`만 바꿔요. 확인: `netstat -ano | findstr ":8000 :8800 :8801 :8802"`
+  - QA 대시보드는 **팀 compose(`compose.gateway.yml`)의 `qa-dashboard` 컨테이너로만** 띄워요. 내 PC 포트를 따로 열지 않아요. 화면 확인: `127.0.0.1:8000`에서 관리자로 로그인.
+  - 컨테이너는 서로 포트 공간이 달라서 `web`과 `qa-dashboard`가 둘 다 안쪽 8000을 써도 충돌하지 않아요.
+  - `TICKET_GUARD_QA_SYSTEM_BASE_URL`(컨테이너 안에서는 `http://web:8000`)은 시험 대상 주소예요.
 - **커밋 제목**: `[QA] 무엇을 했는지` (예: `[QA] add fake verdict api`)
 - **PR 체크리스트**
   - [ ] 정답표 · 봇 설정이 포함되지 않았다

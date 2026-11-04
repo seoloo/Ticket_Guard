@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
-from ticket_guard_qa.domain.enums import AdminCheckMode, TargetKind
+from ticket_guard_qa.domain.enums import TargetKind
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
 from ticket_guard_qa.settings import Settings
 from ticket_guard_qa.system_targets.target_factory import build_system_target
@@ -16,23 +16,15 @@ from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunService
 
 ADMIN_USER_HEADER = "X-Admin-User"  # 팀 입구가 브라우저 값을 지우고 다시 씀
-LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1"})
-LOCAL_DEVELOPER_NAME = "로컬 개발자"
 TARGET_STATUS_CACHE_SEC = 15
 
 
 def require_admin(request: Request) -> None:
-    settings: Settings = request.app.state.settings
-    if settings.admin_check_mode is AdminCheckMode.GATEWAY_HEADER:
-        admin_user = request.headers.get(ADMIN_USER_HEADER, "").strip()
-        if not admin_user:
-            raise HTTPException(status_code=403, detail="관리자만 들어올 수 있어요.")
-        request.state.admin_user = admin_user
-        return
-    client_host = request.client.host if request.client else ""
-    if client_host not in LOOPBACK_HOSTS:  # 혼자 개발 방식 · 내 PC에서 직접 접속만
-        raise HTTPException(status_code=403, detail="이 PC에서만 들어올 수 있어요.")
-    request.state.admin_user = LOCAL_DEVELOPER_NAME
+    """팀 입구(nginx)가 Django에 확인하고 붙인 헤더만 믿음 · A안"""
+    admin_user = request.headers.get(ADMIN_USER_HEADER, "").strip()
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="관리자만 들어올 수 있어요.")
+    request.state.admin_user = admin_user
 
 
 @dataclass(frozen=True)

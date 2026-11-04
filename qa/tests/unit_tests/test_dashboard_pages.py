@@ -4,32 +4,17 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from starlette.requests import Request  # noqa: E402
 
 from ticket_guard_qa.dashboard.dashboard_app import create_dashboard_app  # noqa: E402
-from ticket_guard_qa.dashboard.dependencies import ADMIN_USER_HEADER, require_admin  # noqa: E402
-from ticket_guard_qa.domain.enums import AdminCheckMode  # noqa: E402
+from ticket_guard_qa.dashboard.dependencies import ADMIN_USER_HEADER  # noqa: E402
 
-ADMIN_HEADERS = {ADMIN_USER_HEADER: "qa-admin"}
-
-
-@pytest.fixture
-def gateway_settings(qa_settings):
-    return qa_settings.model_copy(update={
-        "admin_check_mode": AdminCheckMode.GATEWAY_HEADER,
-        "dashboard_base_path": "/qa",
-    })
+ADMIN_HEADERS = {ADMIN_USER_HEADER: "qa-admin"}  # 팀 입구(nginx)가 붙이는 헤더 흉내
 
 
 @pytest.fixture
-def dashboard_client(gateway_settings) -> TestClient:
-    return TestClient(create_dashboard_app(gateway_settings), headers=ADMIN_HEADERS)
-
-
-def build_request(app, client_host: str) -> Request:
-    return Request({"type": "http", "app": app, "headers": [], "client": (client_host, 50000), "state": {}})
+def dashboard_client(qa_settings) -> TestClient:
+    return TestClient(create_dashboard_app(qa_settings), headers=ADMIN_HEADERS)
 
 
 @pytest.mark.parametrize("path", ["/", "/runs/new", "/db", "/db/sessions/attempt-1", "/bots", "/bots/bot_a/edit"])
@@ -37,22 +22,20 @@ def test_screens_open_for_admin(dashboard_client, path):
     assert dashboard_client.get(path).status_code == 200
 
 
-def test_missing_admin_header_is_forbidden(gateway_settings):
-    client = TestClient(create_dashboard_app(gateway_settings))
+def test_missing_admin_header_is_forbidden(qa_settings):
+    client = TestClient(create_dashboard_app(qa_settings))
     assert client.get("/").status_code == 403
 
 
-def test_local_mode_allows_only_this_pc(qa_settings):
-    app = create_dashboard_app(qa_settings)
-    require_admin(build_request(app, "127.0.0.1"))
-    with pytest.raises(HTTPException):
-        require_admin(build_request(app, "172.18.0.5"))
+def test_blank_admin_header_is_forbidden(qa_settings):
+    client = TestClient(create_dashboard_app(qa_settings), headers={ADMIN_USER_HEADER: "  "})
+    assert client.get("/").status_code == 403
 
 
 def test_links_use_gateway_base_path(dashboard_client):
     page = dashboard_client.get("/").text
     assert 'href="/qa/runs/new"' in page
-    assert 'href="/qa/static/css/theme_tokens.css"' in page
+    assert "/qa/static/css/theme_tokens.css?v=" in page
 
 
 def test_unknown_run_is_404(dashboard_client):

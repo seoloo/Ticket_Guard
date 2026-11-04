@@ -8,6 +8,6 @@ WORKDIR /qa
 COPY . .
 RUN python -m pip install --no-cache-dir -e ".[dashboard]"
 
-# 8800 · 팀 대시보드 8000과 겹치지 않게 · AGENTS.md 4장
-EXPOSE 8800
+# 컨테이너 안쪽 8000 · 밖으로는 열지 않고 팀 입구(nginx)만 접속 · AGENTS.md 4장
+EXPOSE 8000
 CMD ["ticket-guard-qa", "dashboard"]

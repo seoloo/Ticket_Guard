@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from ticket_guard_qa.domain.enums import AdminCheckMode, TargetKind
+from ticket_guard_qa.domain.enums import TargetKind
 
 QA_ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -22,10 +22,7 @@ class Settings(BaseSettings):
     report_output_dir: Path = Path("./qa_data/reports")
     case_data_dir: Path = QA_ROOT_DIR / "case_data"
 
-    dashboard_host: str = "127.0.0.1"
-    dashboard_port: int = 8800  # 안쪽 전용 · 밖은 팀 입구 8000 · AGENTS.md 4장
-    dashboard_base_path: str = ""  # 팀 입구 뒤에서는 "/qa"
-    admin_check_mode: AdminCheckMode = AdminCheckMode.LOCAL_ONLY
+    dashboard_base_path: str = "/qa"  # 팀 입구 127.0.0.1:8000/qa/ · AGENTS.md 4장
 
     random_seed: int = 20261103  # 같은 시드 = 같은 정답표
     fake_run_duration_sec: int = 10  # 가짜 대상 실행 흉내 시간 · 실제 QA 소요 시간에 맞춰 조정
