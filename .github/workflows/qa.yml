@@ -1,0 +1,23 @@
+name: QA
+
+on:
+  push:
+    paths: ["qa/**", ".github/workflows/qa.yml"]
+  pull_request:
+    paths: ["qa/**", ".github/workflows/qa.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    container: python:3.13.15-slim-trixie
+    defaults:
+      run:
+        working-directory: qa
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install -e ".[dashboard,dev]"
+      - run: python -m pytest -v
+      - run: ticket-guard-qa run --suite self_check --suite event_contract --target fake

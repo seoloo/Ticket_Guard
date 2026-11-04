@@ -1,0 +1,6 @@
+{
+  "description": "예매 확정(/api/action/)에 이미 받은 순번 재전송 · 거부 · 예매 확정 시험 추가 시 작성",
+  "endpoint": "action",
+  "requests": [],
+  "expected_status_codes": []
+}

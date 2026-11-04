@@ -1,0 +1,40 @@
+# 팀 입구 · 관리자 로그인 → QA 대시보드 · compose.yml에 덧붙여 실행
+# docker compose -f compose.yml -f compose.gateway.yml up -d --build
+# 밖으로 열린 포트는 gateway의 127.0.0.1:8000 하나 · web · qa-dashboard는 안쪽 네트워크로만
+services:
+  web:
+    ports: !reset []
+    environment:
+      DEMO_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME:-}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
+
+  qa-dashboard:
+    image: ticket-guard-qa:dev
+    build: ${TICKET_GUARD_QA_DIR:-./qa}
+    environment:
+      TICKET_GUARD_QA_DASHBOARD_BASE_PATH: /qa
+      TICKET_GUARD_QA_SYSTEM_BASE_URL: http://web:8000
+      TICKET_GUARD_QA_SYSTEM_USERNAME: ${DEMO_USERNAME:-ticketguard}
+      TICKET_GUARD_QA_SYSTEM_PASSWORD: ${DEMO_PASSWORD:-ticketguard-demo}
+      TICKET_GUARD_QA_QA_DATABASE_URL: sqlite:////qa/qa_data/qa.db
+      TICKET_GUARD_QA_REPORT_OUTPUT_DIR: /qa/qa_data/reports
+    volumes:
+      - qa-data:/qa/qa_data
+    depends_on:
+      web:
+        condition: service_healthy
+
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:${TICKET_GUARD_GATEWAY_PORT:-8000}:8000"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      qa-dashboard:
+        condition: service_started
+
+volumes:
+  qa-data:

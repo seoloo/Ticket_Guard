@@ -1,0 +1,173 @@
+{% extends "layout.html" %}
+{% from "screen_parts.html" import test_steps %}
+{% block title %}03 실행 · 티켓가드 QA{% endblock %}
+{% block head %}
+<style>
+  .running-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 36px 40px; }
+  .running-left { padding-right: 40px; border-right: 1px solid var(--line-color); text-align: center; }
+  .running-right { padding-left: 40px; }
+  .running-left h1 { font-size: 40px; font-weight: 800; letter-spacing: -.05em; margin: 0; }
+  .time-box { display: grid; grid-template-columns: 1fr 1fr; background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 18px; padding: 22px; margin: 26px 0; }
+  .time-box > div + div { border-left: 1px solid var(--line-color); }
+  .time-label { font-size: 17px; font-weight: 700; color: var(--strong-text-color); }
+  .elapsed-number { font-size: 92px; font-weight: 800; letter-spacing: -.06em; color: var(--qa-blue); line-height: 1; }
+  .elapsed-total { font-size: 30px; font-weight: 800; color: var(--sub-text-color); }
+  .remaining-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--qa-blue-light); color: var(--qa-blue-text); border-radius: 999px; padding: 14px 28px; font-size: 30px; font-weight: 800; margin-top: 14px; }
+  .remaining-pill svg { width: 30px; height: 30px; }
+  .connection-line { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 16px 0 20px; color: var(--sub-text-color); font-size: 16px; }
+  .connection-line b { color: var(--pass-green); }
+  .connection-line.is-down b { color: var(--fail-red-text); }
+  .live-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--fail-red-light); color: var(--fail-red-text); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 800; }
+  .live-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--fail-red); }
+  .live-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .live-metrics .metric-card { min-height: 150px; }
+  .metric-card .metric-limit { color: var(--pass-green); font-size: 13px; font-weight: 700; }
+  .metric-card.is-failed .metric-limit { color: var(--fail-red-text); }
+  .sparkline { width: 100%; height: 44px; margin-top: 6px; }
+  .progress-log { list-style: none; padding: 0; margin: 14px 0 0; max-height: 140px; overflow: auto; font-size: 13.5px; color: var(--sub-text-color); }
+  .progress-log li { padding: 5px 0; border-bottom: 1px solid var(--soft-line-color); }
+  .state-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; }
+  [hidden] { display: none !important; }
+</style>
+{% endblock %}
+{% block steps %}{{ test_steps(2) }}{% endblock %}
+{% block content %}
+{% set run_config = summary.run_config %}
+<section class="card running-grid">
+  <div class="running-left">
+    <h1>시험이 진행 중이에요</h1>
+    <div class="sub-text" style="font-size:17px">가상 사용자 {{ run_config.virtual_user_count }}명이 예매 {{ '오픈 상황을' if run_config.is_open_burst else '상황을' }} 재현하고 있어요.
+      {% if run_config.target_kind.value == 'fake' %}<span class="pill is-skipped">가짜 대상 · 예시 수치</span>{% endif %}</div>
+    <div class="time-box">
+      <div><div class="time-label">진행한 시간</div><span class="elapsed-number" id="elapsed-number">0</span><span class="elapsed-total"> / {{ measurement_window_sec | int }}초</span></div>
+      <div><div class="time-label">예상 남은 시간</div><span class="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
+    </div>
+    <div class="progress-bar"><i id="progress-fill"></i></div>
+    <div class="connection-line" id="connection-line"><span class="status-dot" id="connection-dot"></span><b id="connection-text">정상 연결 중</b><span class="muted">|</span>끝나면 결과 화면으로 자동 이동해요.</div>
+    <form method="post" action="{{ base_path }}/runs/{{ summary.run_id }}/cancel">
+      <button class="button is-outline" type="submit" style="width:280px">시험 중지</button>
+    </form>
+    <ul class="progress-log" id="progress-log" aria-live="polite"></ul>
+  </div>
+
+  <div class="running-right">
+    <div class="row"><span class="tag is-qa"><i data-lucide="activity"></i>실시간 수치</span><span class="spacer"></span><span class="live-badge">LIVE</span></div>
+    <h2 class="section-heading" style="font-size:22px;margin-top:12px;line-height:1.35">실행 {{ summary.run_id[-11:] }} · {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}</h2>
+    <div class="live-metrics">
+      {% set live_cards = [
+        ("api_latency_p95_sec", "판정 API p95", "초"),
+        ("api_error_rate_percent", "API 오류율", "%"),
+        ("events_per_sec", "초당 이벤트", ""),
+        ("gold_latency_p95_sec", "Gold 반영 p95", "초"),
+      ] %}
+      {% for metric_name, title, unit in live_cards %}
+      <div class="metric-card" data-live-metric="{{ metric_name }}" data-unit="{{ unit }}" data-limit="{{ threshold_by_metric_name.get(metric_name, '') }}">
+        <div class="metric-label">{{ title }}{% if metric_name in threshold_by_metric_name %}<span class="metric-limit">기준 {{ '%g' % threshold_by_metric_name[metric_name] }}{{ unit }}</span>{% endif %}</div>
+        <div class="metric-value">측정 전</div>
+        <svg class="sparkline" viewBox="0 0 100 40" preserveAspectRatio="none"><polyline fill="none" stroke="var(--qa-blue)" stroke-width="2" points=""/></svg>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="notice is-error" id="limit-warning" style="margin-top:16px" hidden><i data-lucide="triangle-alert"></i><span></span></div>
+  </div>
+</section>
+
+<div class="state-grid">
+  <section class="state-card" id="state-disconnected" hidden>
+    <span class="state-icon" style="background:var(--fail-red-light);color:var(--fail-red)"><i data-lucide="wifi-off"></i></span>
+    <div><h4>대상 연결이 끊겼어요</h4><p>진행 상황을 받지 못하고 있어요. 시험은 서버에서 계속될 수 있어요.</p><button class="button is-small" type="button" onclick="location.reload()">다시 연결</button></div>
+  </section>
+  <section class="state-card" id="state-recovering" hidden>
+    <span class="state-icon" style="background:var(--qa-blue-light);color:var(--qa-blue)"><i data-lucide="loader"></i></span>
+    <div><h4>복구 시험 중이에요</h4><p>서비스를 멈췄다가 다시 켜는 중이에요. 곧 측정이 이어져요.</p></div>
+  </section>
+  <section class="state-card" id="state-timeout" hidden>
+    <span class="state-icon" style="background:var(--db-orange-light);color:var(--db-orange)"><i data-lucide="clock-alert"></i></span>
+    <div><h4>시간이 많이 지났어요</h4><p>예상 시간을 넘겼어요. 계속 기다리거나 조건을 줄여 다시 설정해 주세요.</p><a class="button is-small" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}">설정으로 돌아가기</a></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const resultUrl = "{{ base_path }}/runs/{{ summary.run_id }}";
+  const measurementWindowSec = {{ measurement_window_sec }};
+  const TIMEOUT_GRACE_SEC = 60;  // 예상 시간 + 1분 넘으면 시간 초과 카드
+  const MAX_SPARKLINE_POINTS = 30;
+  const historyByMetric = {};
+  const pageOpenedAt = Date.now();
+
+  function formatRemaining(seconds) {
+    return seconds < 60 ? `약 ${Math.max(Math.round(seconds), 0)}초` : `약 ${Math.round(seconds / 60)}분`;
+  }
+
+  function drawSparkline(card, values) {
+    const maxValue = Math.max(...values, 1);
+    const points = values.map((value, index) =>
+      `${(index / Math.max(values.length - 1, 1)) * 100},${38 - (value / maxValue) * 34}`).join(" ");
+    card.querySelector("polyline").setAttribute("points", points);
+  }
+
+  function showLiveMetrics(liveMetrics) {
+    const overLimitTitles = [];
+    document.querySelectorAll("[data-live-metric]").forEach((card) => {
+      const metricName = card.dataset.liveMetric;
+      const value = liveMetrics[metricName];
+      const history = (historyByMetric[metricName] ||= []);
+      history.push(value);
+      if (history.length > MAX_SPARKLINE_POINTS) history.shift();
+      const unit = card.dataset.unit;
+      card.querySelector(".metric-value").textContent = unit ? `${value}${unit}` : Number(value).toLocaleString();
+      const isOverLimit = card.dataset.limit !== "" && value > Number(card.dataset.limit);
+      card.classList.toggle("is-failed", isOverLimit);
+      card.querySelector("polyline").setAttribute("stroke", isOverLimit ? "var(--fail-red)" : "var(--qa-blue)");
+      if (isOverLimit) overLimitTitles.push(card.querySelector(".metric-label").firstChild.textContent.trim());
+      drawSparkline(card, history);
+    });
+    const warning = document.getElementById("limit-warning");
+    warning.hidden = overLimitTitles.length === 0;
+    warning.querySelector("span").textContent = `기준을 넘은 수치: ${overLimitTitles.join(" · ")} · 끝까지 측정한 뒤 결과에 기록해요`;
+  }
+
+  function addLog(text) {
+    const item = document.createElement("li");
+    item.textContent = text;
+    document.getElementById("progress-log").prepend(item);
+  }
+
+  const progressEvents = new EventSource("{{ base_path }}/runs/{{ summary.run_id }}/events");
+  progressEvents.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    document.getElementById("state-disconnected").hidden = true;
+    if (message.elapsed_sec !== null) {
+      document.getElementById("elapsed-number").textContent = Math.floor(message.elapsed_sec);
+      const ratio = message.total_sec ? message.elapsed_sec / message.total_sec : 1;
+      document.getElementById("progress-fill").style.width = `${Math.min(ratio, 1) * 100}%`;
+      document.getElementById("remaining-text").textContent = formatRemaining(message.total_sec - message.elapsed_sec);
+    } else {
+      addLog(message.text);
+    }
+    if (message.live_metrics) showLiveMetrics(message.live_metrics);
+    if (message.suite_name) document.getElementById("state-recovering").hidden = message.suite_name !== "failure_recovery";
+    if (message.is_finished) {
+      progressEvents.close();
+      document.getElementById("progress-fill").style.width = "100%";
+      window.location.href = resultUrl;  // 끝나면 04로 자동 이동
+    }
+  };
+  progressEvents.onerror = () => {
+    document.getElementById("state-disconnected").hidden = false;
+    document.getElementById("connection-dot").classList.add("is-down");
+    document.getElementById("connection-text").textContent = "연결 끊김";
+    document.getElementById("connection-line").classList.add("is-down");
+  };
+  progressEvents.onopen = () => {
+    document.getElementById("connection-dot").classList.remove("is-down");
+    document.getElementById("connection-text").textContent = "정상 연결 중";
+    document.getElementById("connection-line").classList.remove("is-down");
+  };
+  setInterval(() => {
+    const waitedSec = (Date.now() - pageOpenedAt) / 1000;
+    document.getElementById("state-timeout").hidden = waitedSec < measurementWindowSec + TIMEOUT_GRACE_SEC;
+  }, 5000);
+</script>
+{% endblock %}
