@@ -3,7 +3,15 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ticket_guard_qa.domain.enums import TargetKind
-from ticket_guard_qa.domain.models import LiveMetrics, SessionBehavior, SystemVerdicts, VirtualUserSessionResult
+from ticket_guard_qa.domain.models import (
+    LiveMetrics,
+    QuarantineRecord,
+    SessionBehavior,
+    SessionFeatureRecord,
+    SessionVerdictRecord,
+    SystemVerdicts,
+    VirtualUserSessionResult,
+)
 
 
 @dataclass(frozen=True)
@@ -24,11 +32,17 @@ class BookingApi(Protocol):
 class VerdictReader(Protocol):
     def read_session_verdicts(self, run_id: str) -> SystemVerdicts: ...
 
+    def read_verdict_records(self, run_id: str) -> list[SessionVerdictRecord]: ...  # SESSION_VERDICTS
+
 
 class PipelineReader(Protocol):
     def read_gold_latency_sec(self, run_id: str) -> list[float]: ...
 
     def count_quarantined_events(self, run_id: str) -> int: ...
+
+    def read_session_features(self, run_id: str) -> list[SessionFeatureRecord]: ...  # SESSION_FEATURES
+
+    def read_quarantine_records(self, run_id: str) -> list[QuarantineRecord]: ...  # QUARANTINE_EVENTS
 
 
 class LiveMetricsReader(Protocol):

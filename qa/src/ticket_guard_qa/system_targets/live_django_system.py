@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from ticket_guard_qa.domain.models import LiveMetrics, SessionBehavior, SystemVerdicts, VirtualUserSessionResult
+from ticket_guard_qa.domain.models import LiveMetrics, SessionBehavior, SessionVerdictRecord, SystemVerdicts, VirtualUserSessionResult
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult
 
 CSRF_COOKIE_NAME = "csrftoken"
@@ -60,6 +60,9 @@ class LiveDjangoBookingApi:
 class LiveDjangoVerdictReader:
     def read_session_verdicts(self, run_id: str) -> SystemVerdicts:
         # TODO(판정 구현 후): 시스템 판정 결과 읽기 · AGENTS.md 11장
+        raise NotImplementedError("시스템 판정 없음 · AGENTS.md 5장")
+
+    def read_verdict_records(self, run_id: str) -> list[SessionVerdictRecord]:
         raise NotImplementedError("시스템 판정 없음 · AGENTS.md 5장")
 
 

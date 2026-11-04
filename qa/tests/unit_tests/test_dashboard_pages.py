@@ -110,6 +110,7 @@ def test_full_fake_run_shows_result(dashboard_client):
     assert run_service.run_repository.get_summary(run_id).run_config.bot_version_numbers["BOT_B"] == 2  # 저장한 버전으로 실행
     detection_page = dashboard_client.get(f"{run_path}/bots")
     assert detection_page.status_code == 200 and "Confusion Matrix" in detection_page.text
+    assert "MOCK-R" in detection_page.text  # SESSION_VERDICTS.matchedRules → 룰별 Hit 수
     live_bot_page = dashboard_client.get(f"{run_path}/bots/live")
     assert live_bot_page.status_code == 200 and "Run 종료" in live_bot_page.text
     assert run_id in dashboard_client.get("/bots").text  # B1 카드가 최근 실행을 씀

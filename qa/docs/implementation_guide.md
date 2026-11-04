@@ -163,6 +163,7 @@ qa/
 | 부하 | `test_suites/load_capacity.py` · `traffic_generators/` | 껍데기 | 개발 계정 2개뿐 | |
 | 장애 복구 | `test_suites/failure_recovery.py` | 껍데기 | 복구할 파이프라인 없음 | |
 | 봇 설정 저장 · 규칙 미리 보기 | `macro_bots/` | 저장 · 실행에 반영 동작 · 규칙 미리 보기는 대기 표시 | 판정 규칙 R1 ~ R6 정의 대기 | `RULE_CHECKS` 채우기 |
+| db 스키마 대응 (0단계) | `docs/contracts.md` 3 · 5장 · `case_data/event_contracts/` · `domain/models.py` 레코드 · `fake_system.py` | 동작 (Mock이 SESSION_VERDICTS · SESSION_FEATURES · QUARANTINE_EVENTS 모양 반환 · B4 룰별 Hit 수) | db 스키마 확정 · QA 읽기 전용 계정 | `live_mongo_reader.py` 구현 · `expected_storage` 대조 |
 | 경계 검사 · CI | `tests/boundary_tests/` · `.github/workflows/qa.yml` | 동작 (로컬) · CI는 push 후 확인 | | |
 
 ## 6. 코드 안 표시 규칙

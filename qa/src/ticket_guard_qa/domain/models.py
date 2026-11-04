@@ -63,6 +63,50 @@ class SessionBehavior:
 
 
 @dataclass(frozen=True)
+class SessionVerdictRecord:
+    """SESSION_VERDICTS 한 행 · docs/contracts.md 3-1"""
+    booking_attempt_id: SessionKey
+    stage: VerdictStage
+    score: float
+    matched_rules: tuple[str, ...]  # R1 ~ R6
+    rule_set_version: str
+    decided_at: datetime
+
+
+@dataclass(frozen=True)
+class SessionFeatureRecord:
+    """SESSION_FEATURES 한 행 · 시스템이 계산한 세션 행동 값 · SessionBehavior와 1:1 대조"""
+    booking_attempt_id: SessionKey
+    entry_delay_after_open_ms: float
+    click_interval_mean_ms: float
+    click_interval_std_ms: float
+    sessions_per_device: int
+    event_count: int
+    window_start: datetime
+    window_end: datetime
+    computed_at: datetime  # Gold 반영 시각
+
+
+# 봇 파라미터 → SESSION_FEATURES 필드 · 집계 정확도 대조 · None = 세션 하나로는 계산 불가(세션 분포로 대조)
+FEATURE_FIELD_BY_BEHAVIOR_FIELD: dict[str, str | None] = {
+    "entry_delay_after_open_ms": "entry_delay_after_open_ms",
+    "entry_delay_deviation_ms": None,
+    "click_interval_mean_ms": "click_interval_mean_ms",
+    "click_interval_deviation_ms": "click_interval_std_ms",
+    "sessions_per_device": "sessions_per_device",
+}
+
+
+@dataclass(frozen=True)
+class QuarantineRecord:
+    """QUARANTINE_EVENTS 한 행 · 사유 코드는 docs/contracts.md 3-4"""
+    raw_event_id: str
+    stage: str
+    reason_code: str
+    quarantined_at: datetime
+
+
+@dataclass(frozen=True)
 class VirtualUserSessionResult:
     session_key: SessionKey
     latency_ms: float
@@ -143,3 +187,7 @@ def run_config_from_dict(raw: dict[str, Any]) -> RunConfig:
         alert_policy=AlertPolicy(raw.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
         bot_version_numbers=raw.get("bot_version_numbers", {}),
     )
+
+
+def verdicts_from_records(records: list[SessionVerdictRecord]) -> SystemVerdicts:
+    return {record.booking_attempt_id: record.stage for record in records}

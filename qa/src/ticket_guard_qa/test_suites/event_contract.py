@@ -12,6 +12,15 @@ from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 EVENT_CONTRACTS_FOLDER_NAME = "event_contracts"
 BROWSER_EVENTS_ENDPOINT = "events"
+QUARANTINE_REASON_CODES = ("PARSE_ERROR", "MISSING_FIELD", "INVALID_FORMAT", "UNSUPPORTED_SCHEMA", "DUPLICATE_EVENT_ID")  # docs/contracts.md 3-4 · QA 제안
+KAFKA_ENDPOINT = "kafka"  # Django를 거치지 않는 토픽 메시지 · db 팀 파이프라인 시험용 · QA HTTP 시험 대상 아님
+
+
+@dataclass(frozen=True)
+class ExpectedStorage:
+    """파이프라인 처리 뒤 기대 결과 · docs/contracts.md 5-1"""
+    activity_event_count: int | None  # None = 아직 정하지 않음
+    quarantine_reason_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -21,18 +30,25 @@ class ContractCase:
     endpoint: str
     requests: list[dict[str, Any]]
     expected_status_codes: list[int]
+    kafka_messages: list[dict[str, Any]]
+    expected_storage: ExpectedStorage | None
 
 
 def load_contract_cases(case_data_dir: Path) -> list[ContractCase]:
     cases = []
     for case_file in sorted((case_data_dir / EVENT_CONTRACTS_FOLDER_NAME).glob("*.json")):
         raw_case = json.loads(case_file.read_text(encoding="utf-8"))
+        raw_storage = raw_case.get("expected_storage")
         cases.append(ContractCase(
             case_name=case_file.stem,
             description=raw_case["description"],
             endpoint=raw_case["endpoint"],
-            requests=raw_case["requests"],
-            expected_status_codes=raw_case["expected_status_codes"],
+            requests=raw_case.get("requests", []),
+            expected_status_codes=raw_case.get("expected_status_codes", []),
+            kafka_messages=raw_case.get("kafka_messages", []),
+            expected_storage=ExpectedStorage(
+                raw_storage["activity_event_count"], tuple(raw_storage["quarantine_reason_codes"])
+            ) if raw_storage else None,
         ))
     return cases
 
@@ -69,6 +85,8 @@ class EventContractSuite:
         skipped_case_names: list[str] = []
 
         for case in load_contract_cases(context.case_data_dir):
+            if case.endpoint == KAFKA_ENDPOINT:
+                continue  # TODO(MongoDB 연결 후): expected_storage로 저장 결과 대조
             if case.endpoint != BROWSER_EVENTS_ENDPOINT:
                 skipped_case_names.append(case.case_name)  # TODO(예매 확정 시험 추가 시): /api/action/ 사례
                 continue

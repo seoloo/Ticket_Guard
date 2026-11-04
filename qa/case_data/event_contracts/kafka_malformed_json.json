@@ -1,0 +1,16 @@
+{
+  "description": "JSON이 아닌 메시지 · ACTIVITY 0 · 격리 PARSE_ERROR",
+  "endpoint": "kafka",
+  "kafka_messages": [
+    {
+      "key": "qa-attempt-0001",
+      "value": "{eventId: not-json"
+    }
+  ],
+  "expected_storage": {
+    "activity_event_count": 0,
+    "quarantine_reason_codes": [
+      "PARSE_ERROR"
+    ]
+  }
+}

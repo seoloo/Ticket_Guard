@@ -13,6 +13,7 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionResult,
 )
 from ticket_guard_qa.scoring.confusion_matrix import build_confusion_matrix
+from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.scoring.detection_metrics import calculate_detection_metrics, find_false_positives, find_missed_bots
 from ticket_guard_qa.scoring.latency_metrics import calculate_error_rate_percent, calculate_p95
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext
@@ -77,6 +78,14 @@ def build_result_details(answer_key: AnswerKey, system_verdicts: SystemVerdicts)
     }
 
 
+def read_rule_hit_counts_or_none(context: SuiteContext) -> dict[str, int] | None:
+    """SESSION_VERDICTS.matchedRules · 시스템이 아직 판정 이유를 안 주면 None · B4 룰 메타데이터 미수신 표시"""
+    try:
+        return count_rule_hits(context.system_target.verdict_reader.read_verdict_records(context.run_id))
+    except NotImplementedError:
+        return None
+
+
 class VerdictAccuracySuite:
     suite_name = VERDICT_ACCURACY_SUITE_NAME
     title = "판정 정확도"
@@ -93,6 +102,7 @@ class VerdictAccuracySuite:
         context.report_progress(f"Ground Truth 저장 · {len(answer_key)}세션")
 
         system_verdicts = context.system_target.verdict_reader.read_session_verdicts(context.run_id)
+        rule_hit_count_by_rule_id = read_rule_hit_counts_or_none(context)
         context.report_progress(f"Verdict {len(system_verdicts)}", actor_progress=build_actor_progress(planned_users, {
             SessionStep.ENTERED: Counter(answer_key.values()),
             SessionStep.VERDICT_RECEIVED: Counter(answer_key[key] for key in answer_key if key in system_verdicts),
@@ -109,5 +119,5 @@ class VerdictAccuracySuite:
             suite_name=self.suite_name,
             outcome=SuiteOutcome.PASSED,  # 측정 완료 · 합격은 합격 기준이 판단
             metrics=metrics,
-            details=build_result_details(answer_key, system_verdicts),
+            details={**build_result_details(answer_key, system_verdicts), "rule_hit_count_by_rule_id": rule_hit_count_by_rule_id},
         )

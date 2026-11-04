@@ -38,40 +38,134 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 
 - `page_exit`는 유실될 수 있어요. QA는 이 이벤트가 없다고 실패로 보지 않아요.
 
-## 3. 컬렉션 (MongoDB 연결 후 · 예정)
+## 3. 컬렉션 · 필드 대응표 (db ERD 초안 + QA 요청 · 2026-11-04)
 
-| 컬렉션 | 내용 | QA가 확인하는 것 |
+- **원본**: db 팀 ERD 초안 · QA 요청 Issue `[QA][db] DB 스키마 초안 · QA 측정용 컬렉션 · 필드 추가 요청`
+- 상태 표시: **초안** = ERD에 있음 · **요청** = QA가 추가 요청 (db 확정 전) · 확정되면 이 표를 고쳐요.
+- QA 쪽 모양은 `domain/models.py`의 레코드 클래스예요. Mock(`fake_system.py`)도 같은 모양을 돌려줘요.
+- Mock의 룰 이름은 `MOCK-R1` ~ `MOCK-R4`예요. 실제 R1 ~ R6와 관계없고, 화면에서 Mock 값이라는 걸 구분하려고 붙였어요.
+
+### 3-1. 판정 · 집계 · 격리 (QA가 읽는 핵심)
+
+| 컬렉션 | 상태 | QA 레코드 | QA가 계산하는 것 |
+|---|---|---|---|
+| `SESSION_VERDICTS` | 요청 | `SessionVerdictRecord` | 탐지율 · 오탐률(FPR) · 룰별 Hit 수 |
+| `SESSION_FEATURES` (`event_metrics` 자리) | 요청 | `SessionFeatureRecord` | 집계 정확도 (봇이 보낸 파라미터 vs 시스템 계산 값) · Gold 반영 지연 |
+| `QUARANTINE_EVENTS` | 요청 | `QuarantineRecord` | 사유별 격리 건수 · 기대 격리와 대조 |
+
+**SESSION_VERDICTS**
+
+| 시스템 필드 | QA 이름 | QA 사용처 |
 |---|---|---|
-| `users` · `sessions` | 실제 인증 · 서버 세션 | 다른 사용자 데이터 접근 거부 |
-| `shows` · `schedules` | 공연 · 회차 · 오픈 시간 · 가격 | 오픈 전 예매 거부 · 서버 가격 사용 |
-| `bookings` | 예매 결과 · `bookingAttemptId` 유일 | 같은 확정 요청을 다시 보내도 예매 1건 |
-| `inventory` | 재고 · 조건부 차감 | 동시 확정 시 초과 판매 0건 |
-| `events` | 이벤트 원본 · `eventId` 유일 · `receivedAt` TTL 86,400초 | 중복 0건 · 24시간 뒤 삭제(바로 지워지지 않을 수 있음) |
-| `aggregates` | 공연 · 회차 · 시간 구간별 집계 | Spark 재시작 뒤에도 두 번 세지 않음 |
-| 격리(quarantine) | 형식이 틀린 이벤트 | 틀린 이벤트가 전부 격리로 감 · 비밀 값 없음 |
-| 판정 결과 | **미정** (AGENTS.md 11장) | 정답표와 비교 |
+| `bookingAttemptId` | `booking_attempt_id` | 세션 키 · Ground Truth와 대조 |
+| `stage` | `stage` (`VerdictStage`) | CHALLENGE 이상 = 탐지 |
+| `score` | `score` | 임계값 조정 분석 |
+| `matchedRules` | `matched_rules` | B4 룰별 Hit 수 · 05 미탐 원인 |
+| `ruleSetVersion` | `rule_set_version` | Run 비교 기준 |
+| `decidedAt` | `decided_at` | 판정 응답 지연 |
 
-## 4. Kafka (예정)
+**SESSION_FEATURES** · QA 봇 파라미터(`SessionBehavior`)와 1:1 대조 · 대응 원본은 `domain/models.py`의 `FEATURE_FIELD_BY_BEHAVIOR_FIELD`
 
-- 순서 키 후보: `bookingAttemptId` · 없으면 `userId`
-- 토픽 이름 · 파티션 수 · 보관 기간: **미정** · 정해지면 이 표에 추가
+| 시스템 필드 | QA 이름 | 대조하는 봇 파라미터 |
+|---|---|---|
+| `bookingAttemptId` | `booking_attempt_id` | - |
+| `entryDelayAfterOpenMs` | `entry_delay_after_open_ms` | `entry_delay_after_open_ms` (진입 지연) |
+| `clickIntervalMeanMs` | `click_interval_mean_ms` | `click_interval_mean_ms` (평균 간격) |
+| `clickIntervalStdMs` | `click_interval_std_ms` | `click_interval_deviation_ms` (간격 표준편차) |
+| `sessionsPerDevice` | `sessions_per_device` | `sessions_per_device` (병렬 세션) |
+| `eventCount` | `event_count` | 집계 누락 검출 |
+| `windowStart` · `windowEnd` | `window_start` · `window_end` | 이중 집계 검출 |
+| `computedAt` | `computed_at` | Gold 반영 시각 |
+
+**QUARANTINE_EVENTS**
+
+| 시스템 필드 | QA 이름 | QA 사용처 |
+|---|---|---|
+| `rawEventId` | `raw_event_id` | 원본 추적 |
+| `stage` | `stage` | 파싱 · 검증 · 정제 단계별 건수 |
+| `reasonCode` | `reason_code` | 아래 3-4 사유 코드 · 계약 시험 기대값과 대조 |
+| `quarantinedAt` | `quarantined_at` | 격리 지연 |
+
+### 3-2. 원본 이벤트
+
+| 컬렉션 | 상태 | QA가 확인하는 것 |
+|---|---|---|
+| `RAW_EVENTS` (PK = `topic:partition:offset`) | 초안 | Kafka 메시지 1건 = 1행 · `ingestedAt`(요청) 적재 지연 |
+| `ACTIVITY_EVENTS` | 초안 | 이벤트 스키마 v1 필드 · `eventId` UK(요청)로 중복 0건 · `receivedAt` · `processedAt`(요청) 단계 지연 |
+
+**Gold 반영 지연 계산**: `SESSION_FEATURES.computedAt − 그 구간 마지막 ACTIVITY_EVENTS.receivedAt` · 단계별로는 `receivedAt → RAW_EVENTS.ingestedAt → processedAt → computedAt`
+
+### 3-3. 예매 · 계정 · 예외 시험
+
+| 컬렉션 | 상태 | QA가 확인하는 것 |
+|---|---|---|
+| `ACCOUNTS` · `ROLES` · `ACCOUNT_ROLES` | 초안 | 다른 사용자 데이터 접근 거부 · 관리자 권한 |
+| `SHOWS` · `SCHEDULES` · `EVENT_TYPES` | 초안 | 오픈 전 예매 거부(`bookingOpensAt`) · 좌석 방식(`seatMode`) |
+| `BOOKINGS` | 초안 | `idempotencyKey` UK · 같은 확정 요청 재전송 시 예매 1건 (E20) |
+| `INVENTORIES` | 초안 · `version` 요청 | 동시 확정 시 초과 판매 0건 (E12) |
+| `BOOKING_ITEMS` | 초안 | 예매 수량 = 재고 차감 수량 |
+| `QUEUE_TICKETS` | 요청 (권장) | 대기열 한도 · 순번 역전 (T1 · T2) |
+| `SEAT_HOLDS` (또는 Redis) | 요청 (권장) | 좌석 점유 5분 만료 (E16) |
+| `CAPTCHA_CHALLENGES` | 요청 (권장) | CHALLENGE 단계 통과율 |
+
+### 3-4. 격리 사유 코드 (QA 제안 · db 확정 전 · 코드 원본 `test_suites/event_contract.py`의 `QUARANTINE_REASON_CODES`)
+
+| 코드 | 뜻 |
+|---|---|
+| `PARSE_ERROR` | Kafka 메시지 값이 JSON이 아님 |
+| `MISSING_FIELD` | 필수 필드 없음 |
+| `INVALID_FORMAT` | 형식 오류 (eventId 형식 · 시간대 없는 시각 등) |
+| `UNSUPPORTED_SCHEMA` | 처리할 수 없는 `schemaVersion` |
+| `DUPLICATE_EVENT_ID` | 이미 저장된 `eventId` |
+
+## 4. Kafka
+
+| 항목 | 값 |
+|---|---|
+| 토픽 | `ticketguard.events.v1` |
+| 파티션 | 3 |
+| 보관 기간 | 7일 (개발용 제안 · 확정 아님) |
+| 순서 키 후보 | `bookingAttemptId` · 없으면 `userId` |
+| 접속 | Docker 내부 `kafka:9092` (QA 컨테이너는 같은 compose 네트워크) |
+
+- QA는 **전용 consumer group으로 읽기만** 해요. 토픽에 쓰지 않아요.
 
 ## 5. 계약 시험 데이터
 
-위치: `qa/case_data/event_contracts/` · db 팀도 자기 시험에서 가져다 써요. 정답표 · 봇 정보는 넣지 않아요.
+위치: `qa/case_data/event_contracts/` · db 팀도 자기 시험(Spark 등)에서 가져다 써요. Ground Truth · 봇 정보는 넣지 않아요.
 
-| 파일 | 내용 | 기대 결과 |
-|---|---|---|
-| `valid_browser_event.json` | 올바른 브라우저 이벤트 | 저장 1건 |
-| `duplicate_event_id.json` | 같은 `eventId` 두 번 | 저장 1건 · 두 번째는 중복 응답 |
-| `missing_event_id.json` | `eventId` 없음 | 400 · 저장 0건 |
-| `naive_occurred_at.json` | 시간대 없는 시각 | 400 |
-| `stale_occurred_at.json` | 지금과 24시간 넘게 차이 나는 시각 (과거 · 미래) | 400 |
-| `unknown_event_type.json` | 목록에 없는 종류 · 서버 전용 종류 | 400 |
-| `missing_page_instance_id.json` | `pageInstanceId` 없음 | 400 |
-| `unknown_show_id.json` | 없는 공연 | 400 |
-| `spoofed_user_id.json` | 브라우저가 `userId` · `receivedAt`을 직접 보냄 | 서버 값으로 덮어씀 |
-| `extra_fields.json` | 목록에 없는 필드 추가 | 그 필드는 저장 안 됨 |
-| `stale_request_sequence.json` | 예매 확정(`/api/action/`)에 이미 받은 순번 재전송 | 거부 · 이미 확정된 시도면 같은 예매를 돌려줌 |
+### 5-1. 파일 모양
 
-- MongoDB · Kafka가 붙기 전에는 HTTP 응답만 확인하고, 붙은 뒤에는 저장 결과까지 확인해요.
+| 키 | 뜻 |
+|---|---|
+| `endpoint` | `events` = `POST /api/events/` · `action` = `POST /api/action/` · `kafka` = Django를 거치지 않고 토픽에 넣는 메시지 (db 팀 파이프라인 시험용 · QA HTTP 시험은 건너뜀) |
+| `requests` | HTTP 요청 본문 목록 (`events` · `action`) |
+| `kafka_messages` | 토픽 메시지 목록 · `key` · `value` (`kafka`) · `value`가 문자열이면 JSON이 아닌 원문 그대로 |
+| `expected_status_codes` | HTTP 응답 코드 (`events` · `action`) |
+| `expected_storage` | 파이프라인 처리 뒤 기대 결과 · `activity_event_count` (ACTIVITY_EVENTS 행 수) · `quarantine_reason_codes` (QUARANTINE_EVENTS 사유 목록) |
+
+- Django가 400으로 거부한 요청은 Kafka로 가지 않아요. 그래서 `activity_event_count` 0 · 격리 없음이에요.
+- `{{event_id}}` · `{{now}}` 같은 자리 표시는 실행할 때 값으로 바꿔요. 같은 파일 안에서는 같은 값이에요.
+
+### 5-2. 사례 목록
+
+| 파일 | 내용 | HTTP | 저장 기대 |
+|---|---|---|---|
+| `valid_browser_event.json` | 올바른 브라우저 이벤트 | 200 | ACTIVITY 1 |
+| `duplicate_event_id.json` | 같은 `eventId` 두 번 (HTTP) | 200 · 200(중복 응답) | ACTIVITY 1 |
+| `missing_event_id.json` | `eventId` 없음 | 400 | 0 |
+| `naive_occurred_at.json` | 시간대 없는 시각 | 400 | 0 |
+| `stale_occurred_at.json` | 지금과 24시간 넘게 차이 (과거 · 미래) | 400 | 0 |
+| `unknown_event_type.json` | 목록에 없는 종류 · 서버 전용 종류 | 400 | 0 |
+| `missing_page_instance_id.json` | `pageInstanceId` 없음 | 400 | 0 |
+| `unknown_show_id.json` | 없는 공연 | 400 | 0 |
+| `spoofed_user_id.json` | 브라우저가 `userId` · `receivedAt` 직접 전송 | 200 | ACTIVITY 1 · 서버 값으로 덮어씀 |
+| `extra_fields.json` | 목록에 없는 필드 추가 | 200 | ACTIVITY 1 · 그 필드 저장 안 됨 |
+| `stale_request_sequence.json` | 예매 확정에 이미 받은 순번 재전송 | 거부 | 확정 이벤트 중복 없음 |
+| `kafka_valid_server_event.json` | 올바른 서버 이벤트 (`booking_confirm_success`) | - | ACTIVITY 1 |
+| `kafka_duplicate_event_id.json` | 같은 `eventId` 메시지 두 번 (Producer 재전송) | - | ACTIVITY 1 · 격리 `DUPLICATE_EVENT_ID` |
+| `kafka_malformed_json.json` | JSON이 아닌 메시지 | - | ACTIVITY 0 · 격리 `PARSE_ERROR` |
+| `kafka_missing_event_type.json` | `eventType` 없음 | - | ACTIVITY 0 · 격리 `MISSING_FIELD` |
+| `kafka_unsupported_schema_version.json` | `schemaVersion` 99 | - | ACTIVITY 0 · 격리 `UNSUPPORTED_SCHEMA` |
+
+- MongoDB · 파이프라인이 붙기 전에는 HTTP 응답만 확인하고, 붙은 뒤에는 `expected_storage`까지 확인해요.

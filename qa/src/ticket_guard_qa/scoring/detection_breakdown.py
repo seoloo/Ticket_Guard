@@ -5,6 +5,7 @@ from typing import Any
 
 from ticket_guard_qa.domain.detection_targets import DetectionTarget, find_detection_target
 from ticket_guard_qa.domain.enums import ActorType, VerdictStage
+from ticket_guard_qa.domain.models import SessionVerdictRecord
 from ticket_guard_qa.scoring.confusion_matrix import ConfusionMatrix
 
 
@@ -50,6 +51,17 @@ class ActorDetectionRow:
         if self.target is None or rate is None:
             return None
         return self.target.criterion.is_met_by(rate)
+
+
+def count_rule_hits(verdict_records: list[SessionVerdictRecord]) -> dict[str, int]:
+    """B4 룰별 Hit 수 · 탐지(CHALLENGE 이상)된 세션에서 걸린 룰만 · 룰 이름 순"""
+    hit_count_by_rule_id: dict[str, int] = {}
+    for record in verdict_records:
+        if not record.stage.is_detected:
+            continue
+        for rule_id in record.matched_rules:
+            hit_count_by_rule_id[rule_id] = hit_count_by_rule_id.get(rule_id, 0) + 1
+    return dict(sorted(hit_count_by_rule_id.items()))
 
 
 def confusion_matrix_from_details(raw_matrix: dict[str, dict[str, int]]) -> ConfusionMatrix:

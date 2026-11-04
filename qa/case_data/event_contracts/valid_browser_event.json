@@ -13,5 +13,9 @@
   ],
   "expected_status_codes": [
     200
-  ]
+  ],
+  "expected_storage": {
+    "activity_event_count": 1,
+    "quarantine_reason_codes": []
+  }
 }

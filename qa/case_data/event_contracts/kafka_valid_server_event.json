@@ -1,0 +1,28 @@
+{
+  "description": "올바른 서버 이벤트(booking_confirm_success) · ACTIVITY 1",
+  "endpoint": "kafka",
+  "kafka_messages": [
+    {
+      "key": "qa-attempt-0001",
+      "value": {
+        "schemaVersion": 1,
+        "eventId": "{{event_id}}",
+        "eventType": "booking_confirm_success",
+        "occurredAt": "{{now}}",
+        "receivedAt": "{{now}}",
+        "userId": "qa-0001",
+        "bookingAttemptId": "qa-attempt-0001",
+        "showId": "blue-hour",
+        "scheduleId": "blue-hour-evening",
+        "requestSequence": 1,
+        "result": "success",
+        "errorCode": null,
+        "source": "server"
+      }
+    }
+  ],
+  "expected_storage": {
+    "activity_event_count": 1,
+    "quarantine_reason_codes": []
+  }
+}
