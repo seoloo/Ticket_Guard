@@ -24,6 +24,8 @@ ASGI_APPLICATION = 'config.asgi.application'
 DEMO_USERNAME = os.environ.get('DEMO_USERNAME', 'ticketguard')
 DEMO_PASSWORD = os.environ.get('DEMO_PASSWORD', 'ticketguard-demo')
 DEMO_SECOND_USERNAME = os.environ.get('DEMO_SECOND_USERNAME', 'guest')
+DEMO_ADMIN_USERNAME = os.environ.get('DEMO_ADMIN_USERNAME', '')
+DEMO_ADMIN_PASSWORD = os.environ.get('DEMO_ADMIN_PASSWORD', '')  # 비어 있으면 관리자 로그인 꺼짐
 SHOW_SCENARIOS = DEBUG and os.environ.get('SHOW_SCENARIOS', '1') == '1'
 QUEUE_WAIT_SECONDS = 12
 ATTEMPT_TIMEOUT_SECONDS = 60

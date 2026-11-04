@@ -1,0 +1,17 @@
+{
+  "description": "시간대 없는 시각",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now_without_timezone}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    400
+  ]
+}

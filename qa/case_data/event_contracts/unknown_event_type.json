@@ -1,0 +1,26 @@
+{
+  "description": "목록에 없는 종류 · 서버 전용 종류",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "unknown_type",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    },
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "booking_confirm_success",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    400,
+    400
+  ]
+}
