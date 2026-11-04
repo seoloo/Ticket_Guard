@@ -18,6 +18,7 @@
 .login-links a{padding:0 14px}
 .login-links a+a{border-left:1px solid #d8e0eb}
 .login-links a:hover{color:var(--blue);text-decoration:underline;text-underline-offset:3px}
+.signup-note{margin:18px 0 0;color:#748097;font-size:11px;line-height:1.7}
 
 
 /* Typography: Pretendard first, with the existing Korean fallback preserved. */

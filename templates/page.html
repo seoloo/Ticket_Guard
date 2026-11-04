@@ -51,7 +51,7 @@
         <nav class="login-links" aria-label="계정 지원 메뉴">
           <a href="#">아이디 찾기</a>
           <a href="#">비밀번호 찾기</a>
-          <a href="#">회원가입</a>
+          <a href="/signup/">회원가입</a>
         </nav>
       </form>
       <div class="demo-note">
@@ -60,6 +60,32 @@
         <br />
         계정과 비밀번호는 프로젝트 README를 확인해 주세요.
       </div>
+    </div>
+  </section>
+{% elif screen == "signup" %}
+  <section class="login-layout signup-layout">
+    <div class="login-visual">
+      <div class="eyebrow light">TICKET GUARD</div>
+      <h1>새로운 무대를<br />만나보세요<span class="accent-line"></span></h1>
+      <p>간단한 정보만 입력하고<br />티켓가드를 시작해요.</p>
+      <div class="visual-foot">CONCERT · LIVE · FESTIVAL</div>
+    </div>
+    <div class="login-form-wrap">
+      <span class="eyebrow">CREATE ACCOUNT</span>
+      <h2>회원가입</h2>
+      <p class="muted">아이디와 비밀번호를 입력해 주세요.</p>
+      <form id="signup-form">
+        <label for="signup-username">아이디</label>
+        <input id="signup-username" name="username" autocomplete="username" placeholder="아이디를 입력해 주세요" maxlength="100" required />
+        <label for="signup-password">비밀번호</label>
+        <div class="password-wrap">
+          <input id="signup-password" type="password" name="password" autocomplete="new-password" placeholder="비밀번호를 입력해 주세요" maxlength="200" required />
+          <button type="button" id="toggle-signup-password" aria-label="비밀번호 표시" aria-pressed="false">보기</button>
+        </div>
+        <p class="signup-note">가입 기능은 서버 계정 저장 단계에서 연결됩니다.</p>
+        <button class="button full" type="submit">회원가입 <span aria-hidden="true">→</span></button>
+        <nav class="login-links" aria-label="계정 메뉴"><a href="/login/">로그인으로 돌아가기</a></nav>
+      </form>
     </div>
   </section>
 {% elif screen == "shows" %}
@@ -78,7 +104,7 @@
     </form>
     <nav class="shows-account-links" aria-label="계정 메뉴">
       <a href="/login/">로그인</a>
-      <a href="#">회원가입</a>
+      <a href="/signup/">회원가입</a>
     </nav>
   </div>
   <div class="featured-layout"><section class="hero" id="featured-hero" style="--hero-image:url('/static/images/hero.png')"><div class="hero-blur" aria-hidden="true"></div><div class="hero-art" aria-hidden="true"></div>

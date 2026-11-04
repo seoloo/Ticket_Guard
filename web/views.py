@@ -40,14 +40,14 @@ def snapshot(a):
 @never_cache
 @ensure_csrf_cookie
 def page(request, screen, identifier=None):
-    if screen not in {'login', 'shows', 'detail', 'queue', 'captcha', 'select', 'complete', 'history'}:
+    if screen not in {'login', 'signup', 'shows', 'detail', 'queue', 'captcha', 'select', 'complete', 'history'}:
         raise Http404
     user = request.session.get('user')
     # The show listing is the public landing page.  Guests can browse it;
     # starting a booking and all subsequent steps still require a login.
-    if not user and screen not in {'login', 'shows'}:
+    if not user and screen not in {'login', 'signup', 'shows'}:
         return redirect('/login/')
-    if user and screen == 'login':
+    if user and screen in {'login', 'signup'}:
         return redirect(ADMIN_HOME_URL if request.session.get('role') == 'admin' else '/')
     context = dict(screen=screen, user=user, scenarios=settings.SHOW_SCENARIOS,
                    demo_user=settings.DEMO_USERNAME, genres=['전체', '콘서트', '뮤지컬', '연극', '페스티벌'])
