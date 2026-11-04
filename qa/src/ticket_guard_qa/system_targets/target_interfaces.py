@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ticket_guard_qa.domain.enums import TargetKind
-from ticket_guard_qa.domain.models import SystemVerdicts
+from ticket_guard_qa.domain.models import LiveMetrics, SessionBehavior, SystemVerdicts, VirtualUserSessionResult
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,8 @@ class BookingApi(Protocol):
 
     def submit_browser_event(self, event: dict[str, Any]) -> HttpResult: ...  # POST /api/events/
 
+    def start_virtual_user_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult: ...  # 사람 / 봇 여부는 넘기지 않음
+
 
 class VerdictReader(Protocol):
     def read_session_verdicts(self, run_id: str) -> SystemVerdicts: ...
@@ -27,6 +29,10 @@ class PipelineReader(Protocol):
     def read_gold_latency_sec(self, run_id: str) -> list[float]: ...
 
     def count_quarantined_events(self, run_id: str) -> int: ...
+
+
+class LiveMetricsReader(Protocol):
+    def read_live_metrics(self, run_id: str, elapsed_sec: float) -> LiveMetrics: ...  # 03 화면 · 실행 중 1초마다
 
 
 class ProcessControl(Protocol):
@@ -41,4 +47,5 @@ class SystemTarget:
     booking_api: BookingApi
     verdict_reader: VerdictReader
     pipeline_reader: PipelineReader
+    live_metrics_reader: LiveMetricsReader
     process_control: ProcessControl

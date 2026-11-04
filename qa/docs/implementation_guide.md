@@ -44,7 +44,7 @@ qa/
 │  ├─ test_runs/          run_service · run_repository · run_progress_stream
 │  ├─ qa_database/        database · tables
 │  ├─ reports/            json_report · html_report
-│  └─ dashboard/          dashboard_app · dependencies · routes/ · templates/ · static/css/(theme_tokens · screen_layout)
+│  └─ dashboard/          dashboard_app · dependencies · screen_format · routes/ · templates/(layout · screen_parts · screen_*) · static/css/(theme_tokens · screen_layout)
 ├─ traffic_generators/    locust_traffic · user_behaviors · bot_c_browser
 ├─ fake_targets/          fake_verdict_server · always_wrong_target
 ├─ case_data/             exception_codes/ · event_contracts/
@@ -140,11 +140,12 @@ qa/
 | 터미널 명령 · 종료 코드 | `command_line.py` | 동작 | | |
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |
-| 화면 01 ~ 04 | `dashboard/` | 동작 (틀) | | 트래픽 구성 · 실시간 수치 · 비교 |
+| 화면 01 ~ 04 | `dashboard/` | 동작 (시안 기준 · 가짜 대상 숫자) | 실제 대상 실시간 수치 없음 | 결과 알림 보내기 |
 | 화면 05 · B1 ~ B4 | `dashboard/` | 껍데기 (B1 프로필만 표시) | 시스템 DB 없음 · 판정 규칙 없음 | |
-| 관리자 확인 | `dashboard/dependencies.py` | 껍데기 | | EC2 배포 전 필수 |
-| 판정 정확도 | `test_suites/verdict_accuracy.py` | 껍데기 | 시스템 판정 없음 · 저장 위치 미정 | |
+| 관리자 확인 (A안) | `dashboard/dependencies.py` | 동작 (`gateway_header` · `local_only`) | 팀 입구 · Django 관리자 확인 주소 없음 | 팀 입구 붙으면 `gateway_header`로 |
+| 판정 정확도 | `test_suites/verdict_accuracy.py` | 가짜만 동작 (행동 값으로 가짜 판정 · 정답표 저장 · 탐지율 · 오탐률) | 실제 대상: 시스템 판정 없음 · 저장 위치 미정 | |
 | Gold 반영 시간 | `test_suites/pipeline_latency.py` · `live_mongo_reader.py` | 가짜만 동작 | Kafka · Spark · MongoDB 없음 | 시험 이벤트 먼저 보내기 |
+| 03 실시간 수치 | `test_runs/run_service.py` · `LiveMetricsReader` | 가짜만 동작 (`fake_run_duration_sec` 동안) | 실제 대상: 트래픽 생성기 없음 | |
 | 좌석 동시 확정 | `test_suites/seat_concurrency.py` | 껍데기 | 좌석 점유 · Redis 미정 | |
 | 부하 | `test_suites/load_capacity.py` · `traffic_generators/` | 껍데기 | 개발 계정 2개뿐 | |
 | 장애 복구 | `test_suites/failure_recovery.py` | 껍데기 | 복구할 파이프라인 없음 | |

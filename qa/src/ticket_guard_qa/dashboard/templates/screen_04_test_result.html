@@ -1,42 +1,173 @@
 {% extends "layout.html" %}
+{% from "screen_parts.html" import test_steps %}
 {% block title %}04 결과 · 티켓가드 QA{% endblock %}
+{% block head %}
+<style>
+  .result-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .result-main { padding: 30px 32px; }
+  .result-head { display: flex; align-items: flex-start; gap: 12px; }
+  .score-box { display: grid; grid-template-columns: 1fr 1fr; background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 18px; padding: 24px; margin: 22px 0; text-align: center; }
+  .score-box > div + div { border-left: 1px solid var(--line-color); }
+  .score-label { font-size: 17px; font-weight: 700; }
+  .score-number { font-size: 76px; font-weight: 800; color: var(--qa-blue); letter-spacing: -.05em; line-height: 1.05; }
+  .score-total { font-size: 30px; font-weight: 800; color: var(--sub-text-color); }
+  .final-pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 14px 30px; font-size: 32px; font-weight: 800; margin-top: 14px; }
+  .final-pill svg { width: 30px; height: 30px; }
+  .final-pill.is-failed { background: var(--fail-red-light); color: var(--fail-red-text); }
+  .final-pill.is-passed { background: var(--pass-green-light); color: var(--pass-green); }
+  .final-pill.is-other { background: var(--db-orange-light); color: var(--db-orange-text); }
+  .criteria-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .metric-card.is-not-measured .metric-value { font-size: 18px; margin-top: 8px; }
+  .report-card { background: #FAFBFD; }
+  .report-card .report-links { display: flex; gap: 8px; margin-top: 12px; }
+  .side-card { padding: 26px 28px; }
+  .failure-card { border-color: #F6C2C4; background: #FFFAFA; }
+  .failure-card .failure-head { display: flex; gap: 16px; align-items: center; margin-bottom: 18px; }
+  .failure-icon { width: 62px; height: 62px; border-radius: 50%; background: var(--fail-red-light); color: var(--fail-red); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .failure-icon svg { width: 30px; height: 30px; }
+  .pass-card { border-color: #BFE6CC; background: #F6FCF8; }
+  .mismatch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .mismatch-box { background: #FFF8F2; border: 1px solid #F8DCC6; border-radius: 14px; padding: 16px 18px; }
+  .mismatch-box b { font-size: 36px; font-weight: 800; display: block; }
+  .compare-row { display: grid; grid-template-columns: 300px repeat(4, 1fr); gap: 14px; margin-top: 24px; }
+  .compare-row .card { padding: 16px 20px; }
+  .compare-value { font-size: 20px; font-weight: 800; margin-top: 4px; }
+  .delta-good { color: var(--pass-green); }
+  .delta-bad { color: var(--fail-red-text); }
+  .info-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 18px; }
+  .info-card { display: flex; gap: 18px; align-items: center; padding: 20px 24px; }
+  .info-icon { width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .info-card b { font-size: 18px; display: block; margin-bottom: 4px; }
+</style>
+{% endblock %}
+{% block steps %}{{ test_steps(3) }}{% endblock %}
 {% block content %}
-<h1 class="page-title">
-  통과한 합격 기준 {{ summary.passed_criteria_count }} / {{ criteria_total }}
-  <span class="status-pill is-{{ summary.status.value | lower }}">{{ summary.status.value }}</span>
-</h1>
-<p class="muted">{{ summary.run_id }} · 대상 {{ summary.run_config.target_kind.value }}</p>
+{% set run_config = summary.run_config %}
+<div class="result-grid">
+  <section class="card result-main">
+    <div class="result-head">
+      <div class="spacer">
+        <h1 class="page-heading" style="font-size:38px">시험이 끝났어요</h1>
+        <div class="sub-text" style="font-size:16px">실행 {{ summary.run_id }} ·
+          {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}
+          · {{ '가짜 대상' if run_config.target_kind.value == 'fake' else '실제 대상' }} · {{ run_config.virtual_user_count }}명</div>
+      </div>
+      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color);padding:7px 12px"><i data-lucide="file-check"></i>보고서 자동 저장됨</span>
+    </div>
 
-<h2>합격 기준</h2>
-<div class="card-grid">
-  {% for result in summary.criterion_results %}
-  <section class="card">
-    <h3>{{ title_by_criterion_id[result.criterion_id] }}</h3>
-    {% if result.is_passed is none %}
-    <span class="status-pill is-not-measured">측정 안 됨</span>
-    {% else %}
-    <p>{{ '%.2f' | format(result.measured_value) }}</p>
-    <span class="status-pill {{ 'is-passed' if result.is_passed else 'is-failed' }}">{{ '통과' if result.is_passed else '실패' }}</span>
-    {% if not result.is_passed %}<a class="button is-db" href="/db?run_id={{ summary.run_id }}">DB 대시보드에서 원인 보기</a>{% endif %}
-    {% endif %}
+    <div class="score-box">
+      <div><div class="score-label">통과한 합격 기준</div><span class="score-number">{{ summary.passed_criteria_count }}</span><span class="score-total"> / {{ criterion_cards | length }}개</span></div>
+      <div><div class="score-label">최종 결과</div>
+        {% if summary.status.value == 'FAILED' %}
+        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>실패 {{ summary.failed_criteria_count }}건</span>
+        {% elif summary.status.value == 'PASSED' %}
+        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>통과</span>
+        {% else %}
+        <span class="final-pill is-other"><i data-lucide="circle-alert"></i>{{ '중지됨' if summary.status.value == 'CANCELLED' else '오류' }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="criteria-grid">
+      {% for card in criterion_cards %}
+      {% set result = card.result %}
+      <div class="metric-card {{ 'is-not-measured' if result.is_passed is none else ('is-passed' if result.is_passed else 'is-failed') }}">
+        <div class="metric-label">{{ card.criterion.title }}</div>
+        <div class="metric-value">{{ result.measured_value | metric(card.criterion.metric_name) if result.measured_value is not none else '측정 안 됨' }}</div>
+        <div class="metric-check">
+          {% if result.is_passed is none %}<i data-lucide="minus"></i>{% elif result.is_passed %}<i data-lucide="check"></i>{% else %}<i data-lucide="x"></i>{% endif %}
+          {{ card.criterion.comparison.value | threshold(card.criterion.threshold, card.criterion.metric_name) }}
+        </div>
+      </div>
+      {% endfor %}
+      <div class="metric-card report-card">
+        <div class="metric-label">보고서</div>
+        <div class="report-links">
+          <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.html" target="_blank">HTML</a>
+          <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.json" target="_blank">JSON</a>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="section-heading" style="margin:26px 0 10px;font-size:16px">시험 묶음</h3>
+    <table class="result-table">
+      <tr><th>묶음</th><th>결과</th><th>메시지</th></tr>
+      {% for result in summary.suite_results %}
+      <tr>
+        <td>{{ suite_title_by_name.get(result.suite_name, result.suite_name) }}</td>
+        <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': '통과', 'FAILED': '실패', 'SKIPPED': '건너뜀', 'ERROR': '오류'}[result.outcome.value] }}</span></td>
+        <td class="muted">{{ result.message or '-' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
   </section>
+
+  <aside>
+    {% if first_failed_card %}
+    <section class="card side-card failure-card">
+      <div class="failure-head">
+        <span class="failure-icon"><i data-lucide="circle-alert"></i></span>
+        <div><h2 class="section-heading" style="font-size:24px">{{ first_failed_card.criterion.title }} · 기준 미달</h2>
+          <div class="sub-text" style="font-size:16px"><b style="color:var(--fail-red-text)">{{ first_failed_card.result.measured_value | metric(first_failed_card.criterion.metric_name) }}</b>
+            · 기준 {{ first_failed_card.criterion.comparison.value | threshold(first_failed_card.criterion.threshold, first_failed_card.criterion.metric_name) }}</div></div>
+      </div>
+      <a class="button is-db is-wide" style="font-size:17px" href="{{ base_path }}/db?run_id={{ summary.run_id }}"><i data-lucide="database"></i>DB 대시보드에서 원인 보기<i data-lucide="chevron-right"></i></a>
+      <a class="button is-outline is-wide" style="font-size:17px;margin-top:12px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="sliders-horizontal"></i>설정 바꿔 다시 실행</a>
+    </section>
+    {% else %}
+    <section class="card side-card pass-card">
+      <h2 class="section-heading" style="font-size:24px"><i data-lucide="circle-check" style="color:var(--pass-green)"></i>측정한 합격 기준을 모두 넘었어요</h2>
+      <div class="sub-text">측정 안 된 기준은 해당 시험 묶음이 아직 껍데기이거나 이번에 고르지 않은 경우예요.</div>
+      <a class="button is-outline is-wide" style="font-size:17px;margin-top:16px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="refresh-cw"></i>같은 조건으로 다시 실행</a>
+    </section>
+    {% endif %}
+
+    <section class="card side-card" style="margin-top:20px">
+      <div class="row"><h2 class="section-heading">정답과 다른 판정</h2><span class="spacer"></span><span class="tag is-db">DB에서 추적</span></div>
+      {% if verdict_details %}
+      <div class="mismatch-grid">
+        <div class="mismatch-box"><span class="muted">놓친 봇</span><b>{{ verdict_details.missed_bot_count }}</b></div>
+        <div class="mismatch-box"><span class="muted">사람 오탐</span><b>{{ verdict_details.false_positive_count }}</b></div>
+      </div>
+      <div class="row">
+        <a style="color:var(--db-orange-text);font-weight:800" href="{{ base_path }}/db?run_id={{ summary.run_id }}">{{ verdict_details.missed_bot_count + verdict_details.false_positive_count }}개 세션 추적하기 ›</a>
+        <span class="spacer"></span>
+        <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots"><i data-lucide="bot"></i>봇별 보기</a>
+      </div>
+      {% else %}
+      <div class="sub-text" style="margin-top:12px">이번 실행에 판정 정확도 시험이 없거나 건너뛰었어요.</div>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+
+<div class="compare-row">
+  <div class="card"><b style="font-size:18px">지난 실행과 비교</b>
+    <div class="muted" style="margin-top:4px">{{ '같은 조건의 바로 앞 실행' if comparisons else '같은 조건의 지난 실행이 없어요' }}</div></div>
+  {% for comparison in comparisons[:4] %}
+  <div class="card">
+    <div class="muted">{{ comparison.criterion.title }}</div>
+    <div class="compare-value">
+      {{ comparison.previous_value | metric(comparison.criterion.metric_name) }} → {{ comparison.current_value | metric(comparison.criterion.metric_name) }}
+      <span class="{{ 'delta-good' if comparison.is_improved else 'delta-bad' }}">{{ '▲' if comparison.current_value >= comparison.previous_value else '▼' }}</span>
+    </div>
+  </div>
   {% endfor %}
 </div>
 
-<h2>시험 묶음</h2>
-<table class="result-table">
-  <tr><th>묶음</th><th>결과</th><th>메시지</th></tr>
-  {% for result in summary.suite_results %}
-  <tr>
-    <td>{{ result.suite_name }}</td>
-    <td><span class="status-pill is-{{ result.outcome.value | lower }}">{{ result.outcome.value }}</span></td>
-    <td class="muted">{{ result.message }}</td>
-  </tr>
-  {% endfor %}
-</table>
-<p>
-  <a class="button is-qa" href="/runs/new">설정 바꿔 다시 실행</a>
-  <a class="button is-plain" href="/runs/{{ summary.run_id }}/bots">봇별 보기</a>
-</p>
-<!-- TODO(판정 정확도 시험 동작 후): 정답과 다른 판정 목록 · 지난 실행과 비교 -->
+<div class="info-row">
+  <section class="card info-card">
+    <span class="info-icon" style="background:var(--pass-green-light);color:var(--pass-green)"><i data-lucide="database-zap"></i></span>
+    <div>{% if verdict_details %}<b>정답표를 저장했어요</b><span class="muted">QA DB · 세션 {{ verdict_details.session_count }}개 (사람 {{ verdict_details.human_session_count }} · 봇 {{ verdict_details.bot_session_count }})</span>
+      {% else %}<b>정답표 없음</b><span class="muted">판정 정확도 시험을 고르면 함께 저장돼요</span>{% endif %}</div>
+  </section>
+  <section class="card info-card">
+    <span class="info-icon" style="background:var(--qa-blue-light);color:var(--qa-blue)"><i data-lucide="send"></i></span>
+    <div><b>결과 알림</b><span class="muted">설정: {{ alert_policy_titles[run_config.alert_policy] }} · 알림 보내기는 준비 중</span></div>
+  </section>
+  <section class="card info-card">
+    <span class="info-icon" style="background:var(--db-orange-light);color:var(--db-orange)"><i data-lucide="list-todo"></i></span>
+    <div><b>다음에 할 일</b><span class="muted">{{ next_actions | join(' · ') if next_actions else '없음 · 같은 조건으로 한 번 더 돌려 안정성 확인' }}</span></div>
+  </section>
+</div>
 {% endblock %}

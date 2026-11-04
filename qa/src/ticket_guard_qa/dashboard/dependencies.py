@@ -1,20 +1,65 @@
-"""화면에서 쓰는 공용 객체 · 관리자 확인"""
+"""화면에서 쓰는 공용 객체 · 관리자 확인(A안) · 주소 앞부분(/qa)"""
+import time
+from dataclasses import dataclass
 from typing import Any
 
-from fastapi import Request
-from fastapi.responses import HTMLResponse
+from fastapi import HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
+from ticket_guard_qa.domain.enums import AdminCheckMode, TargetKind
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
 from ticket_guard_qa.settings import Settings
+from ticket_guard_qa.system_targets.target_factory import build_system_target
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunService
 
+ADMIN_USER_HEADER = "X-Admin-User"  # 팀 입구가 브라우저 값을 지우고 다시 씀
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1"})
+LOCAL_DEVELOPER_NAME = "로컬 개발자"
+TARGET_STATUS_CACHE_SEC = 15
+
 
 def require_admin(request: Request) -> None:
-    # TODO(EC2 배포 전 필수): 관리자 로그인 · 지금은 127.0.0.1에서만 열어서 사용
-    return None
+    settings: Settings = request.app.state.settings
+    if settings.admin_check_mode is AdminCheckMode.GATEWAY_HEADER:
+        admin_user = request.headers.get(ADMIN_USER_HEADER, "").strip()
+        if not admin_user:
+            raise HTTPException(status_code=403, detail="관리자만 들어올 수 있어요.")
+        request.state.admin_user = admin_user
+        return
+    client_host = request.client.host if request.client else ""
+    if client_host not in LOOPBACK_HOSTS:  # 혼자 개발 방식 · 내 PC에서 직접 접속만
+        raise HTTPException(status_code=403, detail="이 PC에서만 들어올 수 있어요.")
+    request.state.admin_user = LOCAL_DEVELOPER_NAME
+
+
+@dataclass(frozen=True)
+class TargetStatus:
+    target_kind: TargetKind
+    label: str
+    is_connected: bool
+
+
+class TargetStatusChecker:
+    """헤더 연결 상태 · 화면마다 시스템에 묻지 않도록 잠깐 저장"""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self._cached_status: TargetStatus | None = None
+        self._checked_at = 0.0
+
+    def get_status(self) -> TargetStatus:
+        if self._cached_status and time.monotonic() - self._checked_at < TARGET_STATUS_CACHE_SEC:
+            return self._cached_status
+        if self.settings.target_kind is TargetKind.FAKE:
+            status = TargetStatus(TargetKind.FAKE, "가짜 대상", True)
+        else:
+            is_connected = build_system_target(self.settings).booking_api.check_health()
+            status = TargetStatus(TargetKind.LIVE, "실제 대상", is_connected)
+        self._cached_status, self._checked_at = status, time.monotonic()
+        return status
 
 
 def get_settings(request: Request) -> Settings:
@@ -37,6 +82,19 @@ def get_bot_profile_registry(request: Request) -> BotProfileRegistry:
     return request.app.state.bot_profile_registry
 
 
+def build_page_url(request: Request, path: str) -> str:
+    return f"{request.app.state.base_path}{path}"
+
+
+def redirect_to_page(request: Request, path: str) -> RedirectResponse:
+    return RedirectResponse(build_page_url(request, path), status_code=303)
+
+
 def render_screen(request: Request, template_name: str, context: dict[str, Any], status_code: int = 200) -> HTMLResponse:
     templates: Jinja2Templates = request.app.state.templates
-    return templates.TemplateResponse(request, template_name, context, status_code=status_code)
+    screen_context = {
+        "admin_user": getattr(request.state, "admin_user", ""),
+        "target_status": request.app.state.target_status_checker.get_status(),
+        **context,
+    }
+    return templates.TemplateResponse(request, template_name, screen_context, status_code=status_code)

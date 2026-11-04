@@ -52,17 +52,19 @@ main ← develop ← qa   (qa/ 만)
 - **폴더 주인**: qa는 `qa/`만 고쳐요. `qa/` 밖이 바뀌어야 하면 Issue로 요청해요.
   - 예외: `.github/workflows/qa.yml` 하나. GitHub Actions는 이 위치에서만 동작해요.
 - **아직 develop에 안 들어간 다른 브랜치를 시험할 때**: merge 하지 않고, 그 브랜치를 별도 폴더(`git worktree`)로 꺼내 컨테이너를 띄운 뒤 QA의 시험 대상 주소만 바꿔요.
-- **포트**: 한 PC에서 팀 대시보드와 QA를 같이 띄우므로 QA는 **8800번대만** 써요.
+- **입구 · 포트 (A안 · 2026-11-04 확정)**: 밖에서 들어오는 주소는 **`127.0.0.1:8000` 하나**예요. 팀 입구(nginx)가 주소를 보고 나눠요.
 
-  | 포트 | 무엇 | 누구 것 |
+  | 포트 | 무엇 | 밖에서 접속 |
   |---|---|---|
-  | 8000 | 팀 대시보드 · 예매 웹 (develop의 Django) | 팀 · QA는 시험하러 **접속만** |
-  | 8800 | QA 대시보드 | QA |
-  | 8801 | 가짜 판정 서버 (`fake_targets/fake_verdict_server.py`) | QA |
-  | 8802 | 일부러 틀리는 대상 (`fake_targets/always_wrong_target.py`) | QA |
+  | 8000 | 팀 입구(nginx) · 유일한 입구 · `/`는 Django, `/qa/`는 QA 대시보드 | O |
+  | 안쪽 8000 | Django 예매 웹 · 로그인 (develop) | X |
+  | 안쪽 8800 | QA 대시보드 | X |
+  | 8801 · 8802 | 가짜 판정 서버 · 일부러 틀리는 대상 (`fake_targets/`) | 내 PC만 |
 
+  - 관리자로 로그인하면 Django가 `/qa/`로 보내요. 팀 입구가 Django `/auth/check-admin/`에 물어보고, 관리자일 때만 `X-Admin-User` 헤더를 붙여 QA로 넘겨요. 브라우저가 보낸 같은 헤더는 팀 입구가 지워요.
+  - QA 설정: 팀 입구 뒤에서는 `TICKET_GUARD_QA_ADMIN_CHECK_MODE=gateway_header` · `TICKET_GUARD_QA_DASHBOARD_BASE_PATH=/qa`. 팀 입구가 생기기 전 혼자 개발할 때는 기본값(`local_only` · 빈 값)으로 `127.0.0.1:8800`에서 직접 띄워요.
   - QA는 **8000을 열지 않아요.** `TICKET_GUARD_QA_SYSTEM_BASE_URL`의 8000은 시험 대상 주소예요.
-  - **`uvicorn`을 직접 실행하지 않아요.** 기본 포트가 8000이라 팀 대시보드와 충돌해요. `ticket-guard-qa dashboard`로만 띄워요.
+  - **`uvicorn`을 직접 실행하지 않아요.** 기본 포트가 8000이라 충돌해요. `ticket-guard-qa dashboard`로만 띄워요.
   - 8800번대가 이미 쓰이고 있으면 코드 대신 `.env`의 `TICKET_GUARD_QA_DASHBOARD_PORT`만 바꿔요. 확인: `netstat -ano | findstr ":8000 :8800 :8801 :8802"`
 - **커밋 제목**: `[QA] 무엇을 했는지` (예: `[QA] add fake verdict api`)
 - **PR 체크리스트**
@@ -207,3 +209,5 @@ SEAT_HOLD_TIMEOUT_SEC = 300      # 좌석 점유 5분 · E16
 - [ ] Redis를 쓸지 (좌석 점유 시험 E16 여부가 달라짐)
 - [ ] 세션 구분 키: 기획서의 `session_hash`인지, 시스템의 `bookingAttemptId`인지
 - [ ] MongoDB가 붙는 시점 (QA가 실제 대상으로 넘어가는 시점)
+- [ ] 팀 입구(nginx) · Django 관리자 계정과 `/auth/check-admin/` 반영 시점 (develop · 팀 compose)
+- [x] 관리자 로그인 → QA 대시보드 · 입구 하나(A안) · 관리자 = QA 대시보드를 쓰는 팀원 (운영자 상황판과 별개) · 2026-11-04

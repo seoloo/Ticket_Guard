@@ -49,3 +49,14 @@ class SuiteOutcome(StrEnum):
 class Comparison(StrEnum):
     AT_MOST = "<="
     AT_LEAST = ">="
+
+
+class AlertPolicy(StrEnum):
+    NEVER = "never"
+    ON_FAILURE = "on_failure"
+    ALWAYS = "always"
+
+
+class AdminCheckMode(StrEnum):
+    LOCAL_ONLY = "local_only"  # 혼자 개발 · 127.0.0.1 직접 접속만
+    GATEWAY_HEADER = "gateway_header"  # 팀 입구(nginx)가 붙인 X-Admin-User만

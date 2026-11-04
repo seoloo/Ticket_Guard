@@ -30,6 +30,7 @@ class SuiteResultRecord(BaseTable):
     outcome: Mapped[str] = mapped_column(String(20))
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     message: Mapped[str] = mapped_column(Text, default="")
+    details: Mapped[dict] = mapped_column(JSON, default=dict)  # 놓친 세션 · 정답 × 판정 표
 
 
 class AnswerKeyRecord(BaseTable):

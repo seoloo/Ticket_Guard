@@ -1,0 +1,14 @@
+{# 여러 화면이 같이 쓰는 조각 #}
+
+{% macro test_steps(current_step_number) %}
+{% set step_titles = ["시험 설정", "실행", "결과"] %}
+<div class="steps">
+  {% for title in step_titles %}
+  {% set step_number = loop.index %}
+  {% if not loop.first %}<span class="step-line {{ 'is-done' if step_number <= current_step_number }}"></span>{% endif %}
+  <span class="step {{ 'is-done' if step_number < current_step_number else ('is-current' if step_number == current_step_number) }}">
+    <i>{% if step_number < current_step_number %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% else %}{{ step_number }}{% endif %}</i>{{ title }}
+  </span>
+  {% endfor %}
+</div>
+{% endmacro %}

@@ -1,9 +1,9 @@
 {% extends "layout.html" %}
 {% block title %}B2 봇 설정 · 티켓가드 QA{% endblock %}
 {% block content %}
-<h1 class="page-title">{{ profile.display_name }} 설정 <span class="muted">v{{ profile.version_number }}</span></h1>
+<h1 class="page-heading">{{ profile.display_name }} 설정 <span class="muted">v{{ profile.version_number }}</span></h1>
 <div class="card-grid">
-  <section class="card is-qa">
+  <section class="card card-padding">
     <h2>행동</h2>
     <p>① 진입 시점: 오픈 후 {{ profile.entry_delay_after_open_ms }}ms</p>
     <p>② 클릭 간격: {{ profile.click_interval_mean_ms }} ± {{ profile.click_interval_deviation_ms }}ms</p>

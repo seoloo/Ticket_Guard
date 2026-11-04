@@ -12,6 +12,7 @@ def qa_settings(tmp_path: Path) -> Settings:
     return Settings(
         qa_database_url=f"sqlite:///{(tmp_path / 'qa.db').as_posix()}",
         report_output_dir=tmp_path / "reports",
+        fake_run_duration_sec=0,  # 테스트는 기다리지 않음
         _env_file=None,
     )
 

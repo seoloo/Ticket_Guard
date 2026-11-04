@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, NewType
 
-from ticket_guard_qa.domain.enums import ActorType, RunStatus, SuiteOutcome, TargetKind, VerdictStage
+from ticket_guard_qa.domain.enums import AlertPolicy, ActorType, RunStatus, SuiteOutcome, TargetKind, VerdictStage
 
 SessionKey = NewType("SessionKey", str)  # 지금은 bookingAttemptId · AGENTS.md 11장
 AnswerKey = dict[SessionKey, ActorType]
@@ -40,12 +40,39 @@ class RunConfig:
     duration_sec: int = 300
     traffic_mix: TrafficMix = field(default_factory=TrafficMix)
     random_seed: int = 20261103
+    is_open_burst: bool = True  # 오픈 시각에 한꺼번에 진입 · T1
+    alert_policy: AlertPolicy = AlertPolicy.ON_FAILURE
 
 
 @dataclass(frozen=True)
 class PlannedUser:
     virtual_user_label: str  # qa-0001 · 봇 여부를 드러내지 않음
     actor_type: ActorType
+
+
+@dataclass(frozen=True)
+class SessionBehavior:
+    """시스템에 보내는 행동 값 · 사람 / 봇 여부는 담지 않음"""
+    entry_delay_after_open_ms: int
+    click_interval_mean_ms: int
+    click_interval_deviation_ms: int
+    sessions_per_device: int
+
+
+@dataclass(frozen=True)
+class VirtualUserSessionResult:
+    session_key: SessionKey
+    latency_ms: float
+    is_error: bool
+
+
+@dataclass(frozen=True)
+class LiveMetrics:
+    """03 화면 실시간 수치 · 합격 기준 metric_name과 같은 이름"""
+    api_latency_p95_sec: float
+    api_error_rate_percent: float
+    events_per_sec: float
+    gold_latency_p95_sec: float
 
 
 @dataclass(frozen=True)
@@ -61,6 +88,7 @@ class SuiteResult:
     outcome: SuiteOutcome
     metrics: dict[str, float] = field(default_factory=dict)
     message: str = ""
+    details: dict[str, Any] = field(default_factory=dict)  # 화면용 · 놓친 세션 · 정답 × 판정 표
 
 
 @dataclass
@@ -77,11 +105,26 @@ class RunSummary:
     def passed_criteria_count(self) -> int:
         return sum(1 for result in self.criterion_results if result.is_passed)
 
+    @property
+    def failed_criteria_count(self) -> int:
+        return sum(1 for result in self.criterion_results if result.is_passed is False)
+
+    def find_suite_result(self, suite_name: str) -> SuiteResult | None:
+        return next((result for result in self.suite_results if result.suite_name == suite_name), None)
+
+    def measured_value_by_criterion_id(self) -> dict[str, float]:
+        return {
+            result.criterion_id: result.measured_value
+            for result in self.criterion_results
+            if result.measured_value is not None
+        }
+
 
 def run_config_to_dict(run_config: RunConfig) -> dict[str, Any]:
     raw = asdict(run_config)
     raw["target_kind"] = run_config.target_kind.value
     raw["suite_names"] = list(run_config.suite_names)
+    raw["alert_policy"] = run_config.alert_policy.value
     return raw
 
 
@@ -93,4 +136,6 @@ def run_config_from_dict(raw: dict[str, Any]) -> RunConfig:
         duration_sec=raw["duration_sec"],
         traffic_mix=TrafficMix(**raw["traffic_mix"]),
         random_seed=raw["random_seed"],
+        is_open_burst=raw.get("is_open_burst", True),  # 이전 기록 호환
+        alert_policy=AlertPolicy(raw.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
     )

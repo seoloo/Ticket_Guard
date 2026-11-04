@@ -32,7 +32,7 @@ ticket-guard-qa = "ticket_guard_qa.command_line:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ticket_guard_qa = ["dashboard/templates/*.html", "dashboard/static/css/*.css"]
+ticket_guard_qa = ["dashboard/templates/*.html", "dashboard/templates/*.svg", "dashboard/static/css/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

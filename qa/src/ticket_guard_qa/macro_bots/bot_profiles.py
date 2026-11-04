@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from ticket_guard_qa.domain.enums import ActorType
+from ticket_guard_qa.domain.models import SessionBehavior
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,14 @@ class BotProfile:
     sessions_per_device: int
     version_number: int = 1
     is_locked: bool = False  # 새 유형 · 평가 전용
+
+    def to_session_behavior(self) -> SessionBehavior:
+        return SessionBehavior(  # 시스템에는 행동 값만 · 종류 이름은 넘기지 않음
+            entry_delay_after_open_ms=self.entry_delay_after_open_ms,
+            click_interval_mean_ms=self.click_interval_mean_ms,
+            click_interval_deviation_ms=self.click_interval_deviation_ms,
+            sessions_per_device=self.sessions_per_device,
+        )
 
 
 DEFAULT_BOT_PROFILES: tuple[BotProfile, ...] = (
