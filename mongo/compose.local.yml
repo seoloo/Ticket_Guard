@@ -1,0 +1,5 @@
+# Explicit opt-in only. Use together with the repository compose.yml.
+services:
+  mongo:
+    ports:
+      - "127.0.0.1:27017:27017"

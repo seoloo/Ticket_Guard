@@ -2,6 +2,10 @@
 
 ## 구현 범위
 
+후속 Spark 원본 적재 코드와 비적재 점검은 [Spark 문서](spark.md)를 따른다. 현재 실제 적재는 하지 않았으며 아래 별도 원본 Consumer/정제 구상은 이전 단계의 기록이다.
+
+MongoDB 실행 환경은 실제 저장소 C:/workspace/Ticket_Guard에 추가했습니다. [MongoDB 문서](mongodb.md)의 격리 프로젝트 명령을 사용합니다. 원본 적재 Consumer와 Spark는 이번 MongoDB 구축 범위에 포함하지 않았으며 실제 데이터 적재는 하지 않았습니다.
+
 실제 Django → Apache Kafka 발행이 구현되었습니다. MongoDB 원본 적재 Consumer와 Spark 정제/집계는 아직 구현하지 않았으며 최종 필수 후속 범위입니다. 예매 데이터 자체는 여전히 웹 프로세스 메모리입니다.
 
 ```text

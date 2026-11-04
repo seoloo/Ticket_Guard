@@ -1,6 +1,6 @@
 # Ticket Guard · 티켓가드
 
-공연 예매 웹과 실시간 이벤트 처리 파이프라인 프로젝트. **현재 구현 범위: Django 웹 + 실제 Kafka 이벤트 발행**입니다. MongoDB 원본 적재와 Spark 정제·집계는 최종 필수 후속 구성입니다. 자세한 구성·스키마·실행 명령은 [Kafka 연결 문서](docs/kafka.md)를 확인하세요.
+공연 예매 웹과 실시간 이벤트 처리 파이프라인 프로젝트. **현재 구현 범위: Django 웹 + 실제 Kafka 이벤트 발행 + MongoDB 실행 환경**입니다. Spark 원본 적재 코드와 비적재 점검을 추가했습니다. 실제 적재·복구 실험은 미실행입니다. [Spark 문서](docs/spark.md)를 확인하세요. 자세한 구성·스키마·실행 명령은 [Kafka 연결 문서](docs/kafka.md)를 확인하세요.
 
 ## 실행
 
@@ -21,7 +21,7 @@ docker compose ps
 
 두 계정은 예매 내역과 입장 권한이 분리되고 공연 재고는 공유됩니다. 실제 계정 체계가 아닌 개발용 로그인입니다. 외부에 배포하지 마세요.
 
-계정과 설정을 바꾸려면 `.env.example`을 `.env`로 복사해 수정한 뒤 `docker compose up -d`로 재생성합니다. `.env`는 Git에서 제외됩니다. `.env.example`의 비밀번호는 공개된 데모 값입니다.
+신규 환경에서 `.env`가 없을 때만 `.env.example`을 `.env`로 복사하고 수정한 뒤 `docker compose up -d`로 재생성합니다. `.env`는 Git에서 제외됩니다. `.env.example`의 비밀번호는 공개된 데모 값입니다.
 
 ```powershell
 Copy-Item .env.example .env
@@ -29,7 +29,7 @@ docker compose up -d
 docker compose logs --tail 50 web
 ```
 
-`compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. 기본 Compose는 Kafka와 토픽 초기화를 함께 실행합니다. Spark·MongoDB는 아직 필요하지 않습니다.
+`compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. 기본 Compose는 Kafka와 토픽 초기화를 함께 실행합니다. MongoDB는 별도 mongo 프로필로 추가했습니다. 같은 이름을 쓰는 이전 폴더 자원과 충돌하지 않도록 MongoDB 명령에는 `-p ticket-guard-workspace-db`를 반드시 사용합니다. 실행·초기화·검증은 [MongoDB 문서](docs/mongodb.md)를 따릅니다. Spark는 별도 `ticket-guard-workspace-pipeline` 프로젝트와 spark 프로필로 빌드·점검합니다. 실제 적재 명령은 [Spark 문서](docs/spark.md)를 먼저 확인하세요. 기존 `.env`를 복사 명령으로 덮어쓰지 마세요.
 
 ## 사용 흐름
 
