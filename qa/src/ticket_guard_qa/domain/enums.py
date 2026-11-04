@@ -26,6 +26,14 @@ class ActorType(StrEnum):
         return self is not ActorType.HUMAN
 
 
+class SessionStep(StrEnum):
+    """B3 종류별 진행 · 가상 사용자 한 명이 지나가는 단계"""
+    ENTERED = "ENTERED"
+    SEAT_SELECTED = "SEAT_SELECTED"
+    CONFIRMED = "CONFIRMED"
+    VERDICT_RECEIVED = "VERDICT_RECEIVED"
+
+
 class TargetKind(StrEnum):
     FAKE = "fake"
     LIVE = "live"

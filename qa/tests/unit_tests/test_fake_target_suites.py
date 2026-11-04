@@ -18,7 +18,7 @@ def build_context(session_factory, case_data_dir: Path = QA_ROOT_DIR / "case_dat
         system_target=build_fake_system_target(),
         answer_key_repository=AnswerKeyRepository(session_factory),
         case_data_dir=case_data_dir,
-        report_progress=lambda text: None,
+        report_progress=lambda text, **fields: None,
     )
 
 

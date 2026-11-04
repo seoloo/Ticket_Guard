@@ -1,19 +1,219 @@
 {% extends "layout.html" %}
-{% block title %}B2 봇 설정 · 티켓가드 QA{% endblock %}
+{% from "screen_parts.html" import bot_screen_header, actor_chip %}
+{% block title %}B2 {{ type_info.short_name }} 설정 · 티켓가드 QA{% endblock %}
+{% block head %}
+<style>
+  .bot-settings-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .settings-card { padding: 26px 28px; }
+  .settings-card.is-locked { background: #FAFBFD; }
+  .back-link { display: inline-flex; align-items: center; gap: 4px; color: var(--sub-text-color); font-weight: 600; margin-bottom: 10px; }
+  .field-group { border-top: 1px solid var(--soft-line-color); padding: 18px 0; display: grid; grid-template-columns: 170px 1fr; gap: 16px; }
+  .field-group-title { font-weight: 800; font-size: 15.5px; }
+  .field-inputs { display: flex; gap: 14px; flex-wrap: wrap; }
+  .field-input { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--strong-text-color); }
+  .field-input .input-box { display: flex; align-items: center; border: 1.5px solid #DCE2EA; border-radius: 9px; padding: 0 10px; height: 40px; background: #fff; }
+  .field-input input { border: 0; outline: 0; width: 110px; font-size: 15px; font-weight: 700; background: transparent; }
+  .field-input .input-box:focus-within { border-color: var(--qa-blue); }
+  .field-input .unit { color: var(--muted-text-color); font-weight: 600; }
+  .field-input .hint { color: var(--muted-text-color); font-weight: 500; font-size: 12px; }
+  .field-group.is-pending { color: var(--muted-text-color); }
+  .curve-chart { width: 100%; height: 120px; margin-top: 12px; background: #FAFBFD; border: 1px solid var(--soft-line-color); border-radius: 12px; }
+  .curve-legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--sub-text-color); margin-top: 6px; }
+  .curve-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .curve-legend i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .save-row { border-top: 1px solid var(--soft-line-color); padding-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .save-row input[type=text] { flex: 1; min-width: 220px; height: 44px; border: 1.5px solid #DCE2EA; border-radius: 10px; padding: 0 12px; font-size: 14px; }
+  .side-card { padding: 22px 24px; }
+  .side-card + .side-card { margin-top: 18px; }
+  .rule-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rule-list li { border: 1px solid var(--soft-line-color); border-radius: 10px; padding: 9px 12px; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  .rule-list b { font-size: 14px; }
+  .trial-score { font-size: 40px; font-weight: 800; letter-spacing: -.05em; }
+  .stage-bars { display: grid; gap: 6px; margin-top: 10px; }
+  .stage-bar { display: grid; grid-template-columns: 82px 1fr 34px; gap: 8px; align-items: center; font-size: 12.5px; font-weight: 700; }
+  .stage-bar .progress-bar { height: 10px; }
+  .history-table td, .history-table th { padding: 8px 10px; }
+  [hidden] { display: none !important; }
+</style>
+{% endblock %}
 {% block content %}
-<h1 class="page-heading">{{ profile.display_name }} 설정 <span class="muted">v{{ profile.version_number }}</span></h1>
-<div class="card-grid">
-  <section class="card card-padding">
-    <h2>행동</h2>
-    <p>① 진입 시점: 오픈 후 {{ profile.entry_delay_after_open_ms }}ms</p>
-    <p>② 클릭 간격: {{ profile.click_interval_mean_ms }} ± {{ profile.click_interval_deviation_ms }}ms</p>
-    <p>③ 화면 흐름 · ⑤ 좌석 없을 때: 준비 중</p>
-    <p>④ 기기당 세션: {{ profile.sessions_per_device }}</p>
-  </section>
-  <section class="card">
-    <h2>R1 ~ R6 예상 결과</h2>
-    <p class="muted">판정 규칙 정의 대기</p>
-  </section>
+{{ bot_screen_header("봇 설정", "행동 값을 바꿔 가짜 대상에서 돌려 보고 새 버전으로 저장 · 저장한 버전은 다음 시험부터 쓰여요") }}
+<a class="back-link" href="{{ base_path }}/bots"><i data-lucide="chevron-left"></i>봇 목록</a>
+
+<div class="bot-settings-grid">
+  <form method="post" class="card settings-card {{ 'is-locked' if type_info.is_locked }}" id="behavior-form">
+    <div class="row">
+      <h2 class="section-heading" style="font-size:24px"><span class="actor-dot" style="background:var(--{{ type_info.color_token }});width:14px;height:14px"></span>{{ type_info.display_name }}</h2>
+      <span class="spacer"></span>
+      <span class="tag is-qa">지금 v{{ profile.version_number }}</span>
+      <span class="tag is-db" id="edited-tag" {{ '' if is_edited else 'hidden' }}>저장 안 한 변경</span>
+    </div>
+    <div class="sub-text">{{ type_info.purpose }} · {{ type_info.tool_name }}</div>
+
+    {% if saved_version_number %}
+    <div class="notice is-qa" style="margin-top:14px"><i data-lucide="circle-check"></i>v{{ saved_version_number }}로 저장했어요. 다음 시험부터 이 값으로 돌아가요.</div>
+    {% endif %}
+    {% if error_message %}
+    <div class="notice is-error" style="margin-top:14px"><i data-lucide="circle-alert"></i>{{ error_message }}</div>
+    {% endif %}
+    {% if type_info.is_locked %}
+    <div class="notice is-db" style="margin-top:14px"><i data-lucide="lock"></i>새 유형은 규칙을 만들 때 보지 않은 행동이라 평가 전용이에요. 값을 바꿀 수 없어요.</div>
+    {% else %}
+    <div class="row" style="margin-top:18px">
+      <span class="muted" style="font-weight:700">프리셋</span>
+      <div class="chips">
+        {% for preset, values in presets %}
+        <button type="button" class="chip" data-preset='{{ values | tojson }}'>{{ preset.title }}</button>
+        {% endfor %}
+        <span class="chip-hint" style="font-size:12.5px;color:var(--muted-text-color)">· 직접 입력도 가능</span>
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="margin-top:14px">
+      {% for group_title, specs in field_groups.items() %}
+      <div class="field-group">
+        <div class="field-group-title">{{ group_title }}</div>
+        <div>
+          <div class="field-inputs">
+            {% for spec in specs %}
+            <label class="field-input">{{ spec.title }}
+              <span class="input-box"><input type="number" name="{{ spec.field_name }}" min="{{ spec.minimum }}" max="{{ spec.maximum }}"
+                value="{{ behavior_values[spec.field_name] }}" data-saved-value="{{ profile.behavior | attr(spec.field_name) }}" required {{ 'readonly' if type_info.is_locked }}><span class="unit">{{ spec.unit }}</span></span>
+              {% if spec.hint %}<span class="hint">{{ spec.hint }}</span>{% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          {% if specs[0].field_name == 'click_interval_mean_ms' %}
+          <svg class="curve-chart" id="click-curve" viewBox="0 0 400 120" preserveAspectRatio="none" aria-label="클릭 간격 분포">
+            <polyline id="human-curve" fill="none" stroke="var(--bot-human)" stroke-width="2" stroke-dasharray="6 4" points=""/>
+            <polyline id="bot-curve" fill="none" stroke="var(--{{ type_info.color_token }})" stroke-width="2.5" points=""/>
+          </svg>
+          <div class="curve-legend">
+            <span><i style="background:var(--{{ type_info.color_token }})"></i>{{ type_info.short_name }}</span>
+            {% if type_info.actor_type.value != 'HUMAN' %}<span><i style="background:var(--bot-human)"></i>사람 (지금 버전)</span>{% endif %}
+            <span class="spacer"></span><span id="curve-range"></span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% for group_title in pending_groups %}
+      <div class="field-group is-pending">
+        <div class="field-group-title">{{ group_title }}</div>
+        <div><span class="pill is-not-measured">준비 중</span> 트래픽 생성기를 만든 뒤 행동 값으로 추가해요.</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if not type_info.is_locked %}
+    <div class="save-row">
+      <button class="button is-outline" type="submit" formaction="{{ base_path }}/bots/{{ type_info.slug }}/trial"><i data-lucide="flask-conical"></i>가짜 대상 {{ trial_session_count }}세션 돌려보기</button>
+      <input type="text" name="change_note" maxlength="120" placeholder="바꾼 이유 (예: 클릭 간격 흔들림 키움)">
+      <button class="button" type="submit" formaction="{{ base_path }}/bots/{{ type_info.slug }}/versions"><i data-lucide="save"></i>v{{ profile.version_number + 1 }}로 저장</button>
+    </div>
+    {% endif %}
+  </form>
+
+  <aside>
+    <section class="card side-card">
+      <div class="row"><h2 class="section-heading">걸릴 규칙 예상</h2><span class="spacer"></span><span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">R1 ~ R6</span></div>
+      <ul class="rule-list">
+        {% for preview in rule_previews %}
+        <li>
+          <b>{{ preview.rule_id }}</b>
+          {% if preview.is_expected_hit is none %}<span class="pill is-not-measured">대기</span>
+          {% elif preview.is_expected_hit %}<span class="pill is-failed">걸림</span>
+          {% else %}<span class="pill is-passed">통과</span>{% endif %}
+          {% if preview.is_expected_hit is not none %}<span class="muted" style="font-size:12px">{{ preview.reason }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% set pending_previews = rule_previews | selectattr('is_expected_hit', 'none') | list %}
+      {% if pending_previews %}<div class="muted" style="margin-top:10px;font-size:12.5px">대기 {{ pending_previews | length }}개 · {{ pending_previews[0].reason }} · 규칙이 정해지면 행동 값만 보고 미리 알려 줘요</div>{% endif %}
+    </section>
+
+    <section class="card side-card">
+      <div class="row"><h2 class="section-heading">예상 점수</h2><span class="spacer"></span><span class="pill is-skipped">가짜 대상 기준</span></div>
+      {% if trial_result %}
+      <div class="row" style="margin-top:8px;align-items:baseline">
+        <span class="trial-score">{{ trial_result.detection_rate_percent | metric('rate_percent') }}</span>
+        <span class="muted">{{ '오탐' if type_info.actor_type.value == 'HUMAN' else '탐지' }} {{ trial_result.detected_count }} / {{ trial_result.session_count }}세션 · CHALLENGE 이상</span>
+      </div>
+      <div class="stage-bars">
+        {% for stage, count in trial_result.count_by_stage.items() %}
+        <div class="stage-bar"><span>{{ stage.value }}</span>
+          <span class="progress-bar"><i style="width:{{ count / trial_result.session_count * 100 }}%;background:{{ 'var(--fail-red)' if stage.is_detected else 'var(--bot-human)' }}"></i></span>
+          <span>{{ count }}</span></div>
+        {% endfor %}
+      </div>
+      <div class="muted" style="margin-top:10px;font-size:12.5px">저장 전 값으로 돌렸어요 · 정답표 · 실행 기록에 남지 않아요</div>
+      {% else %}
+      <div class="sub-text" style="margin-top:10px">값을 바꾸고 “돌려보기”를 누르면 가짜 판정 서버가 이 행동을 얼마나 잡는지 보여 줘요.</div>
+      {% endif %}
+    </section>
+
+    <section class="card side-card">
+      <h2 class="section-heading">바뀐 기록</h2>
+      <table class="result-table history-table" style="margin-top:10px">
+        <tr><th>버전</th><th>언제</th><th>바꾼 이유</th></tr>
+        {% for version in version_history %}
+        <tr>
+          <td><b>v{{ version.version_number }}</b>{% if version.version_number == profile.version_number %} <span class="pill is-running">사용 중</span>{% endif %}</td>
+          <td class="muted">{{ version.saved_at | time_ago if version.saved_at else '-' }}</td>
+          <td>{{ version.change_note or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </section>
+  </aside>
 </div>
-<!-- TODO(판정 규칙 확정 후): 편집 폼 · 가짜 대상 1세션 돌려보기 · 버전 저장 -->
+{% endblock %}
+{% block scripts %}
+<script>
+  const humanBehavior = {{ human_behavior_values | tojson }};
+  const isHumanProfile = {{ 'true' if type_info.actor_type.value == 'HUMAN' else 'false' }};
+  const CURVE_POINT_COUNT = 80;
+  const CHART_WIDTH = 400, CHART_HEIGHT = 120, CHART_PADDING = 10;
+  const form = document.getElementById("behavior-form");
+  const inputs = [...form.querySelectorAll("input[type=number]")];
+  const readValue = (name) => Number(form.elements[name]?.value || 0);
+
+  function buildCurvePoints(mean, deviation, maxValue) {
+    const safeDeviation = Math.max(deviation, 1);  // 흔들림 0 = 아주 좁은 산
+    return Array.from({ length: CURVE_POINT_COUNT + 1 }, (_, index) => {
+      const value = (index / CURVE_POINT_COUNT) * maxValue;
+      const height = Math.exp(-((value - mean) ** 2) / (2 * safeDeviation ** 2));  // 산마다 꼭대기 = 1
+      const x = (index / CURVE_POINT_COUNT) * CHART_WIDTH;
+      const y = CHART_HEIGHT - CHART_PADDING - height * (CHART_HEIGHT - CHART_PADDING * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+  }
+
+  function drawClickCurves() {
+    if (!document.getElementById("click-curve")) return;
+    const botMean = readValue("click_interval_mean_ms"), botDeviation = readValue("click_interval_deviation_ms");
+    const curves = [[botMean, botDeviation]];
+    if (!isHumanProfile) curves.push([humanBehavior.click_interval_mean_ms, humanBehavior.click_interval_deviation_ms]);
+    const maxValue = Math.max(100, ...curves.map(([mean, deviation]) => mean + deviation * 3));
+    document.getElementById("bot-curve").setAttribute("points", buildCurvePoints(botMean, botDeviation, maxValue));
+    document.getElementById("human-curve").setAttribute("points", isHumanProfile ? "" :
+      buildCurvePoints(humanBehavior.click_interval_mean_ms, humanBehavior.click_interval_deviation_ms, maxValue));
+    document.getElementById("curve-range").textContent = `0 ~ ${Math.round(maxValue).toLocaleString()}ms`;
+  }
+
+  function markEdited() {
+    const isEdited = inputs.some((input) => input.value !== input.dataset.savedValue);
+    document.getElementById("edited-tag").hidden = !isEdited;
+  }
+
+  form.querySelectorAll("[data-preset]").forEach((button) => button.addEventListener("click", () => {
+    const values = JSON.parse(button.dataset.preset);
+    inputs.forEach((input) => { if (input.name in values) input.value = values[input.name]; });
+    drawClickCurves();
+    markEdited();
+  }));
+  inputs.forEach((input) => input.addEventListener("input", () => { drawClickCurves(); markEdited(); }));
+  drawClickCurves();
+</script>
 {% endblock %}

@@ -34,13 +34,14 @@ qa/
 ├─ pyproject.toml · .env.example · Dockerfile
 ├─ src/ticket_guard_qa/
 │  ├─ settings.py · command_line.py
-│  ├─ domain/             enums · models · pass_criteria
+│  ├─ domain/             enums · models · pass_criteria · detection_targets
 │  ├─ system_targets/     target_interfaces · fake_system · live_django_system · live_mongo_reader · target_factory
 │  ├─ answer_key/         expected_verdicts · answer_key_repository
-│  ├─ macro_bots/         bot_profiles · rule_hit_preview
+│  ├─ macro_bots/         bot_catalog · bot_profiles · behavior_fields · bot_profile_store
+│  │                      behavior_sampling · bot_trial_run · rule_hit_preview
 │  ├─ test_suites/        suite_interface · suite_registry · self_check · event_contract · verdict_accuracy
 │  │                      pipeline_latency · seat_concurrency · load_capacity · failure_recovery
-│  ├─ scoring/            latency_metrics · detection_metrics · confusion_matrix
+│  ├─ scoring/            latency_metrics · detection_metrics · confusion_matrix · detection_breakdown
 │  ├─ test_runs/          run_service · run_repository · run_progress_stream
 │  ├─ qa_database/        database · tables
 │  ├─ reports/            json_report · html_report
@@ -57,7 +58,7 @@ qa/
 | `domain/` | 용어(enum) · 데이터 모양 · 합격 기준 7개 | 다른 폴더 import · DB · HTTP |
 | `system_targets/` | 시스템과 연결하는 유일한 곳 · Protocol과 fake / live 구현 | 정답표 · 점수 계산 · 시스템 코드 import |
 | `answer_key/` | 정답표 만들기 · QA DB에 저장 | 시스템 쪽으로 내보내는 코드 |
-| `macro_bots/` | 봇 종류별 설정 · 버전 · 걸릴 규칙 미리 보기 | 실제 트래픽 보내기(→ `traffic_generators`) |
+| `macro_bots/` | 봇 종류 소개 · 행동 값 · 버전 저장(QA DB) · 행동 값 → 대기 시간 식 · 돌려보기 · 걸릴 규칙 미리 보기 | 실제 트래픽 보내기(→ `traffic_generators`) · 시스템 쪽으로 봇 설정 내보내기 |
 | `test_suites/` | 시험 묶음 하나 = 파일 하나 · 입력 → 결과 수집 → 점수 → 판정 | 화면 코드 · 직접 HTTP 호출 |
 | `scoring/` | p95 · 오류율 · 탐지율 · 오탐률 · 정답 × 판정 표 | 입출력(DB · HTTP · 파일) |
 | `test_runs/` | 실행 시작 · 중지 · 동시 실행 잠금 · 진행 상황 전달 | 시험 내용 |
@@ -118,10 +119,23 @@ qa/
 5. AGENTS.md 5장 시험 대상 현황과 이 문서 5장을 고쳐요.
 
 ### 새 봇
-1. `macro_bots/bot_profiles.py`에 프로필을 추가해요. 이름은 `ActorType`에 먼저 추가해요.
-2. 행동은 `traffic_generators/user_behaviors.py`에 넣어요. 브라우저가 필요하면 `bot_c_browser.py` 방식으로 따로 만들어요.
-3. `answer_key/expected_verdicts.py`에 이 봇의 기대 판정을 추가해요.
-4. 봇 색은 [`ui.md`](ui.md) 2장에 추가해요.
+빠뜨리면 `tests/unit_tests/test_macro_bots.py`가 실패해요.
+1. `domain/enums.py`의 `ActorType`에 이름을 추가해요.
+2. `macro_bots/bot_catalog.py`에 소개 한 줄(이름 · 용도 · 도구 · 색 변수)을 추가해요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
+3. `macro_bots/bot_profiles.py`의 `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 시작 행동 값을 추가해요. 이후 값은 B2 화면에서 버전으로 바꿔요.
+4. 목표가 있으면 `domain/pass_criteria.py`에 기준, `domain/detection_targets.py`에 묶음 한 줄을 추가해요. B1 · B4 · 점수 계산이 같이 따라와요.
+5. 트래픽 구성에 넣으려면 `domain/models.py`의 `TrafficMix`와 02 화면 입력 칸을 고쳐요.
+6. 브라우저가 필요하면 `traffic_generators/bot_c_browser.py` 방식으로 따로 만들어요. 대기 시간 식은 `macro_bots/behavior_sampling.py`를 써요.
+
+### 새 행동 값 (예: ③ 화면 흐름)
+1. `domain/models.py`의 `SessionBehavior`에 필드를 추가해요.
+2. `macro_bots/behavior_fields.py`의 `BEHAVIOR_FIELD_SPECS`에 입력 칸 한 줄을 추가해요. B1 · B2 화면은 이 목록을 그대로 그려요.
+3. `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 종류별 시작값을 넣어요. 예전에 저장한 버전은 새 필드를 기본값으로 읽어요.
+4. `PENDING_BEHAVIOR_GROUPS`에서 그 항목을 지워요.
+
+### 판정 규칙이 정해지면 (R1 ~ R6)
+- B2 예상: `macro_bots/rule_hit_preview.py`의 `RULE_CHECKS`에 규칙마다 조건 한 줄을 넣어요.
+- B4 "어떤 규칙이 잡았나": `verdict_accuracy`가 결과 `details["rule_hit_count_by_rule_id"]`를 채우면 화면이 바로 표를 그려요.
 
 ## 5. 구현 현황
 
@@ -139,7 +153,8 @@ qa/
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |
 | 화면 01 ~ 04 | `dashboard/` | 동작 (시안 기준 · 가짜 대상 숫자) | 실제 대상 실시간 수치 없음 | 결과 알림 보내기 |
-| 화면 05 · B1 ~ B4 | `dashboard/` | 껍데기 (B1 프로필만 표시) | 시스템 DB 없음 · 판정 규칙 없음 | |
+| 화면 05 | `dashboard/` | 껍데기 | 시스템 DB 없음 | |
+| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 돌려보기 · 실시간 진행) | 규칙별 결과 · 좌석 선택 · 확정 단계 · 봇 C 캡처 없음 | 판정 규칙 · 트래픽 생성기 연결 |
 | 관리자 확인 (A안) | `dashboard/dependencies.py` | 동작 (팀 입구가 붙인 `X-Admin-User`만) | | |
 | 판정 정확도 | `test_suites/verdict_accuracy.py` | 가짜만 동작 (행동 값으로 가짜 판정 · 정답표 저장 · 탐지율 · 오탐률) | 실제 대상: 시스템 판정 없음 · 저장 위치 미정 | |
 | Gold 반영 시간 | `test_suites/pipeline_latency.py` · `live_mongo_reader.py` | 가짜만 동작 | Kafka · Spark · MongoDB 없음 | 시험 이벤트 먼저 보내기 |
@@ -147,7 +162,7 @@ qa/
 | 좌석 동시 확정 | `test_suites/seat_concurrency.py` | 껍데기 | 좌석 점유 · Redis 미정 | |
 | 부하 | `test_suites/load_capacity.py` · `traffic_generators/` | 껍데기 | 개발 계정 2개뿐 | |
 | 장애 복구 | `test_suites/failure_recovery.py` | 껍데기 | 복구할 파이프라인 없음 | |
-| 봇 설정 저장 · 규칙 미리 보기 | `macro_bots/` | 껍데기 (기본 프로필만) | 판정 규칙 R1 ~ R6 정의 대기 | |
+| 봇 설정 저장 · 규칙 미리 보기 | `macro_bots/` | 저장 · 실행에 반영 동작 · 규칙 미리 보기는 대기 표시 | 판정 규칙 R1 ~ R6 정의 대기 | `RULE_CHECKS` 채우기 |
 | 경계 검사 · CI | `tests/boundary_tests/` · `.github/workflows/qa.yml` | 동작 (로컬) · CI는 push 후 확인 | | |
 
 ## 6. 코드 안 표시 규칙

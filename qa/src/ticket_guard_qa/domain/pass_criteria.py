@@ -29,6 +29,8 @@ PASS_CRITERIA: tuple[PassCriterion, ...] = (
     PassCriterion("human_false_positive", "사람 오탐률", "human_false_positive_rate_percent", 1.0, Comparison.AT_MOST),
 )
 
+PASS_CRITERION_BY_ID = {criterion.criterion_id: criterion for criterion in PASS_CRITERIA}
+
 
 def evaluate_pass_criteria(metrics: dict[str, float]) -> list[CriterionResult]:
     results = []

@@ -10,7 +10,7 @@ from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.dashboard.dependencies import TargetStatusChecker, require_admin
 from ticket_guard_qa.dashboard.routes import db_dashboard_routes, home_routes, macro_bot_routes, test_run_routes
 from ticket_guard_qa.dashboard.screen_format import register_screen_filters
-from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
+from ticket_guard_qa.macro_bots.bot_catalog import BOT_TYPE_CATALOG
 from ticket_guard_qa.qa_database.database import create_qa_database_engine, create_session_factory
 from ticket_guard_qa.settings import Settings, load_settings
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
@@ -32,11 +32,11 @@ def create_dashboard_app(settings: Settings | None = None) -> FastAPI:
     app.state.run_service = RunService(settings, session_factory, progress_stream)
     app.state.run_service.run_repository.mark_unfinished_runs_as_error(datetime.now(timezone.utc))
     app.state.answer_key_repository = AnswerKeyRepository(session_factory)
-    app.state.bot_profile_registry = BotProfileRegistry()
     app.state.target_status_checker = TargetStatusChecker(settings)
 
     templates = Jinja2Templates(directory=DASHBOARD_DIR / "templates")
     templates.env.globals["base_path"] = base_path  # 링크 앞에 /qa
+    templates.env.globals["bot_type_catalog"] = BOT_TYPE_CATALOG  # 봇 이름 · 색 · 화면 어디서나
     templates.env.globals["static_version"] = int(datetime.now(timezone.utc).timestamp())  # 다시 띄우면 CSS 새로 받음
     register_screen_filters(templates.env)
     app.state.templates = templates

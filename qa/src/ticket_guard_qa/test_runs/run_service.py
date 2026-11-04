@@ -3,6 +3,7 @@ import secrets
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -11,6 +12,7 @@ from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
 from ticket_guard_qa.domain.models import LiveMetrics, RunConfig, RunSummary, SuiteResult
 from ticket_guard_qa.domain.pass_criteria import evaluate_pass_criteria
+from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
 from ticket_guard_qa.reports.html_report import write_html_report
 from ticket_guard_qa.reports.json_report import write_json_report
 from ticket_guard_qa.settings import Settings
@@ -65,6 +67,7 @@ class RunService:
         self.settings = settings
         self.run_repository = RunRepository(session_factory)
         self.answer_key_repository = AnswerKeyRepository(session_factory)
+        self.bot_profile_store = BotProfileStore(session_factory)
         self.progress_stream = progress_stream
         self.system_target_builder = system_target_builder
         self._lock = threading.Lock()
@@ -89,18 +92,21 @@ class RunService:
         return 0.0
 
     def run_now(self, run_config: RunConfig) -> RunSummary:
-        run_id, started_at = self._reserve_run(run_config)
+        run_id, run_config, started_at = self._reserve_run(run_config)
         return self._execute(run_id, run_config, started_at)
 
     def start_in_background(self, run_config: RunConfig) -> str:
-        run_id, started_at = self._reserve_run(run_config)
+        run_id, run_config, started_at = self._reserve_run(run_config)
         threading.Thread(target=self._execute, args=(run_id, run_config, started_at), daemon=True).start()
         return run_id
 
     def cancel(self, run_id: str) -> None:
         self._cancel_requested_run_ids.add(run_id)  # 묶음 사이에서 멈춤
 
-    def _reserve_run(self, run_config: RunConfig) -> tuple[str, datetime]:
+    def _reserve_run(self, run_config: RunConfig) -> tuple[str, RunConfig, datetime]:
+        # 지금 봇 버전을 기록 · 같은 버전끼리만 04 비교 · B3 · B4가 당시 설정을 다시 읽음
+        current_versions = self.bot_profile_store.load_current_registry().version_number_by_actor_type()
+        run_config = replace(run_config, bot_version_numbers=current_versions)
         with self._lock:  # 동시 실행 금지 · 02 화면 시작 잠금
             if self._active_run_id is not None:
                 raise RunAlreadyActiveError(f"이미 실행 중: {self._active_run_id}")
@@ -109,7 +115,7 @@ class RunService:
             self._active_run_id = run_id
             self._active_run_ends_at = started_at + timedelta(seconds=self.measurement_window_sec(run_config))
         self.run_repository.create_run(run_id, run_config, started_at)
-        return run_id, started_at
+        return run_id, run_config, started_at
 
     def _execute(self, run_id: str, run_config: RunConfig, started_at: datetime) -> RunSummary:
         summary = RunSummary(run_id, run_config, RunStatus.RUNNING, started_at)
@@ -120,7 +126,8 @@ class RunService:
                 system_target=self.system_target_builder(self.settings, run_config.target_kind),
                 answer_key_repository=self.answer_key_repository,
                 case_data_dir=self.settings.case_data_dir,
-                report_progress=lambda text: self.progress_stream.publish(run_id, text),
+                report_progress=lambda text, **fields: self.progress_stream.publish(run_id, text, **fields),
+                bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
             )
             self._watch_measurement_window(run_id, context.system_target, self.measurement_window_sec(run_config))
             for suite_name in run_config.suite_names:

@@ -51,7 +51,8 @@
   </div>
 
   <div class="running-right">
-    <div class="row"><span class="tag is-qa"><i data-lucide="activity"></i>실시간 수치</span><span class="spacer"></span><span class="live-badge">LIVE</span></div>
+    <div class="row"><span class="tag is-qa"><i data-lucide="activity"></i>실시간 수치</span><span class="spacer"></span>
+      <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots/live"><i data-lucide="bot"></i>봇 보기</a><span class="live-badge">LIVE</span></div>
     <h2 class="section-heading" style="font-size:22px;margin-top:12px;line-height:1.35">실행 {{ summary.run_id[-11:] }} · {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}</h2>
     <div class="live-metrics">
       {% set live_cards = [

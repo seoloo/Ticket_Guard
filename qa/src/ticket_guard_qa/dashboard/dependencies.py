@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.domain.enums import TargetKind
-from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
+from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
 from ticket_guard_qa.settings import Settings
 from ticket_guard_qa.system_targets.target_factory import build_system_target
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
@@ -70,8 +70,8 @@ def get_answer_key_repository(request: Request) -> AnswerKeyRepository:
     return request.app.state.answer_key_repository
 
 
-def get_bot_profile_registry(request: Request) -> BotProfileRegistry:
-    return request.app.state.bot_profile_registry
+def get_bot_profile_store(request: Request) -> BotProfileStore:
+    return request.app.state.run_service.bot_profile_store  # 실행과 같은 저장소
 
 
 def build_page_url(request: Request, path: str) -> str:

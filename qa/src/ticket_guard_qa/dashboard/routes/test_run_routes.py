@@ -19,12 +19,12 @@ from ticket_guard_qa.domain.pass_criteria import PASS_CRITERIA, PassCriterion
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunService
 from ticket_guard_qa.test_suites.suite_registry import list_suites
+from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
 
 PROGRESS_POLL_INTERVAL_SEC = 0.5
 VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)
 DEFAULT_SUITE_NAMES = ("self_check", "event_contract", "verdict_accuracy", "pipeline_latency")
-VERDICT_SUITE_NAME = "verdict_accuracy"
 TRAFFIC_FIELD_NAMES = ("human_percent", "bot_a_percent", "bot_b_percent", "bot_c_percent", "bot_d_percent")
 ALERT_POLICY_TITLES = {AlertPolicy.NEVER: "알림 없음", AlertPolicy.ON_FAILURE: "실패할 때만", AlertPolicy.ALWAYS: "항상"}
 NEXT_ACTION_BY_CRITERION_ID = {
@@ -181,7 +181,7 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
         for criterion in PASS_CRITERIA
     ]
     failed_cards = [card for card in criterion_cards if card.result.is_passed is False]
-    verdict_result = summary.find_suite_result(VERDICT_SUITE_NAME)
+    verdict_result = summary.find_suite_result(VERDICT_ACCURACY_SUITE_NAME)
     return render_screen(request, "screen_04_test_result.html", {
         "active_tab": "qa",
         "summary": summary,

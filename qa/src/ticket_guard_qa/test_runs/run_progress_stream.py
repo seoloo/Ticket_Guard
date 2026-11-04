@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from ticket_guard_qa.domain.models import LiveMetrics
+from ticket_guard_qa.domain.models import ActorProgress, LiveMetrics
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,7 @@ class ProgressMessage:
     suite_name: str | None = None
     live_metrics: LiveMetrics | None = None
     final_status: str | None = None
+    actor_progress: ActorProgress | None = None  # B3 종류별 진행
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)

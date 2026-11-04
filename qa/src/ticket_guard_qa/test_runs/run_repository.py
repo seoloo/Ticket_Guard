@@ -80,6 +80,22 @@ class RunRepository:
         with self.session_factory() as session:
             return list(session.scalars(select(RunRecord.run_id).order_by(RunRecord.started_at.desc()).limit(limit)))
 
+    def find_latest_finished_summary_with_suite(self, suite_name: str) -> RunSummary | None:
+        """B1 카드 · 가장 최근에 끝난 실행 중 이 묶음 결과가 있는 것"""
+        with self.session_factory() as session:
+            run_id = session.scalar(
+                select(RunRecord.run_id)
+                .join(SuiteResultRecord, SuiteResultRecord.run_id == RunRecord.run_id)
+                .where(
+                    RunRecord.finished_at.is_not(None),
+                    SuiteResultRecord.suite_name == suite_name,
+                    SuiteResultRecord.outcome == SuiteOutcome.PASSED.value,  # 측정 완료한 것만
+                )
+                .order_by(RunRecord.started_at.desc())
+                .limit(1)
+            )
+        return self.get_summary(run_id) if run_id else None
+
     def find_previous_same_config_summary(self, summary: RunSummary) -> RunSummary | None:
         """04 지난 실행과 비교 · 같은 조건 · 끝난 실행 중 바로 앞"""
         target_config = run_config_to_dict(summary.run_config)

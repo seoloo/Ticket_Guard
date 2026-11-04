@@ -103,7 +103,11 @@
           <label>봇 D <input type="number" min="0" max="100" name="bot_d_percent" value="{{ mix.bot_d_percent }}"></label>
           <span class="traffic-sum" id="traffic-sum"></span>
         </div>
-        <div class="row-hint" style="margin-top:6px">봇 A 오픈 즉시형 · B 사람 흉내형 · C 브라우저 자동화 · D 한 기기 다중 세션</div>
+        <div class="row" style="margin-top:6px">
+          <span class="row-hint">봇 A 오픈 즉시형 · B 사람 흉내형 · C 브라우저 자동화 · D 한 기기 다중 세션 · 행동 값은 저장된 최신 버전</span>
+          <span class="spacer"></span>
+          <a class="button is-soft is-small" href="{{ base_path }}/bots"><i data-lucide="bot"></i>봇 편집</a>
+        </div>
       </div>
     </div>
 

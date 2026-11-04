@@ -1,8 +1,149 @@
 {% extends "layout.html" %}
+{% from "screen_parts.html" import bot_screen_header, actor_chip %}
 {% block title %}B3 봇 라이브 · 티켓가드 QA{% endblock %}
+{% block head %}
+<style>
+  .run-strip { display: flex; align-items: center; gap: 12px; padding: 14px 20px; margin-bottom: 18px; flex-wrap: wrap; }
+  .live-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--fail-red-light); color: var(--fail-red-text); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 800; }
+  .live-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--fail-red); }
+  .bot-live-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .panel { padding: 22px 24px; }
+  .panel + .panel { margin-top: 20px; }
+  .step-cell { min-width: 96px; }
+  .step-cell .progress-bar { height: 7px; margin-top: 4px; }
+  .step-cell .progress-bar i { transition: none; }
+  .entry-chart { width: 100%; height: 190px; margin-top: 12px; }
+  .entry-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; }
+  .capture-box { border: 1.5px dashed #CBD3DF; border-radius: 14px; padding: 26px; text-align: center; color: var(--muted-text-color); margin-top: 12px; }
+  .behavior-log { list-style: none; padding: 0; margin: 12px 0 0; max-height: 200px; overflow: auto; font-size: 13px; color: var(--sub-text-color); }
+  .behavior-log li { padding: 5px 0; border-bottom: 1px solid var(--soft-line-color); }
+  [hidden] { display: none !important; }
+</style>
+{% endblock %}
 {% block content %}
-<h1 class="page-heading">봇 라이브 <span class="muted">{{ run_id }}</span></h1>
-<section class="card card-padding">
-  <p class="muted">오픈 직후 진입 분포(봇 vs 사람) · 종류별 진행 · 봇 C 화면 캡처 · 트래픽 생성기 구현 후 표시</p>
+{{ bot_screen_header("봇 라이브", "실행 중 봇과 사람이 어디까지 갔는지 · 오픈 직후 언제 들어오는지") }}
+{% set run_config = summary.run_config %}
+
+<section class="card run-strip">
+  {% if is_running %}<span class="live-badge" id="live-badge">LIVE</span>{% endif %}
+  <span>실행 <b class="mono">{{ summary.run_id }}</b> · 가상 사용자 {{ run_config.virtual_user_count }}명 · {{ '오픈 몰림' if run_config.is_open_burst else '일반 진입' }}</span>
+  <span class="row" style="gap:6px">{% for actor_value, version_number in bot_versions.items() %}{{ actor_chip(actor_value | bot_type_info, version_number) }}{% endfor %}</span>
+  <span class="spacer"></span>
+  {% if is_running %}<a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/live"><i data-lucide="gauge"></i>03 실행</a>{% endif %}
+  <a class="button is-small" id="detection-link" href="{{ base_path }}/runs/{{ summary.run_id }}/bots" {{ 'hidden' if is_running }}><i data-lucide="grid-3x3"></i>B4 탐지 결과</a>
 </section>
+
+{% if not has_verdict_suite %}
+<div class="notice is-db" style="margin-bottom:18px"><i data-lucide="info"></i>이 실행에는 판정 정확도 시험이 없어서 봇 트래픽을 보내지 않아요. 진입 분포는 계획 기준이에요.</div>
+{% endif %}
+<div class="notice is-qa" id="finished-notice" style="margin-bottom:18px" {{ 'hidden' if is_running }}><i data-lucide="circle-check"></i>실행이 끝났어요. 종류별로 얼마나 잡았는지는 B4 탐지 결과에서 봐요.</div>
+
+<div class="bot-live-grid">
+  <div>
+    <section class="card panel">
+      <div class="row"><h2 class="section-heading">종류별 진행</h2><span class="spacer"></span><span class="muted" id="progress-updated">{{ '실시간' if is_running else '최종' }}</span></div>
+      <table class="result-table" style="margin-top:12px">
+        <tr><th>종류</th><th>계획</th>{% for step, title in session_step_titles.items() %}<th>{{ title }}</th>{% endfor %}</tr>
+        {% for info in bot_type_catalog if info.actor_type.value in actor_progress %}
+        {% set progress = actor_progress[info.actor_type.value] %}
+        {% set planned_count = progress[planned_progress_key] %}
+        <tr data-actor="{{ info.actor_type.value }}" data-planned="{{ planned_count }}">
+          <td>{{ actor_chip(info) }}</td>
+          <td><b>{{ planned_count }}</b></td>
+          {% for step in session_step_titles %}
+          {% set count = progress.get(step.value) %}
+          <td class="step-cell" data-step="{{ step.value }}">
+            <span class="step-count">{{ count if count is not none else '-' }}</span>
+            <div class="progress-bar"><i style="width:{{ (count or 0) / planned_count * 100 if planned_count else 0 }}%;background:var(--{{ info.color_token }})"></i></div>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </table>
+      <div class="muted" style="margin-top:10px;font-size:12.5px">‘-’ = 아직 측정하지 않는 단계 · 좌석 선택 · 확정은 트래픽 생성기 연결 후 채워져요</div>
+    </section>
+
+    <section class="card panel">
+      <h2 class="section-heading">봇 행동 기록</h2>
+      <ul class="behavior-log" id="behavior-log" aria-live="polite">
+        {% if not is_running %}<li>끝난 실행이에요 · 기록은 실행 중에만 보여요</li>{% endif %}
+      </ul>
+    </section>
+  </div>
+
+  <aside>
+    <section class="card panel">
+      <div class="row"><h2 class="section-heading">오픈 직후 진입 분포</h2><span class="spacer"></span><span class="pill is-skipped">계획 기준</span></div>
+      <div class="sub-text">봇 설정의 진입 시점 값으로 뽑은 시각 · {{ entry_bucket_ms }}ms 한 칸</div>
+      {% set bucket_count = (entry_histogram.values() | first | length) if entry_histogram else 0 %}
+      {% set ns = namespace(max_total=1) %}
+      {% for index in range(bucket_count) %}
+        {% set ns.bucket_total = 0 %}
+        {% for counts in entry_histogram.values() %}{% set ns.bucket_total = ns.bucket_total + counts[index] %}{% endfor %}
+        {% if ns.bucket_total > ns.max_total %}{% set ns.max_total = ns.bucket_total %}{% endif %}
+      {% endfor %}
+      <svg class="entry-chart" viewBox="0 0 {{ bucket_count * 30 }} 190" preserveAspectRatio="none" aria-label="진입 분포">
+        {% for index in range(bucket_count) %}
+          {% set ns.stack_height = 0 %}
+          {% for actor_value, counts in entry_histogram.items() %}
+            {% set bar_height = counts[index] / ns.max_total * 160 %}
+            {% if bar_height > 0 %}
+            <rect x="{{ index * 30 + 4 }}" y="{{ 170 - ns.stack_height - bar_height }}" width="22" height="{{ bar_height }}" fill="var(--{{ (actor_value | bot_type_info).color_token }})"><title>{{ (actor_value | bot_type_info).short_name }} {{ counts[index] }}명</title></rect>
+            {% set ns.stack_height = ns.stack_height + bar_height %}
+            {% endif %}
+          {% endfor %}
+          <text x="{{ index * 30 + 15 }}" y="186" font-size="9" text-anchor="middle" fill="var(--muted-text-color)">{{ '%g' % (index * entry_bucket_ms / 1000) }}{{ '+' if loop.last }}</text>
+        {% endfor %}
+      </svg>
+      <div class="entry-legend">
+        {% for actor_value in entry_histogram %}{{ actor_chip(actor_value | bot_type_info) }}{% endfor %}
+        <span class="spacer"></span><span class="muted">가로 = 오픈 후 초</span>
+      </div>
+    </section>
+
+    <section class="card panel">
+      <div class="row"><h2 class="section-heading">봇 C 화면 캡처</h2><span class="spacer"></span>{{ actor_chip('BOT_C' | bot_type_info) }}</div>
+      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">Playwright 봇을 붙인 뒤 화면 캡처가 여기에 쌓여요</div></div>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if is_running %}
+<script>
+  function updateActorProgress(actorProgress) {
+    Object.entries(actorProgress).forEach(([actorValue, countByStep]) => {
+      const row = document.querySelector(`tr[data-actor="${actorValue}"]`);
+      if (!row) return;
+      const plannedCount = Number(row.dataset.planned) || 1;
+      row.querySelectorAll("[data-step]").forEach((cell) => {
+        const count = countByStep[cell.dataset.step];
+        if (count === undefined) return;  // 측정하지 않는 단계는 '-' 유지
+        cell.querySelector(".step-count").textContent = count;
+        cell.querySelector(".progress-bar i").style.width = `${Math.min(count / plannedCount, 1) * 100}%`;
+      });
+    });
+    document.getElementById("progress-updated").textContent = `갱신 ${new Date().toLocaleTimeString()}`;
+  }
+
+  function addLog(text) {
+    const item = document.createElement("li");
+    item.textContent = text;
+    document.getElementById("behavior-log").prepend(item);
+  }
+
+  const progressEvents = new EventSource("{{ base_path }}/runs/{{ summary.run_id }}/events");
+  progressEvents.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.actor_progress) updateActorProgress(message.actor_progress);
+    if (message.elapsed_sec === null) addLog(message.text);  // 1초마다 오는 측정 메시지는 기록에서 뺌
+    if (message.is_finished) {
+      progressEvents.close();
+      document.getElementById("live-badge").hidden = true;
+      document.getElementById("finished-notice").hidden = false;
+      document.getElementById("detection-link").hidden = false;
+    }
+  };
+</script>
+{% endif %}
 {% endblock %}

@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 
 from jinja2 import Environment
 
+from ticket_guard_qa.domain.enums import ActorType
+from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, get_bot_type_info
+
 SECONDS_PER_MINUTE = 60
 
 
@@ -43,8 +46,13 @@ def format_time_ago(moment: datetime | None) -> str:
     return f"{int(elapsed_sec // 86400)}일 전"
 
 
+def find_bot_type_info(actor_type: ActorType | str) -> BotTypeInfo:
+    return get_bot_type_info(ActorType(actor_type))
+
+
 def register_screen_filters(environment: Environment) -> None:
     environment.filters["metric"] = format_metric
     environment.filters["threshold"] = format_threshold
     environment.filters["rough_duration"] = format_rough_duration
     environment.filters["time_ago"] = format_time_ago
+    environment.filters["bot_type_info"] = find_bot_type_info

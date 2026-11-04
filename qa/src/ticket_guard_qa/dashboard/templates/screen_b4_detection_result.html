@@ -1,9 +1,166 @@
 {% extends "layout.html" %}
+{% from "screen_parts.html" import bot_screen_header, actor_chip, empty_state %}
 {% block title %}B4 탐지 결과 · 티켓가드 QA{% endblock %}
+{% block head %}
+<style>
+  .run-strip { display: flex; align-items: center; gap: 12px; padding: 14px 20px; margin-bottom: 18px; flex-wrap: wrap; }
+  .target-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .target-card { padding: 18px 20px; }
+  .target-card .metric-value { font-size: 32px; }
+  .detection-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .panel { padding: 22px 24px; }
+  .panel + .panel { margin-top: 20px; }
+  .rate-table td { vertical-align: middle; }
+  .rate-table .target-bar { min-width: 140px; }
+  .matrix-table th, .matrix-table td { text-align: center; }
+  .matrix-table th:first-child, .matrix-table td:first-child { text-align: left; }
+  .matrix-cell { display: inline-flex; min-width: 52px; justify-content: center; border-radius: 8px; padding: 5px 8px; font-weight: 800; }
+  .matrix-cell.is-caught { background: var(--pass-green-light); color: var(--pass-green); }
+  .matrix-cell.is-correct_pass { background: #F3F6FA; color: var(--sub-text-color); }
+  .matrix-cell.is-missed { background: var(--db-orange-light); color: var(--db-orange-text); }
+  .matrix-cell.is-false_positive { background: var(--fail-red-light); color: var(--fail-red-text); }
+  .matrix-cell.is-zero { opacity: .45; }
+  .matrix-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; }
+  .matrix-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .matrix-legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+  .session-group { border-top: 1px solid var(--soft-line-color); padding: 12px 0; }
+  .session-group:first-of-type { border-top: 0; }
+  .session-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .session-list a { background: #FFF8F2; border: 1px solid #F8DCC6; border-radius: 8px; padding: 3px 8px; }
+</style>
+{% endblock %}
 {% block content %}
-<h1 class="page-heading">탐지 결과 <span class="muted">{{ run_id }}</span></h1>
-<section class="card card-padding">
-  <p class="muted">종류별 탐지율과 목표선 · 정답 × 판정 표 · 놓친 세션 → DB 대시보드 · 판정 정확도 시험 동작 후 표시</p>
-  <a class="button is-db" href="{{ base_path }}/db?run_id={{ run_id }}">놓친 세션 DB에서 보기</a>
+{{ bot_screen_header("탐지 결과", "봇 종류별로 얼마나 잡았는지 · 정답(QA DB) × 시스템 판정") }}
+
+<section class="card run-strip">
+  <i data-lucide="flag" style="color:var(--qa-blue)"></i>
+  <span>실행 <b class="mono">{{ summary.run_id }}</b> · {{ summary.finished_at | time_ago }} · {{ '가짜 대상' if summary.run_config.target_kind.value == 'fake' else '실제 대상' }}</span>
+  <span class="row" style="gap:6px">
+    {% for actor_value, version_number in summary.run_config.bot_version_numbers.items() %}{{ actor_chip(actor_value | bot_type_info, version_number) }}{% endfor %}
+  </span>
+  <span class="spacer"></span>
+  <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}"><i data-lucide="file-text"></i>04 결과</a>
+  <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots/live"><i data-lucide="activity"></i>B3 봇 라이브</a>
 </section>
+
+{% if not verdict_details %}
+{{ empty_state("bot-off", "이 실행에는 탐지 결과가 없어요", "판정 정확도 시험을 고르지 않았거나 건너뛰었어요. 02 시험 설정에서 ‘판정 정확도’를 골라 다시 돌려 주세요.", base_path ~ "/runs/new?from_run_id=" ~ summary.run_id, "설정 바꿔 다시 실행") }}
+{% else %}
+
+<div class="target-card-grid">
+  {% for card in target_cards %}
+  {% set criterion = card.target.criterion %}
+  {% set result = card.result %}
+  <section class="card target-card metric-card {{ 'is-not-measured' if result.is_passed is none else ('is-passed' if result.is_passed else 'is-failed') }}">
+    <div class="metric-label">{{ criterion.title }}
+      <span class="row" style="gap:6px">{% for actor_type in card.target.actor_types %}{{ actor_chip(actor_type | bot_type_info) }}{% endfor %}</span></div>
+    <div class="metric-value">{{ result.measured_value | metric(criterion.metric_name) if result.measured_value is not none else '측정 안 됨' }}</div>
+    <div class="metric-check">
+      {% if result.is_passed is none %}<i data-lucide="minus"></i>{% elif result.is_passed %}<i data-lucide="check"></i>{% else %}<i data-lucide="x"></i>{% endif %}
+      목표 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+
+<div class="detection-grid">
+  <div>
+    <section class="card panel">
+      <h2 class="section-heading">종류별 탐지율</h2>
+      <table class="result-table rate-table" style="margin-top:12px">
+        <tr><th>종류</th><th>세션</th><th>잡은 수</th><th>비율</th><th>목표 대비</th><th></th></tr>
+        {% for info in bot_type_catalog %}
+        {% set row = rows.get(info.actor_type) %}
+        {% if row and row.session_count %}
+        {% set target = row.target %}
+        <tr>
+          <td>{{ actor_chip(info) }}</td>
+          <td>{{ row.session_count }}</td>
+          <td>{{ row.detected_count }}</td>
+          <td><b>{{ row.detection_rate_percent | metric('rate_percent') }}</b><div class="muted" style="font-size:11.5px">{{ '오탐률' if not info.actor_type.is_bot else '탐지율' }}</div></td>
+          <td>
+            {% if target %}
+            <div class="target-bar"><i style="width:{{ [row.detection_rate_percent, 100] | min }}%;background:var(--{{ info.color_token }})"></i><b style="left:{{ target.criterion.threshold }}%"></b></div>
+            <div class="muted" style="font-size:11.5px;margin-top:4px">목표 {{ target.criterion.comparison.value | threshold(target.criterion.threshold, target.criterion.metric_name) }}{{ ' · 묶음 합계로 판정' if target.actor_types | length > 1 }}</div>
+            {% else %}<span class="pill is-not-measured">목표 없음 · 결과만</span>{% endif %}
+          </td>
+          <td>{% if row.is_meeting_target is true %}<span class="pill is-passed">달성</span>{% elif row.is_meeting_target is false %}<span class="pill is-failed">미달</span>{% endif %}
+            {% if not info.is_locked %}<a class="muted" style="margin-left:6px" href="{{ base_path }}/bots/{{ info.slug }}/edit" title="봇 설정 보기"><i data-lucide="sliders-horizontal"></i></a>{% endif %}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </table>
+    </section>
+
+    <section class="card panel">
+      <h2 class="section-heading">정답 × 판정</h2>
+      <div class="sub-text">행 = QA 정답표 · 열 = 시스템 판정 · 탐지 = CHALLENGE 이상</div>
+      <div class="matrix-scroll">
+      <table class="result-table matrix-table" style="margin-top:12px">
+        <tr><th>정답</th>{% for stage in verdict_stages %}<th>{{ stage.value }}</th>{% endfor %}</tr>
+        {% for info in bot_type_catalog %}
+        {% set row = rows.get(info.actor_type) %}
+        {% if row and row.session_count %}
+        <tr>
+          <td>{{ actor_chip(info) }}</td>
+          {% for stage in verdict_stages %}
+          {% set count = row.count_by_stage[stage] %}
+          <td><span class="matrix-cell is-{{ classify_verdict(info.actor_type, stage).value | lower }} {{ 'is-zero' if count == 0 }}">{{ count }}</span></td>
+          {% endfor %}
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </table>
+      </div>
+      <div class="matrix-legend">
+        <span><i style="background:var(--pass-green-light);border:1px solid var(--pass-green)"></i>봇 잡음</span>
+        <span><i style="background:var(--db-orange-light);border:1px solid var(--db-orange)"></i>봇 놓침 → DB에서 추적</span>
+        <span><i style="background:var(--fail-red-light);border:1px solid var(--fail-red)"></i>사람 오탐</span>
+        <span><i style="background:#F3F6FA;border:1px solid var(--line-color)"></i>사람 통과</span>
+      </div>
+    </section>
+  </div>
+
+  <aside>
+    <section class="card panel">
+      <div class="row"><h2 class="section-heading">정답과 다른 세션</h2><span class="spacer"></span><span class="tag is-db">DB에서 추적</span></div>
+      <div class="mismatch-summary row" style="margin:12px 0 4px;gap:18px">
+        <span>놓친 봇 <b style="font-size:22px">{{ verdict_details.missed_bot_count }}</b></span>
+        <span>사람 오탐 <b style="font-size:22px">{{ verdict_details.false_positive_count }}</b></span>
+      </div>
+      {% for info in bot_type_catalog if info.actor_type in missed_keys_by_actor_type %}
+      {% set session_keys = missed_keys_by_actor_type[info.actor_type] %}
+      <div class="session-group">
+        <div class="row">{{ actor_chip(info) }}<span class="muted">놓침 {{ session_keys | length }}개</span></div>
+        <div class="session-list">
+          {% for session_key in session_keys[:listed_session_count] %}<a class="mono" href="{{ base_path }}/db/sessions/{{ session_key }}?run_id={{ summary.run_id }}">{{ session_key }}</a>{% endfor %}
+          {% if session_keys | length > listed_session_count %}<span class="muted">외 {{ session_keys | length - listed_session_count }}개</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if false_positive_keys %}
+      <div class="session-group">
+        <div class="row">{{ actor_chip('HUMAN' | bot_type_info) }}<span class="muted">오탐 {{ false_positive_keys | length }}개</span></div>
+        <div class="session-list">
+          {% for session_key in false_positive_keys[:listed_session_count] %}<a class="mono" href="{{ base_path }}/db/sessions/{{ session_key }}?run_id={{ summary.run_id }}">{{ session_key }}</a>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      <a class="button is-db is-wide" style="margin-top:12px;font-size:16px;height:50px" href="{{ base_path }}/db?run_id={{ summary.run_id }}"><i data-lucide="database"></i>DB 대시보드에서 전부 보기<i data-lucide="chevron-right"></i></a>
+    </section>
+
+    <section class="card panel">
+      <h2 class="section-heading">어떤 규칙이 잡았나</h2>
+      {% if rule_hit_count_by_rule_id %}
+      <table class="result-table" style="margin-top:10px">
+        <tr><th>규칙</th><th>잡은 세션</th></tr>
+        {% for rule_id, count in rule_hit_count_by_rule_id.items() %}<tr><td><b>{{ rule_id }}</b></td><td>{{ count }}</td></tr>{% endfor %}
+      </table>
+      {% else %}
+      <div class="sub-text" style="margin-top:10px">시스템이 판정 이유(R1 ~ R6)를 아직 주지 않아요. 판정 규칙이 정해지면 여기에 규칙별 건수가 나와요.</div>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endif %}
 {% endblock %}

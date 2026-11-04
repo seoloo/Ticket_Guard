@@ -8,6 +8,7 @@ from ticket_guard_qa.domain.enums import AlertPolicy, ActorType, RunStatus, Suit
 SessionKey = NewType("SessionKey", str)  # 지금은 bookingAttemptId · AGENTS.md 11장
 AnswerKey = dict[SessionKey, ActorType]
 SystemVerdicts = dict[SessionKey, VerdictStage]
+ActorProgress = dict[str, dict[str, int]]  # 종류 → {"PLANNED" · SessionStep 값: 사람 수} · B3
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class RunConfig:
     random_seed: int = 20261103
     is_open_burst: bool = True  # 오픈 시각에 한꺼번에 진입 · T1
     alert_policy: AlertPolicy = AlertPolicy.ON_FAILURE
+    bot_version_numbers: dict[str, int] = field(default_factory=dict)  # 종류 → 봇 버전 · 실행 시작 때 채움
 
 
 @dataclass(frozen=True)
@@ -52,8 +54,9 @@ class PlannedUser:
 
 @dataclass(frozen=True)
 class SessionBehavior:
-    """시스템에 보내는 행동 값 · 사람 / 봇 여부는 담지 않음"""
+    """시스템에 보내는 행동 값 · 사람 / 봇 여부는 담지 않음 · 화면 입력 칸은 macro_bots/behavior_fields.py"""
     entry_delay_after_open_ms: int
+    entry_delay_deviation_ms: int
     click_interval_mean_ms: int
     click_interval_deviation_ms: int
     sessions_per_device: int
@@ -138,4 +141,5 @@ def run_config_from_dict(raw: dict[str, Any]) -> RunConfig:
         random_seed=raw["random_seed"],
         is_open_burst=raw.get("is_open_burst", True),  # 이전 기록 호환
         alert_policy=AlertPolicy(raw.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
+        bot_version_numbers=raw.get("bot_version_numbers", {}),
     )
