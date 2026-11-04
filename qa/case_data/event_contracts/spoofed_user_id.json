@@ -1,0 +1,19 @@
+{
+  "description": "브라우저가 userId · receivedAt을 직접 보냄 · 서버 값으로 덮어씀 (저장 값 확인은 MongoDB 연결 후)",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour",
+      "userId": "someone-else",
+      "receivedAt": "2000-01-01T00:00:00+00:00"
+    }
+  ],
+  "expected_status_codes": [
+    200
+  ]
+}

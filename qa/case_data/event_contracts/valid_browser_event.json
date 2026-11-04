@@ -1,0 +1,17 @@
+{
+  "description": "올바른 브라우저 이벤트 · 저장 1건",
+  "endpoint": "events",
+  "requests": [
+    {
+      "schemaVersion": 1,
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    200
+  ]
+}

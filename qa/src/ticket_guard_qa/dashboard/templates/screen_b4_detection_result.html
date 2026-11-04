@@ -1,0 +1,9 @@
+{% extends "layout.html" %}
+{% block title %}B4 탐지 결과 · 티켓가드 QA{% endblock %}
+{% block content %}
+<h1 class="page-heading">탐지 결과 <span class="muted">{{ run_id }}</span></h1>
+<section class="card card-padding">
+  <p class="muted">종류별 탐지율과 목표선 · 정답 × 판정 표 · 놓친 세션 → DB 대시보드 · 판정 정확도 시험 동작 후 표시</p>
+  <a class="button is-db" href="{{ base_path }}/db?run_id={{ run_id }}">놓친 세션 DB에서 보기</a>
+</section>
+{% endblock %}
