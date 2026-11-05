@@ -53,14 +53,15 @@ class BotVersionRecord(BaseTable):
 
 
 class ArchiveExportRecord(BaseTable):
-    __tablename__ = "archive_exports"  # 보관본 내보내기 기록 · 내보낸 봇 버전 = 공개됨 · AGENTS.md 6장
+    __tablename__ = "archive_exports"  # QA 데이터 넘기기 기록 · AGENTS.md 6장
 
     archive_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     exported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     recipient: Mapped[str] = mapped_column(String(100))
     reason: Mapped[str] = mapped_column(Text)
     run_ids: Mapped[list] = mapped_column(JSON)
-    bot_version_numbers: Mapped[dict] = mapped_column(JSON)  # 종류 → 내보낸 버전 목록
+    collection_names: Mapped[list] = mapped_column(JSON)  # 내보낸 컬렉션
+    bot_version_numbers: Mapped[dict] = mapped_column(JSON)  # 정답표 · 봇 설정을 내보낸 경우만 · 종류 → 공개된 버전
 
 
 class SavedCaseRecord(BaseTable):

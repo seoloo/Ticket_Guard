@@ -121,62 +121,26 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | `UNSUPPORTED_SCHEMA` | 처리할 수 없는 `schemaVersion` |
 | `DUPLICATE_EVENT_ID` | 이미 저장된 `eventId` |
 
-### 3-5. QA 결과 컬렉션 (QA → 시스템 · 초안 · db 확정 전)
+### 3-5. QA 데이터 넘기기 (요청 시 · QA 담당 승인 · 시스템 DB 밖)
 
-- 규칙: `AGENTS.md` 6장 "QA 결과 내보내기" · Run이 끝난 뒤에만 · QA 계정은 이 두 컬렉션에만 쓰기
-- 시스템 실시간 판정 코드는 읽지 않아요. 규칙 개선 분석 · 공격 대응 증거용
-- 봇 설정값 · 시드는 넣지 않아요. 행동 근거는 `SESSION_FEATURES`를 `bookingAttemptId`로 연결
-- 같은 Run을 다시 보내도 중복이 생기지 않게 `_id`를 고정해요 (upsert)
-
-**QA_RUN_SUMMARIES** · Run 하나 = 1건
-
-| 필드 | 형식 | 뜻 |
-|---|---|---|
-| `_id` | string | `runId` |
-| `schemaVersion` | int | 1 |
-| `runId` | string | `run-20261105-050353-c9fa` |
-| `targetKind` | string | `live` (Mock Run은 내보내지 않음) |
-| `startedAt` · `finishedAt` | date (UTC) | 트래픽 기간 · 이 구간의 `ACTIVITY_EVENTS`와 연결 |
-| `status` | string | `PASSED` · `FAILED` |
-| `ruleSetVersion` | string | 시험 당시 판정 규칙 버전 |
-| `virtualUserCount` | int | VU 수 |
-| `sessionCountByActorType` | object | `{"HUMAN": 160, "BOT_A": 10, …}` · Run이 끝난 뒤라 공개 |
-| `metrics` | object | 합격 기준 지표 · `api_latency_p95_sec` · `api_error_rate_percent` · `gold_latency_p95_sec` · `recovery_time_sec` · `bot_abd_detection_rate_percent` · `bot_c_detection_rate_percent` · `human_false_positive_rate_percent` |
-| `passedCriteriaCount` | int | 합격 기준 n / 7 |
-| `exportedAt` | date (UTC) | QA가 쓴 시각 |
-
-**QA_FINDINGS** · 세션 하나 = 1건 · 사람 세션 중 정상 판정은 넣지 않음
-
-| 필드 | 형식 | 뜻 |
-|---|---|---|
-| `_id` | string | `{runId}:{bookingAttemptId}` |
-| `schemaVersion` | int | 1 |
-| `runId` | string | `QA_RUN_SUMMARIES._id` |
-| `bookingAttemptId` | string | `SESSION_VERDICTS` · `SESSION_FEATURES` · `ACTIVITY_EVENTS`와 연결 |
-| `findingType` | string | `MISSED_BOT`(놓친 봇) · `FALSE_POSITIVE`(사람을 봇으로) · `DETECTED_BOT`(탐지한 봇) |
-| `actualActorType` | string | `HUMAN` · `BOT_A` ~ `BOT_D` · `BOT_NEW` |
-| `systemStage` | string | 시스템 판정 (`NORMAL` · `OBSERVE` · `CHALLENGE` · `HOLD`) · 판정 없음은 `null` |
-| `matchedRules` | string[] | 시스템이 건 규칙 |
-| `expectedRules` | string[] | QA 예상 규칙 (`macro_bots/rule_hit_preview.py`) · 판정 규칙 확정 전에는 빈 목록 |
-| `relatedCodes` | string[] | 관련 E · T 코드 |
-| `exportedAt` | date (UTC) | QA가 쓴 시각 |
-
-**인덱스 제안**: `QA_FINDINGS` `{runId: 1, findingType: 1}` · `{bookingAttemptId: 1}` · `QA_RUN_SUMMARIES` `{finishedAt: -1}`
-
-### 3-6. QA 보관본 (요청 시 · QA 담당 승인 · 초안)
-
-- 규칙: `AGENTS.md` 6장 "보관본 복사" · 코드: `qa_database/archive_export.py` · 명령 `ticket-guard-qa export-archive`
+- 시스템 DB(`ticketguard`)에는 QA 필드 · 컬렉션을 두지 않아요. 운영 데이터 구조만 써요.
+- 규칙: `AGENTS.md` 6장 "QA 데이터 넘기기" · 코드: `qa_database/archive_export.py` · 명령 `ticket-guard-qa export-archive`
 - 받는 곳: MongoDB DB `ticketguard_qa_archive` (시스템 DB와 분리 · 판정 코드 읽기 금지)
-- 파일: `qa_data/archives/{archiveId}/` · 컬렉션마다 JSON 배열 1개 + `manifest.json`(받는 사람 · 이유 · 가져오기 명령)
+- 파일: `qa_data/archives/{archiveId}/` · 컬렉션마다 JSON 배열 1개 + `manifest.json`(받는 사람 · 이유 · 컬렉션 · 가져오기 명령)
 - 가져오기: `mongoimport --jsonArray --mode upsert` · 날짜는 확장 JSON `{"$date": …}` · 같은 `_id`는 덮어쓰기
+- 모든 문서에 `_id` · `schemaVersion: 1` · `archiveId`
+- **필드 추가**: `archive_export.py`의 `*_FIELDS`에 한 줄 + 아래 표에 한 줄 · 받는 쪽은 `schemaVersion`이 같으면 새 필드를 무시해도 됨
 
-| 컬렉션 | `_id` | 필드 |
-|---|---|---|
-| `QA_ARCHIVE_RUNS` | `runId` | `archiveId` · `targetKind` · `status` · `startedAt` · `finishedAt` · `virtualUserCount` · `trafficMix` · `randomSeed` · `botVersionNumbers` |
-| `QA_ARCHIVE_ANSWER_KEYS` | `{runId}:{bookingAttemptId}` | `archiveId` · `runId` · `bookingAttemptId` · `actualActorType` |
-| `QA_ARCHIVE_BOT_VERSIONS` | `{actorType}:v{versionNumber}` | `archiveId` · `actorType` · `versionNumber` · `behavior`(행동 값 5개) · `changeNote` |
+| 컬렉션 | 기본 | `_id` | 필드 |
+|---|---|---|---|
+| `QA_ARCHIVE_RUNS` | O | `runId` | `targetKind` · `status` · `startedAt` · `finishedAt` · `virtualUserCount` · `trafficMix` · `metrics`(합격 기준 지표) · `criterionResults` · `passedCriteriaCount` · `missedBotCount` · `falsePositiveCount` · `ruleHitCountByRuleId` · (정답표 · 봇 설정과 함께일 때만) `randomSeed` · `botVersionNumbers` |
+| `QA_ARCHIVE_FINDINGS` | O | `{runId}:{bookingAttemptId}` | `runId` · `bookingAttemptId` · `findingType`(`MISSED_BOT` · `FALSE_POSITIVE`) · `actualActorType` |
+| `QA_ARCHIVE_ANSWER_KEYS` | 직접 지정 | `{runId}:{bookingAttemptId}` | `runId` · `bookingAttemptId` · `actualActorType` |
+| `QA_ARCHIVE_BOT_VERSIONS` | 직접 지정 | `{actorType}:v{versionNumber}` | `actorType` · `versionNumber` · `behavior`(행동 값) · `changeNote` |
 
-모든 문서에 `schemaVersion: 1`
+- 시스템 판정 · 행동 수치는 복사하지 않아요. `bookingAttemptId`로 `SESSION_VERDICTS` · `SESSION_FEATURES`와 연결해요.
+- 적발 목록은 QA 결과 화면 목록 길이(200건)까지 · `missedBotCount` · `falsePositiveCount`가 더 크면 목록이 잘린 것
+- 시드는 VU 순서로 봇을 다시 계산할 수 있어서 정답표와 같은 등급으로 다뤄요.
 
 ## 4. Kafka
 

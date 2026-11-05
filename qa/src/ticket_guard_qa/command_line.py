@@ -5,7 +5,13 @@ import sys
 
 from ticket_guard_qa.domain.enums import RunStatus, TargetKind
 from ticket_guard_qa.domain.models import RunConfig
-from ticket_guard_qa.qa_database.archive_export import MANIFEST_FILE_NAME, ArchiveExportError, export_archive
+from ticket_guard_qa.qa_database.archive_export import (
+    DEFAULT_COLLECTION_NAMES,
+    EXPORT_COLLECTIONS,
+    MANIFEST_FILE_NAME,
+    ArchiveExportError,
+    export_archive,
+)
 from ticket_guard_qa.qa_database.database import create_qa_database_engine, create_session_factory
 from ticket_guard_qa.settings import load_settings
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
@@ -37,11 +43,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
     commands.add_parser("list-suites", help="시험 묶음 목록")
 
     archive_command = commands.add_parser(
-        "export-archive", help="끝난 Run의 정답표 · 봇 설정 보관본 (MongoDB 가져오기용 JSON) · QA 담당 승인 후에만"
+        "export-archive", help="QA 데이터 넘기기 · 끝난 Run → 컬렉션별 JSON (MongoDB 가져오기용) · QA 담당 승인 후에만"
     )
     archive_command.add_argument("--run", dest="run_ids", action="append", required=True, help="여러 번 지정 가능")
     archive_command.add_argument("--recipient", required=True, help="받는 사람 · 기록용")
     archive_command.add_argument("--reason", required=True, help="내보내는 이유 · 기록용")
+    archive_command.add_argument(
+        "--collection", dest="collection_names", action="append", choices=list(EXPORT_COLLECTIONS),
+        help=f"여러 번 지정 가능 · 기본 {' · '.join(DEFAULT_COLLECTION_NAMES)} · 정답표 · 봇 설정은 직접 지정",
+    )
 
     commands.add_parser("dashboard", help="QA 대시보드 띄우기 · 팀 compose 컨테이너 안에서만")
     return parser
@@ -73,6 +83,7 @@ def export_archive_files(arguments: argparse.Namespace) -> int:
         archive_folder = export_archive(
             session_factory, arguments.run_ids, arguments.recipient, arguments.reason,
             settings.report_output_dir.parent / ARCHIVE_FOLDER_NAME,
+            collection_names=tuple(arguments.collection_names or DEFAULT_COLLECTION_NAMES),
         )
     except ArchiveExportError as error:
         print(f"내보내기 중단 · {error}")
@@ -80,7 +91,8 @@ def export_archive_files(arguments: argparse.Namespace) -> int:
     manifest = json.loads((archive_folder / MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
     print(f"{manifest['archiveId']} · Run {len(manifest['runIds'])}개 · {manifest['documentCounts']}")
     print(f"  폴더: {archive_folder}")
-    print(f"  공개 처리된 봇 버전: {manifest['botVersionNumbers']} · 다음 시험은 새 버전 · 새 시드")
+    if manifest["publishedBotVersionNumbers"]:
+        print(f"  공개 처리된 봇 버전: {manifest['publishedBotVersionNumbers']} · 다음 시험은 새 버전 · 새 시드")
     print("  받는 쪽 가져오기 명령:")
     for command in manifest["importCommands"]:
         print(f"    {command}")

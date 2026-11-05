@@ -150,7 +150,7 @@ qa/
 | QA 자기 검사 | `test_suites/self_check.py` | 동작 | | |
 | 이벤트 계약 시험 | `test_suites/event_contract.py` · `live_django_system.py` | 동작 (Mock + Live 2026-11-05 PASS · 요청 22건) | 예매 확정 사례 1건 · 저장 값 확인 | `/api/action/` 사례 · MongoDB 연결 후 저장 확인 |
 | Live 예매 흐름 (1-b ~ 1-d) | `system_targets/live_booking_client.py` · `live_django_system.py` · `traffic_generators/virtual_user_traffic.py` · `test_suites/booking_flow.py` | 동작 (Run 설정 "예매 흐름 테스트" · VU 동시 실행 · 오픈 전 로그인 → 오픈 + 진입 지연 → 대기열 → 보안문자 → 좌석 클릭(봇 프로필 간격 · seat_select 이벤트) → 확정 · 먼저 팔린 좌석은 다른 좌석으로 최대 3번 · 확정 못 한 계정은 예매 취소로 반환 · 시험 시간 넘으면 TIMEOUT · 예매 완료 · 매진 · 중복 판매 · 단계별 p95) · 시스템 테스트 훅 필요 (Issue #6) | 초기화: QA 대시보드에 시스템 관리자 계정 미전달(compose.gateway.yml) → 건너뜀 · 디바이스당 세션(봇 D) · 페이지 흐름 미적용 · Run 중지는 Suite 사이에서만 | 관리자 계정 전달 (develop PR) · 부하 테스트 Locust |
-| QA 보관본 내보내기 | `qa_database/archive_export.py` · `command_line.py` (`export-archive`) · `archive_exports` 테이블 | 동작 (끝난 Run만 · 정답표 · 그 Run이 쓴 봇 버전 · 시드 → 컬렉션별 JSON + manifest · 받는 사람 · 이유 기록 · 내보낸 봇 버전으로 Run 시작 시 03 경고) · AGENTS 6장 보관본 복사 · QA 담당 승인 | 대시보드 버튼 없음(의도) · 받는 쪽 가져오기는 수동(`mongoimport`) | QA 결과 컬렉션 자동 내보내기 (`QA_RUN_SUMMARIES` · `QA_FINDINGS` · db 팀 합의 후) |
+| QA 데이터 넘기기 | `qa_database/archive_export.py` · `command_line.py` (`export-archive`) · `archive_exports` 테이블 | 동작 (요청 · QA 담당 승인 시 · 끝난 Run만 · 기본 결과 숫자 + 적발 목록 · 정답표 · 봇 설정은 `--collection` 직접 지정 · 컬렉션별 JSON + manifest → 받는 쪽 `ticketguard_qa_archive` · 시스템 DB에는 쓰지 않음 · 필드 추가 = `*_FIELDS` 한 줄 · 정답표 · 봇 설정을 넘긴 봇 버전으로 Run 시작 시 03 경고) | 대시보드 버튼 없음(의도) · 받는 쪽 가져오기는 수동(`mongoimport`) | QA DB PostgreSQL 전환 (서버 배포 시) |
 | 터미널 명령 · 종료 코드 | `command_line.py` | 동작 | | |
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |
