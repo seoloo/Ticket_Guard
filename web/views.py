@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from .services import repo, SHOWS, FlowError
 from .events import emit, publisher, CLIENT_EVENTS, build_event, event_request_context
 from .event_schema import EventValidationError, timestamp, validate_event, validate_details
+from .qa_test_hooks import is_test_account_login
 
 ADMIN_HOME_URL = '/qa/'  # 팀 입구(nginx)가 QA 대시보드로 넘김
 
@@ -105,6 +106,18 @@ def check_admin(request):
     return response
 
 
+@require_POST
+@never_cache
+def qa_reset(request):
+    """QA 테스트 훅 · 시험 데이터 초기화 · 관리자 전용 · QA_RESET_ENABLED=1일 때만 (Issue #6)"""
+    if not settings.QA_RESET_ENABLED:
+        raise Http404
+    if request.session.get('role') != 'admin':
+        return JsonResponse({'error': '관리자 권한이 필요해요.'}, status=403)
+    repo.reset()
+    return JsonResponse({'ok': True})
+
+
 def read_body(request):
     if len(request.body) > 16384:
         raise FlowError('요청이 너무 커요.')
@@ -132,6 +145,7 @@ def action(request):
                 raise FlowError('아이디와 비밀번호를 확인해 주세요.')
             is_admin = is_admin_login(username, password)
             is_customer = username in (settings.DEMO_USERNAME, settings.DEMO_SECOND_USERNAME) and secrets.compare_digest(password, settings.DEMO_PASSWORD)
+            is_customer = is_customer or is_test_account_login(username, password)
             if not (is_admin or is_customer):
                 emit(None, 'login_fail', result='failure', errorCode='INVALID_CREDENTIALS')
                 raise FlowError('아이디 또는 비밀번호를 확인해 주세요.', 'LOGIN_FAILED', 401)
