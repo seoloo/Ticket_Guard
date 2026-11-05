@@ -13,7 +13,13 @@ from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TY
 from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.settings import QA_ROOT_DIR
 from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
-from ticket_guard_qa.test_suites.event_contract import KAFKA_ENDPOINT, QUARANTINE_REASON_CODES, load_contract_cases
+from ticket_guard_qa.test_suites.event_contract import (
+    ACCEPTED_STATUS_TOKEN,
+    KAFKA_ENDPOINT,
+    QUARANTINE_REASON_CODES,
+    load_contract_cases,
+    matches_expected_statuses,
+)
 
 CASE_DATA_DIR = QA_ROOT_DIR / "case_data"
 
@@ -32,6 +38,30 @@ def test_kafka_cases_carry_messages_not_http_requests():
     for case in kafka_cases:
         assert case.kafka_messages and not case.requests, case.case_name
         assert all({"key", "value"} <= set(message) for message in case.kafka_messages), case.case_name
+
+
+EVENT_SCHEMA_V1_FIELDS = {
+    "schemaVersion", "eventId", "eventType", "occurredAt", "receivedAt", "source", "userId", "pageInstanceId",
+    "pageViewId", "bookingAttemptId", "showId", "scheduleId", "requestSequence", "result", "errorCode",
+    "isSimulation", "scenarioName", "details",
+}  # main web/event_schema.py FIELDS
+
+
+def test_kafka_messages_follow_schema_v1_except_the_broken_field():
+    for case in load_contract_cases(CASE_DATA_DIR):
+        for message in case.kafka_messages:
+            if isinstance(message["value"], str):
+                continue  # JSON 아닌 원문 사례
+            missing_fields = EVENT_SCHEMA_V1_FIELDS - set(message["value"])
+            assert missing_fields <= {"eventType"}, case.case_name
+            assert not set(message["value"]) - EVENT_SCHEMA_V1_FIELDS, case.case_name
+
+
+def test_accepted_status_token_allows_delivered_or_queued():
+    assert matches_expected_statuses([200, 202], [ACCEPTED_STATUS_TOKEN, ACCEPTED_STATUS_TOKEN])
+    assert matches_expected_statuses([202, 400], [ACCEPTED_STATUS_TOKEN, 400])
+    assert not matches_expected_statuses([503], [ACCEPTED_STATUS_TOKEN])
+    assert not matches_expected_statuses([200], [ACCEPTED_STATUS_TOKEN, 400])
 
 
 def test_mock_returns_schema_shaped_records():

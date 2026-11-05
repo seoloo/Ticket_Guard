@@ -3,16 +3,20 @@
   "endpoint": "events",
   "requests": [
     {
-      "schemaVersion": 1,
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
       "occurredAt": "{{now}}",
       "pageInstanceId": "qa-page-0001",
-      "showId": "blue-hour"
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      }
     }
   ],
   "expected_status_codes": [
-    200
+    "accepted"
   ],
   "expected_storage": {
     "activity_event_count": 1,

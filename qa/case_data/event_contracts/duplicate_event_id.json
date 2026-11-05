@@ -1,27 +1,35 @@
 {
-  "description": "같은 eventId 두 번 · 두 번째는 중복 응답 · 저장 1건",
+  "description": "같은 eventId · 같은 내용 두 번 · 두 번째는 중복 응답(duplicate=true) · 저장 1건",
   "endpoint": "events",
   "requests": [
     {
-      "schemaVersion": 1,
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
       "occurredAt": "{{now}}",
       "pageInstanceId": "qa-page-0001",
-      "showId": "blue-hour"
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      }
     },
     {
-      "schemaVersion": 1,
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
       "occurredAt": "{{now}}",
       "pageInstanceId": "qa-page-0001",
-      "showId": "blue-hour"
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      }
     }
   ],
   "expected_status_codes": [
-    200,
-    200
+    "accepted",
+    "accepted"
   ],
   "expected_storage": {
     "activity_event_count": 1,

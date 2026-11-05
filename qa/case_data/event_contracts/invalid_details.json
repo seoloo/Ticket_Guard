@@ -1,0 +1,39 @@
+{
+  "description": "details 목록 밖 항목 · 허용 값 밖",
+  "endpoint": "events",
+  "requests": [
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows",
+        "seatPrice": 0
+      }
+    },
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "admin",
+        "previousPageName": "shows"
+      }
+    }
+  ],
+  "expected_status_codes": [
+    400,
+    400
+  ],
+  "expected_storage": {
+    "activity_event_count": 0,
+    "quarantine_reason_codes": []
+  }
+}

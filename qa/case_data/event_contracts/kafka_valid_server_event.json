@@ -10,14 +10,25 @@
         "eventType": "booking_confirm_success",
         "occurredAt": "{{now}}",
         "receivedAt": "{{now}}",
+        "source": "server",
         "userId": "qa-0001",
+        "pageInstanceId": "qa-page-0001",
+        "pageViewId": "{{page_view_id}}",
         "bookingAttemptId": "qa-attempt-0001",
         "showId": "blue-hour",
         "scheduleId": "blue-hour-evening",
         "requestSequence": 1,
         "result": "success",
         "errorCode": null,
-        "source": "server"
+        "isSimulation": false,
+        "scenarioName": null,
+        "details": {
+          "bookingId": "qa-booking-0001",
+          "seatType": "reserved",
+          "quantity": 1,
+          "totalAmount": 55000,
+          "durationMs": 120.5
+        }
       }
     }
   ],

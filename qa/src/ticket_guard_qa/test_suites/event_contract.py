@@ -14,6 +14,9 @@ EVENT_CONTRACTS_FOLDER_NAME = "event_contracts"
 BROWSER_EVENTS_ENDPOINT = "events"
 QUARANTINE_REASON_CODES = ("PARSE_ERROR", "MISSING_FIELD", "INVALID_FORMAT", "UNSUPPORTED_SCHEMA", "DUPLICATE_EVENT_ID")  # docs/contracts.md 3-4 · QA 제안
 KAFKA_ENDPOINT = "kafka"  # Django를 거치지 않는 토픽 메시지 · db 팀 파이프라인 시험용 · QA HTTP 시험 대상 아님
+ACCEPTED_STATUS_TOKEN = "accepted"
+ACCEPTED_STATUS_CODES = (200, 202)  # 200 전달 완료 · 202 전달 대기 · Kafka 상태에 따라 달라짐
+KST = timezone(timedelta(hours=9))
 
 
 @dataclass(frozen=True)
@@ -29,7 +32,7 @@ class ContractCase:
     description: str
     endpoint: str
     requests: list[dict[str, Any]]
-    expected_status_codes: list[int]
+    expected_status_codes: list[int | str]  # 숫자 또는 "accepted"
     kafka_messages: list[dict[str, Any]]
     expected_storage: ExpectedStorage | None
 
@@ -67,11 +70,25 @@ def fill_placeholders(value: Any, replacements: dict[str, str]) -> Any:
 def build_placeholder_values(now: datetime) -> dict[str, str]:
     return {
         "{{event_id}}": str(uuid.uuid4()),
+        "{{page_view_id}}": str(uuid.uuid4()),
         "{{now}}": now.isoformat(),
+        "{{now_kst}}": now.astimezone(KST).isoformat(),
         "{{now_without_timezone}}": now.replace(tzinfo=None).isoformat(),
         "{{now_minus_25_hours}}": (now - timedelta(hours=25)).isoformat(),
         "{{now_plus_25_hours}}": (now + timedelta(hours=25)).isoformat(),
     }
+
+
+def is_expected_status(actual_status_code: int, expected: int | str) -> bool:
+    if expected == ACCEPTED_STATUS_TOKEN:
+        return actual_status_code in ACCEPTED_STATUS_CODES
+    return actual_status_code == expected
+
+
+def matches_expected_statuses(actual_status_codes: list[int], expected_status_codes: list[int | str]) -> bool:
+    return len(actual_status_codes) == len(expected_status_codes) and all(
+        is_expected_status(actual, expected) for actual, expected in zip(actual_status_codes, expected_status_codes)
+    )
 
 
 class EventContractSuite:
@@ -92,7 +109,7 @@ class EventContractSuite:
                 continue
             requests = fill_placeholders(case.requests, build_placeholder_values(datetime.now(timezone.utc)))
             actual_status_codes = [booking_api.submit_browser_event(request).status_code for request in requests]
-            if actual_status_codes != case.expected_status_codes:
+            if not matches_expected_statuses(actual_status_codes, case.expected_status_codes):
                 failed_case_names.append(f"{case.case_name}({actual_status_codes})")
             context.report_progress(f"계약 케이스 {case.case_name} 검증")
 

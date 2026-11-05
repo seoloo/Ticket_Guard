@@ -25,7 +25,25 @@ BROWSER_EVENT_TYPES = frozenset({
     "page_enter", "page_exit", "search_change", "genre_change", "show_select",
     "schedule_select", "seat_select", "seat_cancel", "quantity_change",
 })
-KNOWN_SHOW_IDS = frozenset({"blue-hour", "open-air"})
+# POST /api/events/ 규칙 · main web/views.py · web/event_schema.py (2026-11-05)
+ALLOWED_BROWSER_EVENT_FIELDS = frozenset({
+    "eventType", "eventId", "occurredAt", "pageInstanceId", "pageViewId", "showId", "scheduleId", "details",
+})
+KNOWN_SHOW_IDS = frozenset({"blue-hour", "open-air", "spring-concert", "city-night", "starlight", "summer-rhythm"})
+SCHEDULE_ID_SUFFIX = "-evening"
+PAGE_NAMES = frozenset({"login", "shows", "detail", "queue", "captcha", "select", "complete", "history"})
+DETAIL_FIELDS_BY_BROWSER_EVENT_TYPE = {
+    "page_enter": {"pageName", "previousPageName"},
+    "page_exit": {"pageName", "previousPageName"},
+    "search_change": {"queryLength", "resultCount"},
+    "genre_change": {"genre"},
+    "show_select": {"clickTarget"},
+    "schedule_select": {"trigger", "selectedDate"},
+    "seat_select": {"seatId", "selectedCount"},
+    "seat_cancel": {"seatId", "selectedCount"},
+    "quantity_change": {"previousQuantity", "quantity"},
+}
+SHOW_REQUIRED_EVENT_TYPES = frozenset({"show_select", "schedule_select", "seat_select", "seat_cancel", "quantity_change"})
 MAX_EVENT_CLOCK_SKEW_SEC = 86_400  # 과거 · 미래 모두 24시간
 MAX_PAGE_INSTANCE_ID_LENGTH = 80
 
@@ -73,29 +91,55 @@ FIXED_GOLD_LATENCY_SEC = [2.0, 3.5, 4.0, 6.5, 8.0]  # 세션 없을 때 · self_
 FIXED_DECIDED_AT = datetime(2026, 11, 3, tzinfo=timezone.utc)
 
 
+def is_uuid(value: Any) -> bool:
+    try:
+        uuid.UUID(str(value))
+    except ValueError:
+        return False
+    return isinstance(value, str)
+
+
+def find_details_error(event_type: str, details: Any) -> str | None:
+    """항목 누락 · 목록 밖 항목 · pageName 값 · 나머지 값 범위는 Live에서 확인"""
+    if not isinstance(details, dict) or set(details) != DETAIL_FIELDS_BY_BROWSER_EVENT_TYPE[event_type]:
+        return "details 항목 오류"
+    for page_field in ("pageName", "previousPageName"):
+        if page_field in details and details[page_field] not in PAGE_NAMES | ({None} if page_field == "previousPageName" else set()):
+            return "details 값 오류"
+    return None
+
+
 def find_browser_event_error(event: dict[str, Any], now: datetime) -> str | None:
     """None = 통과 · 문자열 = 거부 이유"""
-    if event.get("eventType") not in BROWSER_EVENT_TYPES:
+    if set(event) - ALLOWED_BROWSER_EVENT_FIELDS:
+        return "허용되지 않은 필드"
+    event_type = event.get("eventType")
+    if event_type not in BROWSER_EVENT_TYPES:
         return "허용되지 않은 이벤트"
-    try:
-        uuid.UUID(str(event.get("eventId")))
-    except ValueError:
+    if not is_uuid(event.get("eventId")):
         return "eventId 형식 오류"
     page_instance_id = event.get("pageInstanceId")
     if not isinstance(page_instance_id, str) or len(page_instance_id) > MAX_PAGE_INSTANCE_ID_LENGTH:
         return "pageInstanceId 없음"
+    if not is_uuid(event.get("pageViewId")):
+        return "pageViewId 형식 오류"
     try:
         occurred_at = datetime.fromisoformat(event.get("occurredAt", ""))
     except (TypeError, ValueError):
         return "occurredAt 형식 오류"
-    if occurred_at.tzinfo is None:
-        return "occurredAt 시간대 없음"
+    if occurred_at.utcoffset() != timedelta(0):
+        return "occurredAt UTC 아님"
     if abs((now - occurred_at).total_seconds()) > MAX_EVENT_CLOCK_SKEW_SEC:
         return "occurredAt 범위 밖"
     show_id = event.get("showId")
     if show_id is not None and show_id not in KNOWN_SHOW_IDS:
         return "없는 공연"
-    return None
+    schedule_id = event.get("scheduleId")
+    if schedule_id is not None and (not show_id or schedule_id != show_id + SCHEDULE_ID_SUFFIX):
+        return "회차 오류"
+    if event_type in SHOW_REQUIRED_EVENT_TYPES and not show_id:
+        return "공연 정보 없음"
+    return find_details_error(event_type, event.get("details", {}))
 
 
 def find_matched_mock_rules(behavior: SessionBehavior) -> tuple[str, ...]:
@@ -156,7 +200,7 @@ class FakeSystemState:
     verdict_records: list[SessionVerdictRecord] = field(default_factory=list)  # SESSION_VERDICTS
     session_features: list[SessionFeatureRecord] = field(default_factory=list)  # SESSION_FEATURES
     quarantine_records: list[QuarantineRecord] = field(default_factory=list)  # QUARANTINE_EVENTS
-    accepted_event_ids: set[str] = field(default_factory=set)
+    accepted_event_by_id: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class FakeBookingApi:
@@ -172,10 +216,13 @@ class FakeBookingApi:
         error_reason = find_browser_event_error(event, datetime.now(timezone.utc))
         if error_reason:
             return HttpResult(400, {"error": error_reason}, latency_ms=1.0)
-        if event["eventId"] in self.state.accepted_event_ids:
-            return HttpResult(200, {"accepted": True, "duplicate": True}, latency_ms=1.0)
-        self.state.accepted_event_ids.add(event["eventId"])
-        return HttpResult(200, {"accepted": True}, latency_ms=1.0)
+        accepted_event = self.state.accepted_event_by_id.get(event["eventId"])
+        if accepted_event is not None:
+            if accepted_event != event:
+                return HttpResult(400, {"error": "eventId 내용 충돌"}, latency_ms=1.0)
+            return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": True}, latency_ms=1.0)
+        self.state.accepted_event_by_id[event["eventId"]] = event
+        return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": False}, latency_ms=1.0)
 
     def start_virtual_user_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
         session_key = SessionKey(f"attempt-{len(self.state.session_verdicts) + 1:05d}")

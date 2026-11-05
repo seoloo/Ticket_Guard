@@ -2,7 +2,7 @@
 
 QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보는 문서예요. 규칙 전체는 [`../AGENTS.md`](../AGENTS.md).
 
-- **원본**: 시스템 저장소의 `docs/architecture.md` (develop `d323060` 기준, 2026-11-03)
+- **원본**: 시스템 저장소의 `docs/architecture.md` (develop `d323060` 기준, 2026-11-03) · 이벤트 규칙은 `web/event_schema.py` · `web/views.py` `events` (main `3b9a53b` 기준, 2026-11-05)
 - 이 문서는 원본을 **QA 쪽에서 쓰기 좋게 옮긴 것**이에요. 서로 다르면 원본이 맞고, 이 문서를 고쳐요.
 - 고치는 절차는 AGENTS.md 7장 "형식이 바뀔 때"를 따라요.
 
@@ -12,21 +12,24 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 
 | 시스템 필드 | QA 코드 이름 | 뜻 · 규칙 |
 |---|---|---|
-| `schemaVersion` | `schema_version` | 지금은 `1` |
-| `eventId` | `event_id` | UUID · 같은 사용자 안에서 중복이면 한 번만 저장 |
+| `schemaVersion` | `schema_version` | 지금은 `1` · 서버가 넣음 · 브라우저가 보내면 거부 |
+| `eventId` | `event_id` | UUID · 같은 내용 재전송은 중복 응답(`duplicate: true`) · 같은 ID에 다른 내용이면 거부 |
 | `eventType` | `event_type` | 아래 2장 목록만 허용 |
-| `occurredAt` | `occurred_at` | ISO 시각 · 시간대 없으면 거부 · 지금과 24시간 넘게 차이 나면 거부(미래 포함) · UTC로 바꿔 저장 |
-| `receivedAt` | `received_at` | 서버가 넣는 시각 · 브라우저 값은 받지 않음 |
-| `userId` | `user_id` | 서버가 넣는 사용자 · 브라우저 값은 받지 않음 |
+| `occurredAt` | `occurred_at` | ISO 시각 · **UTC(+00:00)만** · 시간대 없거나 다른 시간대면 거부 · 지금과 24시간 넘게 차이 나면 거부(미래 포함) |
+| `receivedAt` | `received_at` | 서버가 넣는 시각 · 브라우저가 보내면 거부 |
+| `userId` | `user_id` | 서버가 넣는 사용자 · 브라우저가 보내면 거부 |
 | `bookingAttemptId` | `booking_attempt_id` | 예매 시도 하나 · 예매 밖이면 `null` |
-| `pageInstanceId` | `page_instance_id` | 화면(탭) 하나 · 브라우저 이벤트는 필수(80자 이하) |
-| `showId` · `scheduleId` | `show_id` · `schedule_id` | 공연 · 회차 · 없는 공연이면 거부 · 예매 밖이면 `null` |
+| `pageInstanceId` | `page_instance_id` | 탭 하나 · 브라우저 이벤트는 필수(80자 이하) |
+| `pageViewId` | `page_view_id` | 화면 한 번 표시 · UUID · 브라우저 이벤트는 필수 |
+| `showId` · `scheduleId` | `show_id` · `schedule_id` | 공연 · 회차 · 없는 공연이면 거부 · 회차는 `{showId}-evening`만 · 예매 밖이면 `null` |
 | `requestSequence` | `request_sequence` | 확정 요청 순번 · 이미 받은 번호 이하면 거부 |
-| `result` · `errorCode` | `result` · `error_code` | 결과 · 실패 이유 |
+| `result` · `errorCode` | `result` · `error_code` | `success` · `failure` · `rejected` · 실패 이유 |
 | `source` | `source` | `browser` · `server` |
+| `isSimulation` · `scenarioName` | `is_simulation` · `scenario_name` | 시연 시나리오(`admit` 등)를 쓴 세션이면 `true` · 시나리오 이름 |
+| `details` | `details` | 종류별 항목 · 필수 항목 누락 · 목록 밖 항목 · 허용 값 밖이면 거부 (예: `page_enter` = `pageName` · `previousPageName`) |
 
-- 브라우저 이벤트는 `POST /api/events/`로 받아요. 로그인 안 했으면 **401**, 형식이 틀리면 **400**을 돌려줘요.
-- 목록에 없는 필드는 저장하지 않아요.
+- 브라우저 이벤트는 `POST /api/events/`로 받아요. 보낼 수 있는 필드는 `eventType` · `eventId` · `occurredAt` · `pageInstanceId` · `pageViewId` · `showId` · `scheduleId` · `details` 8개뿐이고, **그 밖의 필드가 있으면 400**이에요.
+- 응답: **200** Kafka 전달 완료 · **202** 전달 대기 · **400** 형식 오류 · **401** 로그인 안 함 · **503** 전달 실패(재시도 가능). 200과 202는 둘 다 "받음"이에요.
 - 비밀번호 · 보안문자 답 · 세션 토큰은 이벤트에 들어가지 않아요.
 
 ## 2. 이벤트 종류
@@ -34,7 +37,7 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | 보내는 쪽 | 종류 |
 |---|---|
 | 브라우저 (믿지 않는 관찰 값) | `page_enter` · `page_exit` · `search_change` · `genre_change` · `show_select` · `schedule_select` · `seat_select` · `seat_cancel` · `quantity_change` |
-| 서버 (확정된 사실) | `login_success` · `login_fail` · `queue_enter` · `queue_register` · `queue_cancel` · `connection_timeout` · `captcha_success` · `captcha_wrong` · `booking_confirm_request` · `booking_confirm_success` · `booking_confirm_fail` |
+| 서버 (확정된 사실) | `login_success` · `login_fail` · `queue_enter` · `queue_register` · `queue_admitted` · `queue_cancel` · `connection_timeout` · `captcha_success` · `captcha_wrong` · `captcha_refresh` · `captcha_limit_reached` · `booking_access_rejected` · `booking_not_open` · `booking_confirm_request` · `booking_confirm_success` · `booking_confirm_fail` · `booking_confirm_rejected` · `booking_confirm_replayed` · `scenario_executed` |
 
 - `page_exit`는 유실될 수 있어요. QA는 이 이벤트가 없다고 실패로 보지 않아요.
 
@@ -141,26 +144,41 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | `endpoint` | `events` = `POST /api/events/` · `action` = `POST /api/action/` · `kafka` = Django를 거치지 않고 토픽에 넣는 메시지 (db 팀 파이프라인 시험용 · QA HTTP 시험은 건너뜀) |
 | `requests` | HTTP 요청 본문 목록 (`events` · `action`) |
 | `kafka_messages` | 토픽 메시지 목록 · `key` · `value` (`kafka`) · `value`가 문자열이면 JSON이 아닌 원문 그대로 |
-| `expected_status_codes` | HTTP 응답 코드 (`events` · `action`) |
+| `expected_status_codes` | HTTP 응답 코드 (`events` · `action`) · `"accepted"` = 200 또는 202 (Kafka 전달 완료 · 대기) |
 | `expected_storage` | 파이프라인 처리 뒤 기대 결과 · `activity_event_count` (ACTIVITY_EVENTS 행 수) · `quarantine_reason_codes` (QUARANTINE_EVENTS 사유 목록) |
 
 - Django가 400으로 거부한 요청은 Kafka로 가지 않아요. 그래서 `activity_event_count` 0 · 격리 없음이에요.
-- `{{event_id}}` · `{{now}}` 같은 자리 표시는 실행할 때 값으로 바꿔요. 같은 파일 안에서는 같은 값이에요.
+- 자리 표시는 실행할 때 값으로 바꿔요. 같은 파일 안에서는 같은 값이에요.
+
+| 자리 표시 | 값 |
+|---|---|
+| `{{event_id}}` · `{{page_view_id}}` | 새 UUID |
+| `{{now}}` | 지금 (UTC) |
+| `{{now_without_timezone}}` · `{{now_kst}}` | 시간대 없는 지금 · 한국 시간(+09:00) 지금 |
+| `{{now_minus_25_hours}}` · `{{now_plus_25_hours}}` | 25시간 전 · 뒤 |
+
+- `kafka` 사례의 `value`는 Django가 토픽에 넣는 모양(스키마 v1 필드 18개 전부)과 같아요. 틀린 사례는 그중 한 곳만 틀려요.
 
 ### 5-2. 사례 목록
 
 | 파일 | 내용 | HTTP | 저장 기대 |
 |---|---|---|---|
-| `valid_browser_event.json` | 올바른 브라우저 이벤트 | 200 | ACTIVITY 1 |
-| `duplicate_event_id.json` | 같은 `eventId` 두 번 (HTTP) | 200 · 200(중복 응답) | ACTIVITY 1 |
+| `valid_browser_event.json` | 올바른 브라우저 이벤트 | accepted | ACTIVITY 1 |
+| `duplicate_event_id.json` | 같은 `eventId` · 같은 내용 두 번 | accepted · accepted(중복 응답) | ACTIVITY 1 |
+| `event_id_payload_conflict.json` | 같은 `eventId` · 다른 내용 | accepted · 400 | ACTIVITY 1 |
 | `missing_event_id.json` | `eventId` 없음 | 400 | 0 |
+| `missing_page_instance_id.json` | `pageInstanceId` 없음 | 400 | 0 |
+| `missing_page_view_id.json` | `pageViewId` 없음 | 400 | 0 |
 | `naive_occurred_at.json` | 시간대 없는 시각 | 400 | 0 |
+| `non_utc_occurred_at.json` | UTC가 아닌 시각(+09:00) | 400 | 0 |
 | `stale_occurred_at.json` | 지금과 24시간 넘게 차이 (과거 · 미래) | 400 | 0 |
 | `unknown_event_type.json` | 목록에 없는 종류 · 서버 전용 종류 | 400 | 0 |
-| `missing_page_instance_id.json` | `pageInstanceId` 없음 | 400 | 0 |
 | `unknown_show_id.json` | 없는 공연 | 400 | 0 |
-| `spoofed_user_id.json` | 브라우저가 `userId` · `receivedAt` 직접 전송 | 200 | ACTIVITY 1 · 서버 값으로 덮어씀 |
-| `extra_fields.json` | 목록에 없는 필드 추가 | 200 | ACTIVITY 1 · 그 필드 저장 안 됨 |
+| `invalid_schedule_id.json` | 공연과 맞지 않는 회차 | 400 | 0 |
+| `missing_details.json` | `details` 없음 | 400 | 0 |
+| `invalid_details.json` | `details` 목록 밖 항목 · 허용 값 밖 | 400 | 0 |
+| `spoofed_user_id.json` | 브라우저가 `userId` · `receivedAt` 직접 전송 | 400 | 0 |
+| `extra_fields.json` | 목록에 없는 필드(`seatPrice` · `schemaVersion`) | 400 | 0 |
 | `stale_request_sequence.json` | 예매 확정에 이미 받은 순번 재전송 | 거부 | 확정 이벤트 중복 없음 |
 | `kafka_valid_server_event.json` | 올바른 서버 이벤트 (`booking_confirm_success`) | - | ACTIVITY 1 |
 | `kafka_duplicate_event_id.json` | 같은 `eventId` 메시지 두 번 (Producer 재전송) | - | ACTIVITY 1 · 격리 `DUPLICATE_EVENT_ID` |

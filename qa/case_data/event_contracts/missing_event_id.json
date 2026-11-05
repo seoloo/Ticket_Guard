@@ -3,11 +3,15 @@
   "endpoint": "events",
   "requests": [
     {
-      "schemaVersion": 1,
       "eventType": "page_enter",
       "occurredAt": "{{now}}",
       "pageInstanceId": "qa-page-0001",
-      "showId": "blue-hour"
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      }
     }
   ],
   "expected_status_codes": [
