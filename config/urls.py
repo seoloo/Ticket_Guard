@@ -1,10 +1,12 @@
 from django.urls import path
 from web import views
+from web.capture_views import capture
 
 urlpatterns = [
     path('health/', views.health),
     path('api/action/', views.action),
     path('api/events/', views.events),
+    path('api/capture/', capture),
     path('captcha.png', views.captcha),
     path('auth/check-admin/', views.check_admin),  # 아래 catch-all보다 먼저
     path('', views.page, {'screen': 'shows'}, name='home'),

@@ -8,6 +8,7 @@ ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,test
 ROOT_URLCONF = 'config.urls'
 INSTALLED_APPS = ['django.contrib.staticfiles', 'web']
 MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.common.CommonMiddleware', 'django.middleware.csrf.CsrfViewMiddleware']
+MIDDLEWARE.insert(2, 'web.middleware.RequestTelemetryMiddleware')
 TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates', 'DIRS': [BASE_DIR / 'templates'], 'APP_DIRS': True, 'OPTIONS': {'context_processors': ['django.template.context_processors.request', 'django.template.context_processors.static']}}]
 DATABASES = {}  # Phase 1 deliberately has no relational database.
 SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
@@ -43,3 +44,10 @@ CSRF_COOKIE_SECURE = not DEBUG
 if not DEBUG and SECRET_KEY.startswith('local-demo'):
     from django.core.exceptions import ImproperlyConfigured
     raise ImproperlyConfigured('Set DJANGO_SECRET_KEY before disabling DEBUG.')
+
+# Simulation observation: no field/body sampling or silent truncation.
+CAPTURE_ENABLED = os.environ.get('CAPTURE_ENABLED', '1') == '1'
+# Preserve existing small Kafka records using transport chunks, not data loss.
+CAPTURE_KAFKA_RECORD_BYTES = 16384
+# Django's existing memory upload limit is retained, but capture API returns explicit 413.
+# No additional collector body-size cap is imposed.
