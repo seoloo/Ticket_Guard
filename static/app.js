@@ -6,9 +6,9 @@
   const screen = body.dataset.screen;
   const attemptId = body.dataset.attempt;
   const showId = body.dataset.show || null;
-  const pageViewId = crypto.randomUUID();
+  const pageViewId = window.ticketGuardCapture?.pageViewId || crypto.randomUUID();
   const previousPage = sessionStorage.getItem('tg-last-page');
-  const pageNames = ['login','shows','detail','queue','captcha','select','complete','history'];
+  const pageNames = ['login','signup','shows','detail','queue','captcha','select','complete','history'];
   const previousPageName = pageNames.includes(previousPage) ? previousPage : null;
   sessionStorage.setItem('tg-last-page',screen);
   const price = Number(body.dataset.price);
@@ -79,54 +79,13 @@
     }
   }
 
-  let eventQueue = [];
-  try { eventQueue = JSON.parse(sessionStorage.getItem('tg-events') || '[]').filter(x => Date.now()-x.created < 900000).slice(-100); } catch (_) {}
-  const inFlightEvents = new Set();
-  function saveEvents() { sessionStorage.setItem('tg-events',JSON.stringify(eventQueue.slice(-100))); }
-  function dropEvent(id) { eventQueue = eventQueue.filter(x=>x.payload.eventId!==id); saveEvents(); }
-  async function sendEvent(item, keepalive=false) {
-    const id = item.payload.eventId;
-    if (inFlightEvents.has(id) || Date.now() < (item.next || 0)) return;
-    inFlightEvents.add(id);
-    try {
-      let response, result;
-      if (item.pending && !keepalive) {
-        response = await fetch('/api/events/?eventId='+encodeURIComponent(id));
-        result = await response.json();
-        if (response.status===404) item.pending=false;
-      }
-      if (!item.pending || keepalive) {
-        response = await fetch('/api/events/',{method:'POST',keepalive,headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(item.payload)});
-        result = await response.json();
-        item.posts = (item.posts || 0)+1;
-      }
-      if (response.status===401 || response.status===403 || response.status===400) return dropEvent(id);
-      if (result.state==='delivered') return dropEvent(id);
-      if (result.state==='failed') {
-        item.pending=false;
-        if (!result.retryable || item.posts>=3) { console.warn('Event delivery exhausted; eventId='+id); return dropEvent(id); }
-        item.next=Date.now()+1000;
-      } else { item.pending=true; item.next=Date.now()+750; }
-    } catch (_) {
-      item.networkFailures=(item.networkFailures || 0)+1;
-      item.next=Date.now()+1500;
-      if (item.networkFailures>=3) { console.warn('Event network retry exhausted; eventId='+id); dropEvent(id); }
-    } finally { inFlightEvents.delete(id); saveEvents(); }
-  }
   function event(type, details = {}, overrides = {}, keepalive = false) {
-    if (screen === 'login') return;
-    const item={created:Date.now(),payload:{eventId:crypto.randomUUID(),eventType:type,occurredAt:new Date().toISOString(),pageInstanceId:pageId,pageViewId,showId,
-      scheduleId:showId ? showId+'-evening' : null,details,...overrides}};
-    eventQueue.push(item);
-    eventQueue=eventQueue.slice(-100);
-    saveEvents();
-    sendEvent(item,keepalive);
+    window.ticketGuardCapture?.record(type, details, {
+      pageInstanceId:pageId,pageViewId,bookingAttemptId:attemptId || null,showId,
+      scheduleId:showId ? showId+'-evening' : null,...overrides
+    });
   }
-  window.addEventListener('pagehide', () => event('page_exit',{pageName:screen,previousPageName},{},true));
-  if (screen!=='login') setInterval(()=>{
-    eventQueue=eventQueue.filter(x=>Date.now()-x.created<900000);
-    eventQueue.slice(0,5).forEach(item=>sendEvent(item));
-  },1000);
+  window.addEventListener('pagehide', () => event('page_exit',{pageName:screen,previousPageName}));
   window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload(); });
   document.querySelectorAll('.money').forEach(el => {
     const value = Number(el.textContent.replace(/[^0-9]/g, ''));
@@ -159,9 +118,6 @@
   document.querySelectorAll('[data-genre]').forEach(el => el.addEventListener('click', () => event('genre_change',{genre:el.dataset.genre},{},true)));
   document.querySelectorAll('[data-show-link]').forEach(el => el.addEventListener('click', () => event('show_select',{clickTarget:el.dataset.clickTarget || 'poster'},{showId:el.dataset.showLink,scheduleId:null},true)));
   ['#date-select', '#time-select'].forEach(id => $(id)?.addEventListener('change', () => event('schedule_select',{trigger:id==='#date-select'?'date_change':'time_change',selectedDate:$('#date-select').value})));
-  $('#search')?.closest('form').addEventListener('submit', () => event('search_change', true));
-  document.querySelectorAll('[data-genre]').forEach(el => el.addEventListener('click', () => event('genre_change', true)));
-  document.querySelectorAll('[data-show-link]').forEach(el => el.addEventListener('click', () => event('show_select', true)));
   document.querySelectorAll('.featured-show-card').forEach(card => card.addEventListener('mouseenter', () => {
     const hero = $('#featured-hero');
     hero.style.setProperty('--hero-image', `url('${card.dataset.heroImage}')`);
@@ -172,7 +128,6 @@
     $('#hero-show-detail').hidden = false;
     document.querySelectorAll('.featured-show-card').forEach(item => item.classList.toggle('is-active', item === card));
   }));
-  ['#date-select', '#time-select'].forEach(id => $(id)?.addEventListener('change', () => event('schedule_select')));
 
   function countdown() {
     const el = $('#countdown');

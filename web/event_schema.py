@@ -3,10 +3,13 @@ import json
 import re
 from datetime import datetime
 from uuid import UUID
+from .telemetry import TELEMETRY_EVENTS, sanitize
 
 CLIENT_EVENTS = {'page_enter', 'page_exit', 'search_change', 'genre_change', 'show_select', 'schedule_select', 'seat_select', 'seat_cancel', 'quantity_change'}
+CLIENT_EVENTS |= TELEMETRY_EVENTS - {'server_request'}
 SERVER_EVENTS = {'login_success', 'login_fail', 'queue_enter', 'queue_register', 'queue_cancel', 'connection_timeout', 'captcha_success', 'captcha_wrong', 'booking_confirm_request', 'booking_confirm_success', 'booking_confirm_fail', 'queue_admitted', 'booking_access_rejected', 'booking_not_open', 'captcha_limit_reached', 'captcha_refresh', 'booking_confirm_rejected', 'booking_confirm_replayed', 'scenario_executed'}
-PAGES = {'login', 'shows', 'detail', 'queue', 'captcha', 'select', 'complete', 'history'}
+SERVER_EVENTS.add('server_request')
+PAGES = {'login', 'shows', 'detail', 'queue', 'captcha', 'select', 'complete', 'history', 'signup'}
 SCENARIOS = {'open_later', 'open_now', 'admit', 'expire', 'four_wrong', 'collision', 'shortage', 'disconnect', 'verification_outage', 'repeat_confirm', 'old_confirm'}
 FIELDS = {'schemaVersion','eventId','eventType','occurredAt','receivedAt','source','userId','pageInstanceId','pageViewId','bookingAttemptId','showId','scheduleId','requestSequence','result','errorCode','isSimulation','scenarioName','details'}
 RULES = {
@@ -51,11 +54,19 @@ def timestamp(value):
 
 
 def validate_details(kind, details, require=False):
-    if not isinstance(details, dict) or set(details)-DETAILS.get(kind,set()):
-        raise EventValidationError('unknown details field')
+    if kind in TELEMETRY_EVENTS:
+        if not isinstance(details, dict) or not details or sanitize(details) != details:
+            raise EventValidationError('invalid or unsanitized telemetry')
+        return
+    if not isinstance(details, dict):
+        raise EventValidationError('details must be an object')
+    if sanitize(details) != details:
+        raise EventValidationError('credential requires redaction')
     if require and kind not in OPTIONAL_DETAILS and DETAILS.get(kind,set())-set(details):
         raise EventValidationError('missing required details')
     for name,value in details.items():
+        if name not in RULES:
+            continue  # Preserve additional observable fields.
         rule=RULES[name]
         if isinstance(rule,set):
             valid=isinstance(value,(str,type(None))) and value in rule
@@ -69,6 +80,8 @@ def validate_details(kind, details, require=False):
 
 
 def validate_event(event, require_details=False):
+    if isinstance(event,dict) and event.get('schemaVersion') == 2:
+        return validate_capture_event(event)
     if not isinstance(event,dict) or set(event)!=FIELDS:
         raise EventValidationError('invalid event fields')
     if type(event['schemaVersion']) is not int or event['schemaVersion']!=1:
@@ -103,3 +116,24 @@ def validate_event(event, require_details=False):
     if len(payload)>16384:
         raise EventValidationError('event too large')
     return payload
+
+
+def validate_capture_event(event):
+    if set(event) != FIELDS | {'capture'}:
+        raise EventValidationError('invalid capture envelope')
+    if type(event['schemaVersion']) is not int or event['schemaVersion'] != 2:
+        raise EventValidationError('invalid capture version')
+    try: UUID(event['eventId'])
+    except (ValueError,TypeError,AttributeError): raise EventValidationError('invalid eventId') from None
+    if not isinstance(event['eventType'],str) or not event['eventType']:
+        raise EventValidationError('eventType required')
+    if event['source'] not in ('browser','server'):
+        raise EventValidationError('invalid observation source')
+    timestamp(event['occurredAt']); timestamp(event['receivedAt'])
+    for name in ('userId','pageInstanceId','pageViewId','bookingAttemptId','showId','scheduleId','errorCode'):
+        if event[name] is not None and not isinstance(event[name],str):
+            raise EventValidationError('invalid identifier')
+    if not isinstance(event['capture'],dict) or not isinstance(event['details'],dict):
+        raise EventValidationError('capture/details must be objects')
+    try: return json.dumps(event,ensure_ascii=False,allow_nan=False,separators=(',',':')).encode('utf-8')
+    except (ValueError,TypeError,RecursionError): raise EventValidationError('invalid JSON') from None

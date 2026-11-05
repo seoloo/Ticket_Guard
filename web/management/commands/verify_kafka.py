@@ -7,7 +7,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.core.management.base import BaseCommand,CommandError
 from django.test import Client,override_settings
-from web.events import publisher,build_event
+from web.events import publisher,build_event,CaptureReassembler
 from web.event_schema import validate_event
 from web.services import MockRepository
 
@@ -70,11 +70,13 @@ class Command(BaseCommand):
             for event_id in expected:
                 assert wait_receipt(event_id,user)['state']=='delivered'
             found={}
+            reassembler=CaptureReassembler()
             deadline=time.monotonic()+12
             while time.monotonic()<deadline and len(found)<len(expected):
                 message=consumer.poll(.3)
                 if message is None or message.error(): continue
-                event=json.loads(message.value())
+                event=reassembler.feed(json.loads(message.value()))
+                if event is None: continue
                 if event.get('eventId') not in expected: continue
                 validate_event(event,require_details=True)
                 key=event['bookingAttemptId'] or event['userId'] or event['eventId']
