@@ -130,4 +130,4 @@ def test_booking_flow_suite_button_and_result(dashboard_client):
             break
         time.sleep(0.05)
     result_page = dashboard_client.get(run_path).text
-    assert "예매 흐름 테스트" in result_page and "좌석 선택 단계 도착 20/20" in result_page
+    assert "예매 흐름 테스트" in result_page and "예매 완료 20 · 매진 0 · 오류 0 / VU 20" in result_page

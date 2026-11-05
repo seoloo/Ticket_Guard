@@ -1,23 +1,31 @@
-"""Live 예매 흐름 · VU 한 명 = 시험 계정 하나 · 로그인 → 예매 시작 → 대기열 → 보안문자 → 좌석 선택 · HTTP만"""
+"""Live 예매 흐름 · VU 한 명 = 시험 계정 하나 · 로그인 → 예매 시작 → 대기열 → 보안문자 → 좌석 클릭 → 확정 · HTTP만"""
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
+from ticket_guard_qa.domain.enums import BookingOutcome
+from ticket_guard_qa.domain.models import VirtualUserSessionPlan
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult
 
 CSRF_COOKIE_NAME = "csrftoken"
-REQUEST_TIMEOUT_SEC = 5.0
+REQUEST_TIMEOUT_SEC = 10.0  # 동시 VU 수백 명 · 개발 서버 응답이 늦어짐
 QUEUE_POLL_INTERVAL_SEC = 1.0  # 예매 화면 heartbeat 주기와 같게
 MAX_QUEUE_WAIT_SEC = 60.0  # 기본 대기 12초 + 여유
-DEFAULT_SHOW_ID = "blue-hour"
+DEFAULT_SHOW_ID = "blue-hour"  # 지정석 공연 · A1 ~ J10
 TEST_ACCOUNT_PREFIX = "qa-user-"  # 시스템 web/qa_test_hooks.py 규칙 · 번호 4자리
+SEATS_PER_BOOKING = 2  # 시스템 한도 1 ~ 4석
+MAX_CONFIRM_ATTEMPT_COUNT = 3  # 먼저 팔린 좌석 → 다른 좌석으로 다시
+EVENT_ACCEPTED_STATUS_CODES = (200, 202)  # 202 = Kafka 전달 대기
 
 STAGE_QUEUE = "queue"
 STAGE_CAPTCHA = "captcha"
 STAGE_SEAT_SELECTION = "select"
+SEAT_SOLD_ERROR_CODE = "SEAT_SOLD"
 
 
 def build_test_account_username(account_number: int) -> str:
@@ -38,30 +46,38 @@ class BookingFlowError(RuntimeError):
 class BookingFlowResult:
     username: str
     booking_attempt_id: str
-    reached_stage: str
-    step_latency_ms: dict[str, float] = field(default_factory=dict)  # 단계별 응답 시간 · 대기열은 기다린 시간 포함
+    booking_outcome: BookingOutcome
+    booked_seat_ids: tuple[str, ...] = ()
+    step_latency_ms: dict[str, float] = field(default_factory=dict)  # 대기열 · 좌석 클릭은 기다린 시간 포함
 
     @property
     def total_latency_ms(self) -> float:
         return sum(self.step_latency_ms.values())
 
 
-class LiveBookingClient:
-    """예매 화면(static/app.js)이 보내는 요청과 같은 순서 · 같은 본문"""
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-    def __init__(self, base_url: str, transport: httpx.BaseTransport | None = None) -> None:
-        self.http_client = httpx.Client(base_url=base_url.rstrip("/"), timeout=REQUEST_TIMEOUT_SEC, transport=transport)
+
+class LiveBookingClient:
+    """예매 화면(static/app.js)이 보내는 요청과 같은 순서 · 같은 본문 · VU 하나 = 클라이언트 하나"""
+
+    def __init__(self, base_url: str, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self.http_client = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=REQUEST_TIMEOUT_SEC, transport=transport)
         self.page_instance_id = str(uuid.uuid4())  # 탭 하나
         self.page_view_id = str(uuid.uuid4())  # 화면 한 번 표시
         self.booking_attempt_id: str | None = None
+        self.show_id = DEFAULT_SHOW_ID
+        self.confirm_sequence = 0
+        self.is_booked = False
 
-    def close(self) -> None:
-        self.http_client.close()
+    async def close(self) -> None:
+        await self.http_client.aclose()
 
-    def post_json(self, path: str, payload: dict[str, Any]) -> HttpResult:
+    async def post_json(self, path: str, payload: dict[str, Any]) -> HttpResult:
         headers = {"X-CSRFToken": self.http_client.cookies.get(CSRF_COOKIE_NAME, "")}
         started_at = time.perf_counter()
-        response = self.http_client.post(path, json=payload, headers=headers)
+        response = await self.http_client.post(path, json=payload, headers=headers)
         latency_ms = (time.perf_counter() - started_at) * 1000
         try:
             body = response.json()
@@ -69,60 +85,110 @@ class LiveBookingClient:
             body = {}
         return HttpResult(response.status_code, body if isinstance(body, dict) else {}, latency_ms)
 
-    def login(self, username: str, password: str) -> HttpResult:
-        self.http_client.get("/login/")  # csrftoken 쿠키 받기
-        return self._expect_ok("login", self.post_json(
+    async def login(self, username: str, password: str) -> HttpResult:
+        await self.http_client.get("/login/")  # csrftoken 쿠키 받기
+        return self._expect_ok("login", await self.post_json(
             "/api/action/", {"action": "login", "username": username, "password": password}
         ))
 
-    def start_booking(self, show_id: str) -> HttpResult:
-        result = self._expect_ok("start", self._post_action("start", showId=show_id))
+    async def reset_test_data(self) -> HttpResult:
+        """관리자 로그인 뒤 · 시스템 테스트 훅 /api/qa/reset/ (Issue #6)"""
+        return self._expect_ok("reset", await self.post_json("/api/qa/reset/", {}))
+
+    async def start_booking(self, show_id: str) -> HttpResult:
+        self.show_id = show_id
+        result = self._expect_ok("start", await self._post_action("start", showId=show_id))
         self.booking_attempt_id = result.body["id"]
         return result
 
-    def wait_for_admission(self, poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC,
-                           max_wait_sec: float = MAX_QUEUE_WAIT_SEC) -> HttpResult:
+    async def wait_for_admission(self, poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC,
+                                 max_wait_sec: float = MAX_QUEUE_WAIT_SEC) -> HttpResult:
         """대기열 heartbeat · 보안문자 단계가 될 때까지"""
         deadline = time.monotonic() + max_wait_sec
         while True:
-            result = self._expect_ok("heartbeat", self._post_action("heartbeat"))
+            result = self._expect_ok("heartbeat", await self._post_action("heartbeat"))
             if result.body.get("stage") != STAGE_QUEUE:
                 return result
             if time.monotonic() >= deadline:
                 raise BookingFlowError("heartbeat", result.status_code, "QUEUE_TIMEOUT")
-            time.sleep(poll_interval_sec)
+            await asyncio.sleep(poll_interval_sec)
 
-    def pass_captcha(self, answer: str) -> HttpResult:
+    async def pass_captcha(self, answer: str) -> HttpResult:
         """이미지 요청으로 문제 발급 → 정답 제출 · 정답은 시스템 테스트 훅 고정값"""
-        image_response = self.http_client.get("/captcha.png", params={
+        image_response = await self.http_client.get("/captcha.png", params={
             "pageId": self.page_instance_id, "attemptId": self.booking_attempt_id,
         })
         if image_response.status_code != 200:
             raise BookingFlowError("captcha_image", image_response.status_code, None)
-        return self._expect_ok("verify", self._post_action("verify", answer=answer))
+        return self._expect_ok("verify", await self._post_action("verify", answer=answer))
 
-    def cancel_booking(self) -> None:
+    async def click_seats(self, seat_ids: list[str], click_intervals_ms: tuple[float, ...]) -> None:
+        """좌석 하나 = seat_select 이벤트 하나 · 행동 값 간격대로 · 탐지에 쓰이는 입력"""
+        select_page_view_id = str(uuid.uuid4())
+        for index, seat_id in enumerate(seat_ids):
+            await asyncio.sleep(click_intervals_ms[index % len(click_intervals_ms)] / 1000)
+            result = await self.post_json("/api/events/", {
+                "eventType": "seat_select", "eventId": str(uuid.uuid4()), "occurredAt": utc_now_iso(),
+                "pageInstanceId": self.page_instance_id, "pageViewId": select_page_view_id,
+                "showId": self.show_id, "scheduleId": f"{self.show_id}-evening",
+                "details": {"seatId": seat_id, "selectedCount": index + 1},
+            })
+            if result.status_code not in EVENT_ACCEPTED_STATUS_CODES:
+                raise BookingFlowError("seat_select", result.status_code, result.body.get("code"))
+        await asyncio.sleep(click_intervals_ms[-1] / 1000)  # 마지막 클릭 → 확정 버튼
+
+    async def confirm_seats(self, seat_ids: list[str]) -> HttpResult:
+        """200 = 예매 완료 · 409 SEAT_SOLD = 먼저 팔림(본문 sold) · 그 외는 오류"""
+        self.confirm_sequence += 1
+        result = await self._post_action("confirm", sequence=self.confirm_sequence, seats=seat_ids, quantity=len(seat_ids))
+        if result.status_code == 200:
+            self.is_booked = True
+            return result
+        if result.body.get("code") == SEAT_SOLD_ERROR_CODE:
+            return result
+        raise BookingFlowError("confirm", result.status_code, result.body.get("code"))
+
+    async def cancel_booking(self) -> None:
         """시험 끝 정리 · 계정당 진행 중 예매 1건 규칙 · 다음 Run에서 같은 계정 재사용"""
-        if self.booking_attempt_id:
-            self._post_action("cancel", reason="user_cancel")
+        if self.booking_attempt_id and not self.is_booked:
+            await self._post_action("cancel", reason="user_cancel")
 
-    def run_until_seat_selection(self, username: str, password: str, captcha_answer: str,
-                                 show_id: str = DEFAULT_SHOW_ID,
-                                 poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC) -> BookingFlowResult:
-        step_latency_ms = {"login": self.login(username, password).latency_ms,
-                           "start": self.start_booking(show_id).latency_ms}
+    async def run_booking_flow(self, username: str, password: str, captcha_answer: str,
+                               session_plan: VirtualUserSessionPlan, open_at_monotonic: float,
+                               show_id: str = DEFAULT_SHOW_ID,
+                               poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC) -> BookingFlowResult:
+        """오픈 전 로그인 → 오픈 + 진입 지연 → 예매 시작 → … → 확정 · 팔린 좌석은 다른 좌석으로 다시"""
+        step_latency_ms = {"login": (await self.login(username, password)).latency_ms}
+        entry_at = open_at_monotonic + session_plan.entry_delay_ms / 1000
+        await asyncio.sleep(max(entry_at - time.monotonic(), 0.0))
+
+        step_latency_ms["start"] = (await self.start_booking(show_id)).latency_ms
         queue_started_at = time.perf_counter()
-        admission = self.wait_for_admission(poll_interval_sec)
+        admission = await self.wait_for_admission(poll_interval_sec)
         step_latency_ms["queue"] = (time.perf_counter() - queue_started_at) * 1000
         if admission.body.get("stage") != STAGE_CAPTCHA:
             raise BookingFlowError("heartbeat", admission.status_code, f"UNEXPECTED_STAGE_{admission.body.get('stage')}")
-        verified = self.pass_captcha(captcha_answer)
-        step_latency_ms["captcha"] = verified.latency_ms
-        # TODO(1-c): 좌석 클릭 · 확정 · 봇 프로필 간격대로 이벤트 전송
-        return BookingFlowResult(username, self.booking_attempt_id or "", verified.body.get("stage", ""), step_latency_ms)
+        step_latency_ms["captcha"] = (await self.pass_captcha(captcha_answer)).latency_ms
 
-    def _post_action(self, action: str, **fields: Any) -> HttpResult:
-        return self.post_json("/api/action/", {
+        sold_seat_ids: set[str] = set()
+        step_latency_ms["seat_select"] = step_latency_ms["confirm"] = 0.0
+        for _ in range(MAX_CONFIRM_ATTEMPT_COUNT):
+            seat_ids = [seat for seat in session_plan.preferred_seat_ids if seat not in sold_seat_ids][:SEATS_PER_BOOKING]
+            if not seat_ids:
+                break
+            click_started_at = time.perf_counter()
+            await self.click_seats(seat_ids, session_plan.click_intervals_ms)
+            step_latency_ms["seat_select"] += (time.perf_counter() - click_started_at) * 1000
+            confirmed = await self.confirm_seats(seat_ids)
+            step_latency_ms["confirm"] += confirmed.latency_ms
+            if self.is_booked:
+                return BookingFlowResult(username, self.booking_attempt_id or "", BookingOutcome.BOOKED,
+                                         tuple(seat_ids), step_latency_ms)
+            sold_seat_ids.update(confirmed.body.get("sold") or seat_ids)  # 시스템이 준 판매 목록 · 없으면 고른 좌석 제외
+        return BookingFlowResult(username, self.booking_attempt_id or "", BookingOutcome.SOLD_OUT, (), step_latency_ms)
+
+    async def _post_action(self, action: str, **fields: Any) -> HttpResult:
+        return await self.post_json("/api/action/", {
             "action": action, "pageId": self.page_instance_id, "pageViewId": self.page_view_id,
             "attemptId": self.booking_attempt_id, **fields,
         })

@@ -3,7 +3,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, NewType
 
-from ticket_guard_qa.domain.enums import AlertPolicy, ActorType, RunStatus, SuiteOutcome, TargetKind, VerdictStage
+from ticket_guard_qa.domain.enums import (
+    ActorType,
+    AlertPolicy,
+    BookingOutcome,
+    RunStatus,
+    SuiteOutcome,
+    TargetKind,
+    VerdictStage,
+)
 
 SessionKey = NewType("SessionKey", str)  # 지금은 bookingAttemptId · AGENTS.md 11장
 AnswerKey = dict[SessionKey, ActorType]
@@ -63,6 +71,15 @@ class SessionBehavior:
 
 
 @dataclass(frozen=True)
+class VirtualUserSessionPlan:
+    """VU 한 명의 실행 계획 · 행동 값에서 뽑은 실제 대기 시간 · 사람 / 봇 여부는 담지 않음"""
+    behavior: SessionBehavior
+    entry_delay_ms: float  # 오픈(T0) → 예매 시작
+    click_intervals_ms: tuple[float, ...]  # 좌석 클릭 간격 · 마지막 = 클릭 → 확정 · 재시도 때 반복 사용
+    preferred_seat_ids: tuple[str, ...]  # 고를 좌석 순서 · 팔린 좌석은 건너뜀
+
+
+@dataclass(frozen=True)
 class SessionVerdictRecord:
     """SESSION_VERDICTS 한 행 · docs/contracts.md 3-1"""
     booking_attempt_id: SessionKey
@@ -111,8 +128,10 @@ class VirtualUserSessionResult:
     session_key: SessionKey
     latency_ms: float
     is_error: bool
-    step_latency_ms: dict[str, float] = field(default_factory=dict)  # Live만 · login · start · queue · captcha
+    step_latency_ms: dict[str, float] = field(default_factory=dict)  # Live만 · login · start · queue · captcha · seat_select · confirm
     failed_step: str | None = None  # 예: "verify · CAPTCHA_WRONG"
+    booking_outcome: BookingOutcome | None = None  # 오류면 None
+    booked_seat_ids: tuple[str, ...] = ()  # 중복 판매 확인
 
 
 @dataclass(frozen=True)

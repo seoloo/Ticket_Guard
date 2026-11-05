@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     test_account_count: int = 0
     test_account_password: str = ""
     captcha_fixed_answer: str = ""
+    # 트래픽 전 시험 데이터 초기화(/api/qa/reset/) · 시스템 관리자 계정 · 비어 있으면 건너뜀
+    system_admin_username: str = ""
+    system_admin_password: str = ""
 
     qa_database_url: str = "sqlite:///./qa_data/qa.db"
     report_output_dir: Path = Path("./qa_data/reports")

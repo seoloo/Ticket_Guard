@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ticket_guard_qa.domain.enums import TargetKind, VerdictStage
+from ticket_guard_qa.domain.enums import BookingOutcome, TargetKind, VerdictStage
 from ticket_guard_qa.domain.models import (
     LiveMetrics,
     QuarantineRecord,
@@ -17,6 +17,7 @@ from ticket_guard_qa.domain.models import (
     SessionKey,
     SessionVerdictRecord,
     SystemVerdicts,
+    VirtualUserSessionPlan,
     VirtualUserSessionResult,
 )
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult, SystemTarget
@@ -224,7 +225,19 @@ class FakeBookingApi:
         self.state.accepted_event_by_id[event["eventId"]] = event
         return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": False}, latency_ms=1.0)
 
-    def start_virtual_user_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
+    def virtual_user_capacity(self) -> int | None:
+        return None
+
+    def reset_test_data(self) -> bool:
+        return True  # 대상 하나 = 실행 하나 · 이미 빈 상태
+
+    async def run_virtual_user_session(
+        self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
+    ) -> VirtualUserSessionResult:
+        """대기 없이 바로 판정 · 생성 순서대로 끝나서 같은 시드 = 같은 결과"""
+        return self.record_session(session_plan.behavior)
+
+    def record_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
         session_key = SessionKey(f"attempt-{len(self.state.session_verdicts) + 1:05d}")
         stage = judge_behavior(behavior, self.random_source)
         feature_record = build_mock_feature_record(session_key, behavior, self.pipeline_random_source, datetime.now(timezone.utc))
@@ -239,7 +252,7 @@ class FakeBookingApi:
             decided_at=feature_record.computed_at,
         ))
         latency_ms = max(self.random_source.gauss(900, 350), 120)  # 예시 지연
-        return VirtualUserSessionResult(session_key, latency_ms, is_error=False)
+        return VirtualUserSessionResult(session_key, latency_ms, is_error=False, booking_outcome=BookingOutcome.BOOKED)
 
 
 class FakeVerdictReader:

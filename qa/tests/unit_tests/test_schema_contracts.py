@@ -66,8 +66,8 @@ def test_accepted_status_token_allows_delivered_or_queued():
 
 def test_mock_returns_schema_shaped_records():
     system_target = build_fake_system_target(7)
-    bot_session = system_target.booking_api.start_virtual_user_session(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A])
-    system_target.booking_api.start_virtual_user_session(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN])
+    bot_session = system_target.booking_api.record_session(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A])
+    system_target.booking_api.record_session(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN])
 
     verdict_records = system_target.verdict_reader.read_verdict_records("run-test")
     features = system_target.pipeline_reader.read_session_features("run-test")

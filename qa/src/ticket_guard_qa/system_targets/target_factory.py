@@ -7,6 +7,7 @@ from ticket_guard_qa.system_targets.live_django_system import (
     LiveDjangoLiveMetricsReader,
     LiveDjangoVerdictReader,
     LiveDockerProcessControl,
+    SystemAdminAccount,
     VirtualUserAccountPool,
 )
 from ticket_guard_qa.system_targets.live_mongo_reader import LiveMongoPipelineReader, LiveMongoVerdictReader
@@ -23,6 +24,7 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
         booking_api=LiveDjangoBookingApi(
             settings.system_base_url, settings.system_username, settings.system_password,
             VirtualUserAccountPool(settings.test_account_count, settings.test_account_password, settings.captcha_fixed_answer),
+            SystemAdminAccount(settings.system_admin_username, settings.system_admin_password),
         ),
         verdict_reader=LiveMongoVerdictReader(settings.system_mongo_uri) if has_mongo else LiveDjangoVerdictReader(),
         pipeline_reader=LiveMongoPipelineReader(settings.system_mongo_uri),

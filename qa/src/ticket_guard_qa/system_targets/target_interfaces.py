@@ -6,10 +6,10 @@ from ticket_guard_qa.domain.enums import TargetKind
 from ticket_guard_qa.domain.models import (
     LiveMetrics,
     QuarantineRecord,
-    SessionBehavior,
     SessionFeatureRecord,
     SessionVerdictRecord,
     SystemVerdicts,
+    VirtualUserSessionPlan,
     VirtualUserSessionResult,
 )
 
@@ -30,7 +30,13 @@ class BookingApi(Protocol):
 
     def submit_browser_event(self, event: dict[str, Any]) -> HttpResult: ...  # POST /api/events/
 
-    def start_virtual_user_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult: ...  # 사람 / 봇 여부는 넘기지 않음
+    def virtual_user_capacity(self) -> int | None: ...  # 동시에 쓸 수 있는 VU 수 · None = 제한 없음
+
+    def reset_test_data(self) -> bool: ...  # 트래픽 전 초기화 · False = 건너뜀
+
+    async def run_virtual_user_session(
+        self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
+    ) -> VirtualUserSessionResult: ...  # 사람 / 봇 여부는 넘기지 않음
 
 
 class VerdictReader(Protocol):

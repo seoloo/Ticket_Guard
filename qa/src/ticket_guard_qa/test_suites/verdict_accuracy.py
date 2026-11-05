@@ -2,7 +2,7 @@
 from collections import Counter
 
 from ticket_guard_qa.answer_key.expected_verdicts import build_answer_key, plan_virtual_users
-from ticket_guard_qa.domain.enums import SessionStep, SuiteOutcome
+from ticket_guard_qa.domain.enums import BookingOutcome, SessionStep, SuiteOutcome
 from ticket_guard_qa.domain.models import (
     ActorProgress,
     AnswerKey,
@@ -17,10 +17,14 @@ from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.scoring.detection_metrics import calculate_detection_metrics, find_false_positives, find_missed_bots
 from ticket_guard_qa.scoring.latency_metrics import calculate_error_rate_percent, calculate_p95
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
+    build_session_plans,
+    reset_before_traffic,
+    send_virtual_user_traffic,
+)
 
 VERDICT_ACCURACY_SUITE_NAME = "verdict_accuracy"  # 04 · B1 · B4가 결과를 찾는 이름
 MAX_LISTED_SESSION_COUNT = 200  # 04 · 05 화면 목록 길이
-PROGRESS_REPORT_EVERY_SESSION_COUNT = 20  # B3 갱신 간격 · 메시지가 너무 많아지지 않게
 PLANNED_PROGRESS_KEY = "PLANNED"
 
 
@@ -35,26 +39,40 @@ def build_actor_progress(planned_users: list[PlannedUser], reached_count_by_step
     }
 
 
-def send_virtual_user_traffic(
+def count_reached_steps(
+    planned_users: list[PlannedUser], results: list[VirtualUserSessionResult | None]
+) -> dict[SessionStep, Counter]:
+    finished = [(user, result) for user, result in zip(planned_users, results) if result is not None]
+    return {
+        SessionStep.ENTERED: Counter(user.actor_type for user, _ in finished),
+        SessionStep.CONFIRMED: Counter(
+            user.actor_type for user, result in finished if result.booking_outcome is BookingOutcome.BOOKED
+        ),
+    }
+
+
+def send_planned_user_traffic(
     context: SuiteContext, planned_users: list[PlannedUser]
 ) -> tuple[dict[str, SessionKey], list[VirtualUserSessionResult]]:
-    """가상 사용자 라벨 → 시스템이 준 세션 키 · 시스템에는 행동 값만 보냄"""
+    """가상 사용자 라벨 → 시스템이 준 세션 키 · 시스템에는 행동 값만 보냄 · VU 동시 실행"""
     booking_api = context.system_target.booking_api
-    session_key_by_label: dict[str, SessionKey] = {}
-    session_results: list[VirtualUserSessionResult] = []
-    entered_count_by_actor: Counter = Counter()
-    for index, user in enumerate(planned_users, start=1):
-        behavior = context.bot_profile_registry.get_profile(user.actor_type).behavior
-        session_result = booking_api.start_virtual_user_session(behavior)
-        session_key_by_label[user.virtual_user_label] = session_result.session_key
-        session_results.append(session_result)
-        entered_count_by_actor[user.actor_type] += 1
-        if index % PROGRESS_REPORT_EVERY_SESSION_COUNT == 0 or index == len(planned_users):
-            # TODO(트래픽 생성기 구현 후): 좌석 선택 · 확정 단계도 같이 보고
-            context.report_progress(
-                f"Entered {index}/{len(planned_users)}",
-                actor_progress=build_actor_progress(planned_users, {SessionStep.ENTERED: entered_count_by_actor}),
-            )
+    behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
+    context.report_progress(reset_before_traffic(booking_api))
+
+    def report_traffic_progress(results: list[VirtualUserSessionResult | None]) -> None:
+        finished_count = sum(result is not None for result in results)
+        context.report_progress(
+            f"Entered {finished_count}/{len(planned_users)}",
+            actor_progress=build_actor_progress(planned_users, count_reached_steps(planned_users, results)),
+        )
+
+    session_results = send_virtual_user_traffic(
+        booking_api, build_session_plans(behaviors, context.run_config.random_seed),
+        context.run_config.duration_sec, report_traffic_progress,
+    )
+    session_key_by_label = {
+        user.virtual_user_label: result.session_key for user, result in zip(planned_users, session_results)
+    }
     return session_key_by_label, session_results
 
 
@@ -95,7 +113,7 @@ class VerdictAccuracySuite:
         run_config = context.run_config
         planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
         context.report_progress(f"VU {len(planned_users)} 접속")
-        session_key_by_label, session_results = send_virtual_user_traffic(context, planned_users)
+        session_key_by_label, session_results = send_planned_user_traffic(context, planned_users)
 
         answer_key = build_answer_key(planned_users, session_key_by_label)
         context.answer_key_repository.save(context.run_id, answer_key)  # QA DB만

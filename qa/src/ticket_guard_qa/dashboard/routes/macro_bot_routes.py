@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
@@ -150,7 +151,9 @@ async def try_bot_settings(
     except BehaviorInputError as error:
         return render_bot_settings(request, store, type_info, error_message=str(error), status_code=400)
     # 항상 가짜 대상 · 실제 시스템에 시험 세션을 남기지 않음 · 같은 값이면 같은 결과
-    trial_result = run_trial_sessions(build_fake_system_target(run_service.settings.random_seed), behavior)
+    trial_result = await run_in_threadpool(  # 트래픽 생성기가 자체 이벤트 루프 사용
+        run_trial_sessions, build_fake_system_target(run_service.settings.random_seed), behavior
+    )
     return render_bot_settings(request, store, type_info, behavior, trial_result)
 
 

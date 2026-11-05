@@ -88,8 +88,7 @@ class RunService:
     def measurement_window_sec(self, run_config: RunConfig) -> float:
         if run_config.target_kind is TargetKind.FAKE:
             return float(self.settings.fake_run_duration_sec)  # 가짜 실행 흉내 시간 · .env로 조정
-        # TODO(트래픽 생성기 구현 후): run_config.duration_sec 동안 트래픽 유지
-        return 0.0
+        return float(run_config.duration_sec)  # 실제 대상 · 트래픽 최대 시간 · 먼저 끝나면 04로
 
     def run_now(self, run_config: RunConfig) -> RunSummary:
         run_id, run_config, started_at = self._reserve_run(run_config)
@@ -129,13 +128,24 @@ class RunService:
                 report_progress=lambda text, **fields: self.progress_stream.publish(run_id, text, **fields),
                 bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
             )
-            self._watch_measurement_window(run_id, context.system_target, self.measurement_window_sec(run_config))
-            for suite_name in run_config.suite_names:
-                if run_id in self._cancel_requested_run_ids:
-                    break
-                suite = get_suite(suite_name)
-                self.progress_stream.publish(run_id, f"{suite.title} 시작", suite_name=suite.suite_name)
-                summary.suite_results.append(run_one_suite(suite, context))
+            window_sec = self.measurement_window_sec(run_config)
+            suites_finished = threading.Event()
+            if run_config.target_kind is TargetKind.FAKE:
+                self._watch_measurement_window(run_id, context.system_target, window_sec, suites_finished)
+            else:  # 실제 대상 · 트래픽과 함께 경과 시간 표시
+                threading.Thread(
+                    target=self._watch_measurement_window,
+                    args=(run_id, context.system_target, window_sec, suites_finished), daemon=True,
+                ).start()
+            try:
+                for suite_name in run_config.suite_names:
+                    if run_id in self._cancel_requested_run_ids:
+                        break
+                    suite = get_suite(suite_name)
+                    self.progress_stream.publish(run_id, f"{suite.title} 시작", suite_name=suite.suite_name)
+                    summary.suite_results.append(run_one_suite(suite, context))
+            finally:
+                suites_finished.set()
 
             measured_metrics = {
                 name: value for result in summary.suite_results for name, value in result.metrics.items()
@@ -159,10 +169,12 @@ class RunService:
                 self._cancel_requested_run_ids.discard(run_id)
         return summary
 
-    def _watch_measurement_window(self, run_id: str, system_target: SystemTarget, window_sec: float) -> None:
-        """측정 시간 동안 1초마다 03 화면에 진행 · 실시간 수치 전달"""
+    def _watch_measurement_window(
+        self, run_id: str, system_target: SystemTarget, window_sec: float, stop_event: threading.Event
+    ) -> None:
+        """측정 시간 동안 1초마다 03 화면에 진행 · 실시간 수치 전달 · 시험이 먼저 끝나면 멈춤"""
         started_at = time.monotonic()
-        while run_id not in self._cancel_requested_run_ids:
+        while run_id not in self._cancel_requested_run_ids and not stop_event.is_set():
             elapsed_sec = min(time.monotonic() - started_at, window_sec)
             self.progress_stream.publish(
                 run_id, "측정 중",
@@ -172,7 +184,7 @@ class RunService:
             )
             if elapsed_sec >= window_sec:
                 return
-            time.sleep(min(PROGRESS_TICK_SEC, window_sec - elapsed_sec))
+            stop_event.wait(min(PROGRESS_TICK_SEC, window_sec - elapsed_sec))
 
 
 def read_live_metrics_or_none(system_target: SystemTarget, run_id: str, elapsed_sec: float) -> LiveMetrics | None:
