@@ -148,7 +148,8 @@ qa/
 | 점수 계산 | `scoring/` | 동작 | | |
 | 정답표 계획 · 저장 | `answer_key/` | 동작 | | 트래픽 후 세션 키 연결 |
 | QA 자기 검사 | `test_suites/self_check.py` | 동작 | | |
-| 이벤트 계약 시험 | `test_suites/event_contract.py` · `live_django_system.py` | 동작 (가짜 + 지금의 Django 10건 통과) | 예매 확정 사례 1건 · 저장 값 확인 | `/api/action/` 사례 · MongoDB 연결 후 저장 확인 |
+| 이벤트 계약 시험 | `test_suites/event_contract.py` · `live_django_system.py` | 동작 (Mock + Live 2026-11-05 PASS · 요청 22건) | 예매 확정 사례 1건 · 저장 값 확인 | `/api/action/` 사례 · MongoDB 연결 후 저장 확인 |
+| Live 예매 흐름 (1-b) | `system_targets/live_booking_client.py` · `live_django_system.py` | 동작 (시험 계정 로그인 → 대기열 → 보안문자 → 좌석 선택 단계 · VU마다 다음 계정) · 시스템 테스트 훅 필요 (Issue #6) | 좌석 클릭 · 확정 · 행동 값 미적용 · Run 시작 시 초기화 없음 | 1-c 트래픽 생성기 · 1-d Run 시작 시 `/api/qa/reset/` |
 | 터미널 명령 · 종료 코드 | `command_line.py` | 동작 | | |
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |

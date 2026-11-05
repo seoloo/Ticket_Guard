@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     system_password: str = ""
     system_mongo_uri: str = ""  # 읽기 전용 계정만
 
+    # 시스템 테스트 훅과 같은 값 · 저장소 .env의 QA_TEST_ACCOUNT_* · QA_CAPTCHA_FIXED_ANSWER (Issue #6)
+    test_account_count: int = 0
+    test_account_password: str = ""
+    captcha_fixed_answer: str = ""
+
     qa_database_url: str = "sqlite:///./qa_data/qa.db"
     report_output_dir: Path = Path("./qa_data/reports")
     case_data_dir: Path = QA_ROOT_DIR / "case_data"

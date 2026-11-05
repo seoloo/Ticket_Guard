@@ -1,60 +1,80 @@
 """지금의 Django 시스템에 HTTP로 접속 · 시스템 코드 import 금지"""
-import time
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-from ticket_guard_qa.domain.models import LiveMetrics, SessionBehavior, SessionVerdictRecord, SystemVerdicts, VirtualUserSessionResult
+from ticket_guard_qa.domain.models import (
+    LiveMetrics,
+    SessionBehavior,
+    SessionKey,
+    SessionVerdictRecord,
+    SystemVerdicts,
+    VirtualUserSessionResult,
+)
+from ticket_guard_qa.system_targets.live_booking_client import (
+    BookingFlowError,
+    LiveBookingClient,
+    build_test_account_username,
+)
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult
 
-CSRF_COOKIE_NAME = "csrftoken"
-REQUEST_TIMEOUT_SEC = 5.0
 HEALTH_CHECK_TIMEOUT_SEC = 1.5  # 화면 헤더용 · 오래 기다리지 않음
 
 
+@dataclass(frozen=True)
+class VirtualUserAccountPool:
+    """시스템 테스트 훅 시험 계정 · qa-user-0001 ~ · 꺼져 있으면 count 0"""
+    count: int
+    password: str
+    captcha_answer: str
+
+
+class AccountPoolExhaustedError(RuntimeError):
+    pass
+
+
 class LiveDjangoBookingApi:
-    def __init__(self, base_url: str, username: str, password: str) -> None:
+    def __init__(self, base_url: str, username: str, password: str,
+                 test_accounts: VirtualUserAccountPool | None = None, transport: httpx.BaseTransport | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
-        self.http_client = httpx.Client(base_url=self.base_url, timeout=REQUEST_TIMEOUT_SEC)
-        self.is_logged_in = False
+        self.test_accounts = test_accounts or VirtualUserAccountPool(0, "", "")
+        self.transport = transport
+        self.contract_client: LiveBookingClient | None = None  # 계약 시험 · 개발 계정 한 개
+        self.used_test_account_count = 0  # VU마다 다음 번호 · 계정당 진행 중 예매 1건
 
     def check_health(self) -> bool:
         try:
-            return self.http_client.get("/health/", timeout=HEALTH_CHECK_TIMEOUT_SEC).status_code == 200
+            with httpx.Client(base_url=self.base_url, transport=self.transport) as http_client:
+                return http_client.get("/health/", timeout=HEALTH_CHECK_TIMEOUT_SEC).status_code == 200
         except httpx.HTTPError:
             return False
 
     def submit_browser_event(self, event: dict[str, Any]) -> HttpResult:
-        self._ensure_logged_in()
-        return self._post_json("/api/events/", event)
+        if self.contract_client is None:
+            contract_client = LiveBookingClient(self.base_url, self.transport)
+            contract_client.login(self.username, self.password)
+            self.contract_client = contract_client
+        return self.contract_client.post_json("/api/events/", event)
 
     def start_virtual_user_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
-        # TODO(시험 계정 여러 개 생긴 후): 로그인 → 공연 상세 → 대기열 → 확정 · bookingAttemptId 받기
-        raise NotImplementedError("개발 계정 2개뿐 · 트래픽 생성기 미구현 · AGENTS.md 5장")
-
-    def _ensure_logged_in(self) -> None:
-        if self.is_logged_in:
-            return
-        self.http_client.get("/login/")  # csrftoken 쿠키 받기
-        login_result = self._post_json(
-            "/api/action/", {"action": "login", "username": self.username, "password": self.password}
-        )
-        if login_result.status_code != 200:
-            raise RuntimeError(f"시스템 로그인 실패 · HTTP {login_result.status_code}")
-        self.is_logged_in = True
-
-    def _post_json(self, path: str, payload: dict[str, Any]) -> HttpResult:
-        headers = {"X-CSRFToken": self.http_client.cookies.get(CSRF_COOKIE_NAME, "")}
-        started_at = time.perf_counter()
-        response = self.http_client.post(path, json=payload, headers=headers)
-        latency_ms = (time.perf_counter() - started_at) * 1000
+        """시험 계정 하나로 좌석 선택 단계까지 · 행동 값(진입 지연 · 클릭 간격) 적용은 1-c"""
+        if self.used_test_account_count >= self.test_accounts.count:
+            raise AccountPoolExhaustedError(
+                f"시험 계정 부족 · {self.test_accounts.count}개 · 저장소 .env QA_TEST_ACCOUNT_COUNT 확인"
+            )
+        self.used_test_account_count += 1
+        username = build_test_account_username(self.used_test_account_count)
+        client = LiveBookingClient(self.base_url, self.transport)
         try:
-            body = response.json()
-        except ValueError:
-            body = {}
-        return HttpResult(response.status_code, body, latency_ms)
+            flow_result = client.run_until_seat_selection(username, self.test_accounts.password, self.test_accounts.captcha_answer)
+        except (BookingFlowError, httpx.HTTPError):
+            return VirtualUserSessionResult(SessionKey(f"failed-{username}"), latency_ms=0.0, is_error=True)
+        finally:
+            client.close()
+        return VirtualUserSessionResult(SessionKey(flow_result.booking_attempt_id), flow_result.total_latency_ms, is_error=False)
 
 
 class LiveDjangoVerdictReader:
