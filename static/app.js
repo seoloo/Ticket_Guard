@@ -6,6 +6,11 @@
   const screen = body.dataset.screen;
   const attemptId = body.dataset.attempt;
   const showId = body.dataset.show || null;
+  const pageViewId = crypto.randomUUID();
+  const previousPage = sessionStorage.getItem('tg-last-page');
+  const pageNames = ['login','shows','detail','queue','captcha','select','complete','history'];
+  const previousPageName = pageNames.includes(previousPage) ? previousPage : null;
+  sessionStorage.setItem('tg-last-page',screen);
   const price = Number(body.dataset.price);
   const reserved = body.dataset.kind === 'reserved';
   let pageId = sessionStorage.getItem('tg-page') || crypto.randomUUID();
@@ -55,7 +60,7 @@
     let response;
     try {
       response = await fetch('/api/action/', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-        body: JSON.stringify({action, pageId, attemptId, ...extra})});
+        body: JSON.stringify({action, pageId, pageViewId, attemptId, ...extra})});
     } catch (_) { throw {error: '연결이 원활하지 않아요. 네트워크를 확인한 뒤 다시 시도해 주세요.', code: 'NETWORK'}; }
     let result;
     try { result = await response.json(); }
@@ -74,12 +79,54 @@
     }
   }
 
-  function event(type, keepalive = false) {
-    if (screen === 'login') return;
-    fetch('/api/events/', {method: 'POST', keepalive, headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-      body: JSON.stringify({eventId: crypto.randomUUID(), eventType: type, occurredAt: new Date().toISOString(), pageInstanceId: pageId, showId})}).catch(() => {});
+  let eventQueue = [];
+  try { eventQueue = JSON.parse(sessionStorage.getItem('tg-events') || '[]').filter(x => Date.now()-x.created < 900000).slice(-100); } catch (_) {}
+  const inFlightEvents = new Set();
+  function saveEvents() { sessionStorage.setItem('tg-events',JSON.stringify(eventQueue.slice(-100))); }
+  function dropEvent(id) { eventQueue = eventQueue.filter(x=>x.payload.eventId!==id); saveEvents(); }
+  async function sendEvent(item, keepalive=false) {
+    const id = item.payload.eventId;
+    if (inFlightEvents.has(id) || Date.now() < (item.next || 0)) return;
+    inFlightEvents.add(id);
+    try {
+      let response, result;
+      if (item.pending && !keepalive) {
+        response = await fetch('/api/events/?eventId='+encodeURIComponent(id));
+        result = await response.json();
+        if (response.status===404) item.pending=false;
+      }
+      if (!item.pending || keepalive) {
+        response = await fetch('/api/events/',{method:'POST',keepalive,headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(item.payload)});
+        result = await response.json();
+        item.posts = (item.posts || 0)+1;
+      }
+      if (response.status===401 || response.status===403 || response.status===400) return dropEvent(id);
+      if (result.state==='delivered') return dropEvent(id);
+      if (result.state==='failed') {
+        item.pending=false;
+        if (!result.retryable || item.posts>=3) { console.warn('Event delivery exhausted; eventId='+id); return dropEvent(id); }
+        item.next=Date.now()+1000;
+      } else { item.pending=true; item.next=Date.now()+750; }
+    } catch (_) {
+      item.networkFailures=(item.networkFailures || 0)+1;
+      item.next=Date.now()+1500;
+      if (item.networkFailures>=3) { console.warn('Event network retry exhausted; eventId='+id); dropEvent(id); }
+    } finally { inFlightEvents.delete(id); saveEvents(); }
   }
-  window.addEventListener('pagehide', () => event('page_exit', true));
+  function event(type, details = {}, overrides = {}, keepalive = false) {
+    if (screen === 'login') return;
+    const item={created:Date.now(),payload:{eventId:crypto.randomUUID(),eventType:type,occurredAt:new Date().toISOString(),pageInstanceId:pageId,pageViewId,showId,
+      scheduleId:showId ? showId+'-evening' : null,details,...overrides}};
+    eventQueue.push(item);
+    eventQueue=eventQueue.slice(-100);
+    saveEvents();
+    sendEvent(item,keepalive);
+  }
+  window.addEventListener('pagehide', () => event('page_exit',{pageName:screen,previousPageName},{},true));
+  if (screen!=='login') setInterval(()=>{
+    eventQueue=eventQueue.filter(x=>Date.now()-x.created<900000);
+    eventQueue.slice(0,5).forEach(item=>sendEvent(item));
+  },1000);
   window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload(); });
   document.querySelectorAll('.money').forEach(el => {
     const value = Number(el.textContent.replace(/[^0-9]/g, ''));
@@ -100,14 +147,18 @@
     const button = e.currentTarget.querySelector('[type=submit]');
     button.disabled = true;
     $('#login-error').hidden = true;
-    try { const result = await api('login', {username: $('#username').value.trim(), password: $('#password').value}); sessionStorage.removeItem('tg-active'); go(result.redirect); }
+    try { const result = await api('login', {username: $('#username').value.trim(), password: $('#password').value}); sessionStorage.removeItem('tg-active'); sessionStorage.removeItem('tg-events'); go(result.redirect); }
     catch (error) { fieldError('#login-error', error.error); $('#password').setAttribute('aria-invalid', 'true'); $('#password').setAttribute('aria-describedby', 'login-error'); $('#password').focus(); }
     finally { button.disabled = false; }
   });
   $('#logout')?.addEventListener('click', async () => {
-    try { const result = await api('logout'); sessionStorage.removeItem('tg-active'); go(result.redirect); }
+    try { const result = await api('logout'); sessionStorage.removeItem('tg-active'); sessionStorage.removeItem('tg-events'); go(result.redirect); }
     catch (error) { failure(error); }
   });
+  $('#search')?.closest('form').addEventListener('submit', () => sessionStorage.setItem('tg-search-length',String($('#search').value.length)));
+  document.querySelectorAll('[data-genre]').forEach(el => el.addEventListener('click', () => event('genre_change',{genre:el.dataset.genre},{},true)));
+  document.querySelectorAll('[data-show-link]').forEach(el => el.addEventListener('click', () => event('show_select',{clickTarget:el.dataset.clickTarget || 'poster'},{showId:el.dataset.showLink,scheduleId:null},true)));
+  ['#date-select', '#time-select'].forEach(id => $(id)?.addEventListener('change', () => event('schedule_select',{trigger:id==='#date-select'?'date_change':'time_change',selectedDate:$('#date-select').value})));
   $('#search')?.closest('form').addEventListener('submit', () => event('search_change', true));
   document.querySelectorAll('[data-genre]').forEach(el => el.addEventListener('click', () => event('genre_change', true)));
   document.querySelectorAll('[data-show-link]').forEach(el => el.addEventListener('click', () => event('show_select', true)));
@@ -139,13 +190,13 @@
     try {
       const result = await api('start', {showId});
       sessionStorage.setItem('tg-active', JSON.stringify({id: result.id, pageId}));
-      event('schedule_select');
+      event('schedule_select',{trigger:'booking_start',selectedDate:$('#date-select').value},{},true);
       go(result.redirect);
     } catch (error) { failure(error); e.currentTarget.disabled = false; }
   });
 
   async function cancel() {
-    const result = await api('cancel');
+    const result = await api('cancel',{reason:'user_cancel'});
     sessionStorage.removeItem('tg-active');
     sessionStorage.removeItem('tg-selection-' + attemptId);
     go(result.redirect);
@@ -157,7 +208,7 @@
     document.querySelectorAll('.site-header a').forEach(link => link.addEventListener('click', async e => {
       e.preventDefault();
       if (!window.confirm('페이지를 나가면 현재 입장 권한이 해제돼요. 이동할까요?')) return;
-      try { await api('cancel'); sessionStorage.removeItem('tg-active'); go(link.href); }
+      try { await api('cancel',{reason:'menu_navigation'}); sessionStorage.removeItem('tg-active'); go(link.href); }
       catch (error) { failure(error); }
     }));
   }
@@ -188,20 +239,22 @@
     await heartbeat();
     e.currentTarget.disabled = false;
   });
-  $('#disconnect')?.addEventListener('click', () => {
+  $('#disconnect')?.addEventListener('click', async () => {
+    try { await api('scenario',{name:'disconnect',showId}); } catch(error) { return failure(error); }
     paused = true;
     $('#connection-state').textContent = '연결이 끊겼어요. 다시 연결해 주세요.';
     $('#reconnect').hidden = false;
   });
-  $('#verification-outage')?.addEventListener('click', () => {
+  $('#verification-outage')?.addEventListener('click', async () => {
+    try { await api('scenario',{name:'verification_outage',showId}); } catch(error) { return failure(error); }
     verificationOutage = true;
     notify('다음 보안문자 제출에서 통신 오류를 재현합니다. 오답 횟수는 증가하지 않아요.');
   });
-  function refreshCaptcha() {
-    if ($('#captcha-image')) $('#captcha-image').src = '/captcha.png?pageId=' + encodeURIComponent(pageId) + '&attemptId=' + encodeURIComponent(attemptId) + '&v=' + Date.now();
+  function refreshCaptcha(reason='initial') {
+    if ($('#captcha-image')) $('#captcha-image').src = '/captcha.png?pageId=' + encodeURIComponent(pageId) + '&pageViewId='+encodeURIComponent(pageViewId)+'&attemptId=' + encodeURIComponent(attemptId) + '&reason='+reason+'&v=' + Date.now();
   }
   $('#captcha-image')?.addEventListener('error', () => notify('보안문자 이미지를 불러오지 못했어요. 문제 바꾸기를 눌러 주세요.'));
-  $('#refresh-captcha')?.addEventListener('click', refreshCaptcha);
+  $('#refresh-captcha')?.addEventListener('click', () => refreshCaptcha('user_refresh'));
   $('#captcha-form')?.addEventListener('submit', async e => {
     e.preventDefault();
     if (verificationOutage) { verificationOutage = false; return fieldError('#captcha-error', '통신 오류가 발생했어요. 오답 횟수는 그대로예요. 다시 확인해 주세요.'); }
@@ -245,16 +298,16 @@
       }
     } catch (_) { /* Ignore invalid browser-local draft. */ }
     document.querySelectorAll('[data-seat]').forEach(el => el.addEventListener('click', () => {
-      if (chosen.has(el.dataset.seat)) { chosen.delete(el.dataset.seat); event('seat_cancel'); }
+      if (chosen.has(el.dataset.seat)) { chosen.delete(el.dataset.seat); event('seat_cancel',{seatId:el.dataset.seat,selectedCount:chosen.size}); }
       else {
         if (chosen.size >= 4) return fieldError('#selection-error', '최대 4석까지 선택할 수 있어요. 선택 내역을 수정해 주세요.');
-        chosen.add(el.dataset.seat); event('seat_select');
+        chosen.add(el.dataset.seat); event('seat_select',{seatId:el.dataset.seat,selectedCount:chosen.size});
       }
       $('#selection-error').hidden = true;
       renderSelection();
     }));
-    $('#quantity-minus')?.addEventListener('click', () => { if (quantity > 1) quantity--; renderSelection(); event('quantity_change'); });
-    $('#quantity-plus')?.addEventListener('click', () => { if (quantity < Math.min(4, remaining)) quantity++; renderSelection(); event('quantity_change'); });
+    $('#quantity-minus')?.addEventListener('click', () => { const previousQuantity=quantity; if (quantity > 1) quantity--; renderSelection(); event('quantity_change',{previousQuantity,quantity}); });
+    $('#quantity-plus')?.addEventListener('click', () => { const previousQuantity=quantity; if (quantity < Math.min(4, remaining)) quantity++; renderSelection(); event('quantity_change',{previousQuantity,quantity}); });
     renderSelection();
   }
   async function confirm(repeat = false) {
@@ -285,8 +338,9 @@
     } finally { busy = false; $('#confirm-booking').textContent = '예매 확정 →'; renderSelection(); }
   }
   $('#confirm-booking')?.addEventListener('click', () => confirm());
-  $('#repeat-confirm')?.addEventListener('click', () => confirm(true));
+  $('#repeat-confirm')?.addEventListener('click', async () => { try { await api('scenario',{name:'repeat_confirm',showId}); await confirm(true); } catch(error) { failure(error); } });
   $('#old-confirm')?.addEventListener('click', async () => {
+    try { await api('scenario',{name:'old_confirm',showId}); } catch(error) { return failure(error); }
     sequence++;
     latestSequence = sequence;
     sessionStorage.setItem('tg-seq-' + attemptId, String(sequence));
@@ -307,13 +361,17 @@
       const response = await fetch('/api/events/');
       if (!response.ok) throw new Error();
       const result = await response.json();
-      $('#event-log').textContent = JSON.stringify(result.events.slice(-15), null, 2);
+      $('#event-log').textContent = JSON.stringify({metrics:result.deliveryMetrics,events:result.events.slice(-15)}, null, 2);
       $('#event-log').hidden = false;
     } catch (_) { notify('이벤트를 불러오지 못했어요. 다시 시도해 주세요.'); }
   });
 
   setTimeout(async () => {
-    event('page_enter');
+    event('page_enter',{pageName:screen,previousPageName});
+    if (screen==='shows' && sessionStorage.getItem('tg-search-length')!==null) {
+      event('search_change',{queryLength:Number(sessionStorage.getItem('tg-search-length')),resultCount:Number(body.dataset.resultCount || 0)});
+      sessionStorage.removeItem('tg-search-length');
+    }
     if (attemptId) {
       await heartbeat();
       if (!blocked && !moving) {
@@ -324,7 +382,7 @@
     } else {
       const active = JSON.parse(sessionStorage.getItem('tg-active') || 'null');
       if (active && active.pageId === pageId && screen !== 'complete') {
-        try { await api('cancel', {attemptId: active.id}); } catch (_) { /* Expired attempts are already invalid. */ }
+        try { await api('cancel', {attemptId: active.id,reason:'page_navigation'}); } catch (_) { /* Expired attempts are already invalid. */ }
       }
       sessionStorage.removeItem('tg-active');
     }

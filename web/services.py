@@ -52,14 +52,14 @@ class MockRepository:
         self.remaining = 28
         self.queue_counter = 126
         self.opens = {}
-        self.client_events = deque(maxlen=2000)
+        self.scenarios = {}
 
     def current(self, user, required=True):
         a = self.attempts.get(user)
         if a and a['stage'] not in ('complete', 'expired', 'cancelled'):
             if time.monotonic() - a['heartbeat'] > settings.ATTEMPT_TIMEOUT_SECONDS:
                 a['stage'], a['captcha'] = 'expired', ''
-                emit(user, 'connection_timeout', a, result='failure', errorCode='EXPIRED')
+                emit(user, 'connection_timeout', a, result='failure', errorCode='EXPIRED', details={'reason':'heartbeat_expired','elapsedMs':round((time.monotonic()-a['heartbeat'])*1000,2)})
         if required and (not a or a['stage'] in ('expired', 'cancelled')):
             show_id = a['show_id'] if a else 'blue-hour'
             raise FlowError('입장 권한이 만료되었어요. 대기열에 다시 입장해 주세요.', 'EXPIRED', 409, '/detail/' + show_id + '/')
@@ -86,10 +86,10 @@ class MockRepository:
             self.queue_counter += 1
             a = dict(id=str(uuid4()), show_id=show_id, page_id=page_id, stage='queue',
                      entered=time.monotonic(), heartbeat=time.monotonic(), rank=self.queue_counter,
-                     wrong=0, captcha='', sequence=0, booking_id=None)
+                     wrong=0, captcha='', sequence=0, booking_id=None, scenario=self.scenarios.get((user,show_id)))
             self.attempts[user] = a
             emit(user, 'queue_enter', a)
-            emit(user, 'queue_register', a)
+            emit(user, 'queue_register', a, details={'initialRank':a['rank'],'estimatedWaitMs':settings.QUEUE_WAIT_SECONDS*1000})
             return a
 
     def owned(self, user, page_id, attempt_id):
@@ -106,14 +106,16 @@ class MockRepository:
             a['heartbeat'] = time.monotonic()
             if a['stage'] == 'queue' and time.monotonic() - a['entered'] >= settings.QUEUE_WAIT_SECONDS:
                 a['stage'] = 'captcha'
+                emit(user,'queue_admitted',a,details={'elapsedMs':round((time.monotonic()-a['entered'])*1000,2)})
             return a
 
-    def challenge(self, user, page_id, attempt_id):
+    def challenge(self, user, page_id, attempt_id, reason='initial'):
         with self.lock:
             a = self.owned(user, page_id, attempt_id)
             if a['stage'] != 'captcha':
                 raise FlowError('보안 확인 단계에서만 사용할 수 있어요.')
             a['captcha'] = ''.join(secrets.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(5))
+            if reason=='user_refresh': emit(user,'captcha_refresh',a,details={'reason':'user_refresh'})
             return a['captcha']
 
     def verify(self, user, page_id, attempt_id, answer):
@@ -123,8 +125,10 @@ class MockRepository:
                 raise FlowError('보안 확인 단계가 아니에요.')
             if not a['captcha'] or not secrets.compare_digest(answer.strip().upper(), a['captcha']):
                 a['wrong'] += 1
-                emit(user, 'captcha_wrong', a, result='failure', errorCode='CAPTCHA_WRONG')
+                counts={'wrongCount':a['wrong'],'remainingAttempts':max(0,5-a['wrong'])}
+                emit(user, 'captcha_wrong', a, result='failure', errorCode='CAPTCHA_WRONG',details=counts)
                 if a['wrong'] >= 5:
+                    emit(user,'captcha_limit_reached',a,result='failure',errorCode='CAPTCHA_LIMIT',details=counts)
                     a['stage'], a['captcha'] = 'cancelled', ''
                     raise FlowError('입력 가능 횟수를 초과했어요. 대기열에 다시 입장해 주세요.', 'CAPTCHA_LIMIT', 409, '/detail/' + a['show_id'] + '/')
                 raise FlowError(f"입력한 문자가 일치하지 않아요 · 남은 기회 {5-a['wrong']}회", 'CAPTCHA_WRONG')
@@ -133,19 +137,22 @@ class MockRepository:
             emit(user, 'captcha_success', a)
             return a
 
-    def cancel(self, user, page_id, attempt_id):
+    def cancel(self, user, page_id, attempt_id, reason='user_cancel'):
         with self.lock:
             a = self.owned(user, page_id, attempt_id)
             if a['stage'] != 'complete':
                 a['stage'], a['captcha'] = 'cancelled', ''
-                emit(user, 'queue_cancel', a)
+                emit(user, 'queue_cancel', a, details={'reason':reason,'elapsedMs':round((time.monotonic()-a['entered'])*1000,2)})
             return a
 
     def confirm(self, user, page_id, attempt_id, sequence, seats, quantity):
+        started=time.monotonic()
         with self.lock:
             a = self.owned(user, page_id, attempt_id)
             if a['booking_id']:
-                return self.bookings[a['booking_id']]
+                existing=self.bookings[a['booking_id']]
+                emit(user,'booking_confirm_replayed',a,details=self.booking_details(existing,started))
+                return existing
             if a['stage'] != 'select':
                 raise FlowError('보안 확인을 완료해 주세요.', 'NOT_VERIFIED', 403)
             if type(sequence) is not int or sequence < 1:
@@ -181,11 +188,18 @@ class MockRepository:
                     self.remaining -= quantity
                 self.bookings[booking_id] = b
                 a['booking_id'], a['stage'] = booking_id, 'complete'
-                emit(user, 'booking_confirm_success', a, requestSequence=sequence)
+                emit(user, 'booking_confirm_success', a, requestSequence=sequence,details=self.booking_details(b,started))
                 return b
             except FlowError as e:
-                emit(user, 'booking_confirm_fail', a, requestSequence=sequence, result='failure', errorCode=e.code)
+                e.logged=True
+                emit(user, 'booking_confirm_fail', a, requestSequence=sequence, result='failure', errorCode=e.code,
+                     details={'seatType':SHOWS[a['show_id']]['kind'],'durationMs':round((time.monotonic()-started)*1000,2)})
                 raise
+
+    @staticmethod
+    def booking_details(booking,started):
+        return {'bookingId':booking['id'],'seatType':SHOWS[booking['show_id']]['kind'],'quantity':booking['quantity'],
+                'totalAmount':booking['total'],'durationMs':round((time.monotonic()-started)*1000,2)}
 
     def booking(self, user, identifier):
         b = self.bookings.get(identifier)
@@ -202,6 +216,8 @@ class MockRepository:
                 if not isinstance(show_id, str) or show_id not in SHOWS:
                     raise FlowError('공연을 선택해 주세요.')
                 self.opens[user, show_id] = time.time() + 30 if name == 'open_later' else 0
+                self.scenarios[user,show_id]=name
+                emit(user,'scenario_executed',showId=show_id,scheduleId=show_id+'-evening',isSimulation=True,scenarioName=name,details={'scenario':name})
                 return
             a = self.owned(user, page_id, attempt_id)
             if name == 'admit' and a['stage'] == 'queue':
@@ -217,8 +233,17 @@ class MockRepository:
                 self.sold.add(seats[-1])
             elif name == 'shortage' and a['stage'] == 'select' and a['show_id'] == 'open-air':
                 self.remaining = 1
+            elif name in ('disconnect','verification_outage','repeat_confirm','old_confirm'):
+                pass
             else:
                 raise FlowError('현재 단계에서 사용할 수 없는 시나리오예요.')
+            a['scenario']=name
+            emit(user,'scenario_executed',a,details={'scenario':name})
+
+    def scenario_context(self,user,show_id=None):
+        a=self.attempts.get(user)
+        if a and a['stage'] not in ('complete','cancelled','expired') and (show_id is None or a['show_id']==show_id): return a.get('scenario')
+        return self.scenarios.get((user,show_id))
 
 
 repo = MockRepository()

@@ -9,6 +9,7 @@ from .services import MockRepository, FlowError
 from .events import publisher
 
 
+@override_settings(EVENT_PUBLISHER='mock')
 class BookingTests(SimpleTestCase):
     def setUp(self):
         self.repo = MockRepository()
@@ -131,7 +132,7 @@ class BookingTests(SimpleTestCase):
         self.assertIn(b['id'], self.repo.bookings)
 
 
-@override_settings(DEMO_USERNAME='ticketguard', DEMO_SECOND_USERNAME='guest', DEMO_PASSWORD='demo-password', SHOW_SCENARIOS=True)
+@override_settings(EVENT_PUBLISHER='mock',DEMO_USERNAME='ticketguard', DEMO_SECOND_USERNAME='guest', DEMO_PASSWORD='demo-password', SHOW_SCENARIOS=True)
 class WebTests(SimpleTestCase):
     def setUp(self):
         self.repo = MockRepository()
@@ -225,7 +226,9 @@ class WebTests(SimpleTestCase):
             return self.client.post('/api/events/', json.dumps(data), content_type='application/json')
         self.assertEqual(post().status_code, 400)
         from datetime import datetime, timezone
-        data.update(occurredAt=datetime.now(timezone.utc).isoformat(), pageInstanceId='tab-one', userId='forged')
+        data.update(occurredAt=datetime.now(timezone.utc).isoformat(), pageInstanceId='tab-one', pageViewId=str(uuid4()),details={'pageName':'shows','previousPageName':None},userId='forged')
+        self.assertEqual(post().status_code,400)
+        data.pop('userId')
         self.assertEqual(post().status_code, 200)
         self.assertTrue(post().json()['duplicate'])
         last = publisher.records[-1]
