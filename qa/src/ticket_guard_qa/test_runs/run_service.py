@@ -13,6 +13,7 @@ from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
 from ticket_guard_qa.domain.models import LiveMetrics, RunConfig, RunSummary, SuiteResult
 from ticket_guard_qa.domain.pass_criteria import evaluate_pass_criteria
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
+from ticket_guard_qa.qa_database.archive_export import find_published_bot_versions, find_published_versions_in_use
 from ticket_guard_qa.reports.html_report import write_html_report
 from ticket_guard_qa.reports.json_report import write_json_report
 from ticket_guard_qa.settings import Settings
@@ -65,6 +66,7 @@ class RunService:
         system_target_builder: Callable[[Settings, TargetKind], SystemTarget] = build_system_target,
     ) -> None:
         self.settings = settings
+        self.session_factory = session_factory
         self.run_repository = RunRepository(session_factory)
         self.answer_key_repository = AnswerKeyRepository(session_factory)
         self.bot_profile_store = BotProfileStore(session_factory)
@@ -128,6 +130,11 @@ class RunService:
                 report_progress=lambda text, **fields: self.progress_stream.publish(run_id, text, **fields),
                 bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
             )
+            published_in_use = find_published_versions_in_use(
+                find_published_bot_versions(self.session_factory), run_config.bot_version_numbers
+            )
+            if published_in_use:  # 보관본으로 내보낸 봇 버전 · 탐지율 신뢰 낮음
+                self.progress_stream.publish(run_id, f"주의: 공개된 봇 버전 사용 · {' · '.join(published_in_use)} · 새 버전 저장 필요")
             window_sec = self.measurement_window_sec(run_config)
             suites_finished = threading.Event()
             if run_config.target_kind is TargetKind.FAKE:

@@ -1,4 +1,4 @@
-"""QA DB 테이블 · runs · suite_results · answer_keys · bot_versions · saved_cases"""
+"""QA DB 테이블 · runs · suite_results · answer_keys · bot_versions · archive_exports · saved_cases"""
 from datetime import datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
@@ -50,6 +50,17 @@ class BotVersionRecord(BaseTable):
     version_number: Mapped[int] = mapped_column(Integer)
     profile: Mapped[dict] = mapped_column(JSON)
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ArchiveExportRecord(BaseTable):
+    __tablename__ = "archive_exports"  # 보관본 내보내기 기록 · 내보낸 봇 버전 = 공개됨 · AGENTS.md 6장
+
+    archive_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    exported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    recipient: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str] = mapped_column(Text)
+    run_ids: Mapped[list] = mapped_column(JSON)
+    bot_version_numbers: Mapped[dict] = mapped_column(JSON)  # 종류 → 내보낸 버전 목록
 
 
 class SavedCaseRecord(BaseTable):

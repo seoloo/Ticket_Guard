@@ -4,7 +4,8 @@ from pathlib import Path
 
 from ticket_guard_qa.settings import QA_ROOT_DIR
 
-QA_CODE_DIRS = ("src", "traffic_generators")
+QA_CODE_DIRS = ("src",)
+SYSTEM_SIDE_CODE_DIRS = ("system_targets", "traffic_generators")  # 시스템으로 요청을 보내는 코드
 SYSTEM_TOP_LEVEL_MODULES = {"django", "config", "web"}  # 시스템 Django 프로젝트 · 앱 이름
 ANSWER_KEY_MODULE = "ticket_guard_qa.answer_key"
 
@@ -35,9 +36,8 @@ def test_qa_code_never_imports_system_code():
 
 
 def test_answer_key_stays_out_of_system_side_code():
-    target_files = iter_qa_python_files("traffic_generators") + list(
-        (QA_ROOT_DIR / "src" / "ticket_guard_qa" / "system_targets").rglob("*.py")
-    )
+    target_files = iter_qa_python_files(*(f"src/ticket_guard_qa/{folder_name}" for folder_name in SYSTEM_SIDE_CODE_DIRS))
+    assert target_files  # 폴더 이름이 바뀌면 검사가 비지 않게
     violations = [
         f"{path.relative_to(QA_ROOT_DIR)}: {module}"
         for path in target_files
