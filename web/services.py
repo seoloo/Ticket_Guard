@@ -46,6 +46,14 @@ class FlowError(Exception):
 class MockRepository:
     def __init__(self):
         self.lock = RLock()
+        self.reset()
+
+    def reset(self):
+        """처음 상태로 · QA 테스트 훅 초기화도 사용 (Issue #6)"""
+        with self.lock:
+            self._set_initial_state()
+
+    def _set_initial_state(self):
         self.attempts = {}
         self.bookings = {}
         self.sold = {'A5', 'B2', 'B8', 'D3', 'D9', 'F4', 'F8', 'H1', 'H10', 'I4'}
@@ -114,7 +122,8 @@ class MockRepository:
             a = self.owned(user, page_id, attempt_id)
             if a['stage'] != 'captcha':
                 raise FlowError('보안 확인 단계에서만 사용할 수 있어요.')
-            a['captcha'] = ''.join(secrets.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(5))
+            # QA 테스트 훅 · 고정 정답 (Issue #6)
+            a['captcha'] = settings.QA_CAPTCHA_FIXED_ANSWER or ''.join(secrets.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(5))
             if reason=='user_refresh': emit(user,'captcha_refresh',a,details={'reason':'user_refresh'})
             return a['captcha']
 

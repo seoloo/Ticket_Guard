@@ -1,5 +1,13 @@
 # Ticket Guard · 티켓가드
 
+> 브랜치별 문서는 아래 표에서 시작합니다. 이 README는 프로젝트 전체 소개이며 `main`에서만 수정합니다.
+
+| 브랜치 | 담당 영역 | README |
+|---|---|---|
+| `develop` | 예매 웹 (Django) | `web/README.md` · 작성 예정 |
+| `db` | 이벤트 파이프라인 · DB (Kafka · Spark · MongoDB) | `pipeline/README.md` · 작성 예정 |
+| `qa` | 자동화 QA · QA 대시보드 | [qa/README.md](qa/README.md) |
+
 공연 예매 웹과 실시간 이벤트 처리 파이프라인 프로젝트. **현재 구현 범위: Django 웹 + 실제 Kafka 이벤트 발행 + MongoDB 실행 환경**입니다. Spark 원본 적재 코드와 비적재 점검을 추가했습니다. 실제 적재·복구 실험은 미실행입니다. [Spark 문서](docs/spark.md)를 확인하세요. 자세한 구성·스키마·실행 명령은 [Kafka 연결 문서](docs/kafka.md)를 확인하세요.
 
 ## 실행

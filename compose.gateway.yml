@@ -5,6 +5,7 @@ services:
   web:
     ports: !reset []
     environment:
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web  # qa-dashboard가 http://web:8000으로 접속
       DEMO_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME:-}
       DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
 
@@ -16,6 +17,10 @@ services:
       TICKET_GUARD_QA_SYSTEM_BASE_URL: http://web:8000
       TICKET_GUARD_QA_SYSTEM_USERNAME: ${DEMO_USERNAME:-ticketguard}
       TICKET_GUARD_QA_SYSTEM_PASSWORD: ${DEMO_PASSWORD:-ticketguard-demo}
+      # web 테스트 훅과 같은 값 · .env 한 곳에서 (Issue #6)
+      TICKET_GUARD_QA_TEST_ACCOUNT_COUNT: ${QA_TEST_ACCOUNT_COUNT:-0}
+      TICKET_GUARD_QA_TEST_ACCOUNT_PASSWORD: ${QA_TEST_ACCOUNT_PASSWORD:-}
+      TICKET_GUARD_QA_CAPTCHA_FIXED_ANSWER: ${QA_CAPTCHA_FIXED_ANSWER:-}
       TICKET_GUARD_QA_QA_DATABASE_URL: sqlite:////qa/qa_data/qa.db
       TICKET_GUARD_QA_REPORT_OUTPUT_DIR: /qa/qa_data/reports
     volumes:
