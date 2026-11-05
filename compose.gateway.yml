@@ -5,6 +5,7 @@ services:
   web:
     ports: !reset []
     environment:
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,web  # qa-dashboard가 http://web:8000으로 접속
       DEMO_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME:-}
       DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
 
