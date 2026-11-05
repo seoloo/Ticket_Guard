@@ -114,3 +114,20 @@ def test_full_fake_run_shows_result(dashboard_client):
     live_bot_page = dashboard_client.get(f"{run_path}/bots/live")
     assert live_bot_page.status_code == 200 and "Run 종료" in live_bot_page.text
     assert run_id in dashboard_client.get("/bots").text  # B1 카드가 최근 실행을 씀
+
+
+def test_booking_flow_suite_button_and_result(dashboard_client):
+    assert 'value="booking_flow"' in dashboard_client.get("/runs/new").text  # Run 설정 Suite 버튼
+    response = dashboard_client.post("/runs", data={
+        "suite_names": ["booking_flow"], "target_kind": "fake", "virtual_user_count": "20", "duration_sec": "120",
+        "alert_policy": "never", "human_percent": "80", "bot_a_percent": "5", "bot_b_percent": "5",
+        "bot_c_percent": "5", "bot_d_percent": "5",
+    }, follow_redirects=False)
+    run_path = response.headers["location"].removeprefix("/qa").removesuffix("/live")
+    run_service = dashboard_client.app.state.run_service
+    for _ in range(100):
+        if run_service.active_run_id is None:
+            break
+        time.sleep(0.05)
+    result_page = dashboard_client.get(run_path).text
+    assert "예매 흐름 테스트" in result_page and "좌석 선택 단계 도착 20/20" in result_page

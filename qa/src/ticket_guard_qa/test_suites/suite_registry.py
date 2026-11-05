@@ -1,4 +1,5 @@
 """시험 묶음 등록표 · 새 묶음은 여기에 한 줄 추가"""
+from ticket_guard_qa.test_suites.booking_flow import BookingFlowSuite
 from ticket_guard_qa.test_suites.event_contract import EventContractSuite
 from ticket_guard_qa.test_suites.failure_recovery import FailureRecoverySuite
 from ticket_guard_qa.test_suites.load_capacity import LoadCapacitySuite
@@ -11,6 +12,7 @@ from ticket_guard_qa.test_suites.verdict_accuracy import VerdictAccuracySuite
 REGISTERED_SUITES: tuple[QaSuite, ...] = (
     SelfCheckSuite(),
     EventContractSuite(),
+    BookingFlowSuite(),
     VerdictAccuracySuite(),
     PipelineLatencySuite(),
     SeatConcurrencySuite(),

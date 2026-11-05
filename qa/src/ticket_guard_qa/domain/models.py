@@ -111,6 +111,8 @@ class VirtualUserSessionResult:
     session_key: SessionKey
     latency_ms: float
     is_error: bool
+    step_latency_ms: dict[str, float] = field(default_factory=dict)  # Live만 · login · start · queue · captcha
+    failed_step: str | None = None  # 예: "verify · CAPTCHA_WRONG"
 
 
 @dataclass(frozen=True)

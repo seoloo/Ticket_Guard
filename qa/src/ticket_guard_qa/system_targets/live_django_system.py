@@ -17,7 +17,7 @@ from ticket_guard_qa.system_targets.live_booking_client import (
     LiveBookingClient,
     build_test_account_username,
 )
-from ticket_guard_qa.system_targets.target_interfaces import HttpResult
+from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, HttpResult
 
 HEALTH_CHECK_TIMEOUT_SEC = 1.5  # 화면 헤더용 · 오래 기다리지 않음
 
@@ -28,10 +28,6 @@ class VirtualUserAccountPool:
     count: int
     password: str
     captcha_answer: str
-
-
-class AccountPoolExhaustedError(RuntimeError):
-    pass
 
 
 class LiveDjangoBookingApi:
@@ -60,7 +56,7 @@ class LiveDjangoBookingApi:
         return self.contract_client.post_json("/api/events/", event)
 
     def start_virtual_user_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
-        """시험 계정 하나로 좌석 선택 단계까지 · 행동 값(진입 지연 · 클릭 간격) 적용은 1-c"""
+        """시험 계정 하나로 좌석 선택 단계까지 → 예매 취소로 계정 반환 · 행동 값 · 좌석 클릭 · 확정은 1-c"""
         if self.used_test_account_count >= self.test_accounts.count:
             raise AccountPoolExhaustedError(
                 f"시험 계정 부족 · {self.test_accounts.count}개 · 저장소 .env QA_TEST_ACCOUNT_COUNT 확인"
@@ -70,11 +66,20 @@ class LiveDjangoBookingApi:
         client = LiveBookingClient(self.base_url, self.transport)
         try:
             flow_result = client.run_until_seat_selection(username, self.test_accounts.password, self.test_accounts.captcha_answer)
-        except (BookingFlowError, httpx.HTTPError):
-            return VirtualUserSessionResult(SessionKey(f"failed-{username}"), latency_ms=0.0, is_error=True)
+        except BookingFlowError as error:
+            return VirtualUserSessionResult(SessionKey(f"failed-{username}"), 0.0, is_error=True,
+                                            failed_step=f"{error.step} · {error.error_code or error.status_code}")
+        except httpx.HTTPError as error:
+            return VirtualUserSessionResult(SessionKey(f"failed-{username}"), 0.0, is_error=True,
+                                            failed_step=f"connection · {type(error).__name__}")
         finally:
+            try:
+                client.cancel_booking()
+            except httpx.HTTPError:
+                pass  # 정리 실패 · 60초 뒤 시스템이 만료 처리
             client.close()
-        return VirtualUserSessionResult(SessionKey(flow_result.booking_attempt_id), flow_result.total_latency_ms, is_error=False)
+        return VirtualUserSessionResult(SessionKey(flow_result.booking_attempt_id), flow_result.total_latency_ms,
+                                        is_error=False, step_latency_ms=flow_result.step_latency_ms)
 
 
 class LiveDjangoVerdictReader:

@@ -1,21 +1,23 @@
 """Live 예매 흐름 · 시스템 없이 가짜 HTTP 응답으로 확인 · 순서 · 본문 · 실패 단계"""
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
 
-from ticket_guard_qa.domain.enums import ActorType
+from ticket_guard_qa.domain.enums import ActorType, SuiteOutcome, TargetKind
+from ticket_guard_qa.domain.models import RunConfig
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.system_targets.live_booking_client import (
     BookingFlowError,
     LiveBookingClient,
     build_test_account_username,
 )
-from ticket_guard_qa.system_targets.live_django_system import (
-    AccountPoolExhaustedError,
-    LiveDjangoBookingApi,
-    VirtualUserAccountPool,
-)
+from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
+from ticket_guard_qa.system_targets.live_django_system import LiveDjangoBookingApi, VirtualUserAccountPool
+from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError
+from ticket_guard_qa.test_suites.booking_flow import BookingFlowSuite
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 BASE_URL = "http://web:8000"
 PASSWORD = "qa-password"
@@ -44,6 +46,8 @@ class FakeDjango:
         if body["action"] == "heartbeat":
             self.heartbeat_count += 1
             return httpx.Response(200, json={"id": "attempt-1", "stage": "queue" if self.heartbeat_count < 2 else "captcha"})
+        if body["action"] == "cancel":
+            return httpx.Response(200, json={"stage": "cancelled"})
         if body["action"] == "verify":
             is_correct = body["answer"] == CAPTCHA_ANSWER
             return httpx.Response(200 if is_correct else 400, json={"stage": "select"} if is_correct else {"code": "CAPTCHA_WRONG"})
@@ -85,6 +89,8 @@ def test_each_virtual_user_takes_next_test_account():
     assert not first.is_error and not second.is_error
     logins = [action["username"] for action in fake_django.actions if action["action"] == "login"]
     assert logins == [build_test_account_username(1), build_test_account_username(2)] == ["qa-user-0001", "qa-user-0002"]
+    assert sum(action["action"] == "cancel" for action in fake_django.actions) == 2  # 계정 반환
+    assert set(first.step_latency_ms) == {"login", "start", "queue", "captcha"}
     with pytest.raises(AccountPoolExhaustedError):
         booking_api.start_virtual_user_session(behavior)
 
@@ -95,3 +101,34 @@ def test_login_failure_marks_session_as_error():
                                        httpx.MockTransport(FakeDjango(login_status=401).handle))
     result = booking_api.start_virtual_user_session(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN])
     assert result.is_error
+    assert result.failed_step == "login · LOGIN_FAILED"
+
+
+def build_booking_flow_context(system_target, virtual_user_count: int) -> SuiteContext:
+    return SuiteContext(
+        run_id="run-test",
+        run_config=RunConfig(TargetKind.LIVE, ("booking_flow",), virtual_user_count=virtual_user_count),
+        system_target=system_target,
+        answer_key_repository=None,
+        case_data_dir=None,
+        report_progress=lambda text, **fields: None,
+    )
+
+
+def test_booking_flow_suite_passes_on_mock():
+    result = BookingFlowSuite().run(build_booking_flow_context(build_fake_system_target(), 30))
+    assert result.outcome is SuiteOutcome.PASSED, result.message
+    assert result.metrics["booking_flow_success_count"] == 30
+    assert result.message.startswith("좌석 선택 단계 도착 30/30")
+
+
+def test_booking_flow_suite_reports_failed_step_and_shortage():
+    fake_django = FakeDjango()
+    booking_api = LiveDjangoBookingApi(BASE_URL, "ticketguard", "unused",
+                                       VirtualUserAccountPool(2, PASSWORD, "WRONG"),
+                                       httpx.MockTransport(fake_django.handle))
+    system_target = replace(build_fake_system_target(), booking_api=booking_api)
+    result = BookingFlowSuite().run(build_booking_flow_context(system_target, 3))
+    assert result.outcome is SuiteOutcome.FAILED
+    assert "시험 계정 부족" in result.message and "verify · CAPTCHA_WRONG 2건" in result.message
+    assert result.metrics["booking_flow_failure_count"] == 3

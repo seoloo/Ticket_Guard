@@ -101,6 +101,11 @@ class LiveBookingClient:
             raise BookingFlowError("captcha_image", image_response.status_code, None)
         return self._expect_ok("verify", self._post_action("verify", answer=answer))
 
+    def cancel_booking(self) -> None:
+        """시험 끝 정리 · 계정당 진행 중 예매 1건 규칙 · 다음 Run에서 같은 계정 재사용"""
+        if self.booking_attempt_id:
+            self._post_action("cancel", reason="user_cancel")
+
     def run_until_seat_selection(self, username: str, password: str, captcha_answer: str,
                                  show_id: str = DEFAULT_SHOW_ID,
                                  poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC) -> BookingFlowResult:

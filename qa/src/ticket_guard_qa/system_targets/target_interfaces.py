@@ -14,6 +14,10 @@ from ticket_guard_qa.domain.models import (
 )
 
 
+class AccountPoolExhaustedError(RuntimeError):
+    """Live 시험 계정 수보다 VU가 많음"""
+
+
 @dataclass(frozen=True)
 class HttpResult:
     status_code: int
