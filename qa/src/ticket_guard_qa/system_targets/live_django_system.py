@@ -102,10 +102,12 @@ class LiveDjangoBookingApi:
             )
         except BookingFlowError as error:
             return VirtualUserSessionResult(SessionKey(client.booking_attempt_id or f"failed-{username}"), 0.0, is_error=True,
-                                            failed_step=f"{error.step} · {error.error_code or error.status_code}")
+                                            failed_step=f"{error.step} · {error.error_code or error.status_code}",
+                                            sent_event_ids=tuple(client.sent_event_ids))
         except httpx.HTTPError as error:
             return VirtualUserSessionResult(SessionKey(client.booking_attempt_id or f"failed-{username}"), 0.0, is_error=True,
-                                            failed_step=f"connection · {type(error).__name__}")
+                                            failed_step=f"connection · {type(error).__name__}",
+                                            sent_event_ids=tuple(client.sent_event_ids))
         finally:
             try:
                 await client.cancel_booking()
@@ -115,7 +117,7 @@ class LiveDjangoBookingApi:
         return VirtualUserSessionResult(
             SessionKey(flow_result.booking_attempt_id), flow_result.total_latency_ms, is_error=False,
             step_latency_ms=flow_result.step_latency_ms, booking_outcome=flow_result.booking_outcome,
-            booked_seat_ids=flow_result.booked_seat_ids,
+            booked_seat_ids=flow_result.booked_seat_ids, sent_event_ids=tuple(client.sent_event_ids),
         )
 
 

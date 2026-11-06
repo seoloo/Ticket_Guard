@@ -66,6 +66,24 @@ class ProcessControl(Protocol):
 
 
 @dataclass(frozen=True)
+class StreamRecord:
+    """이벤트 토픽 메시지 하나 · event None = JSON 해석 실패"""
+    partition: int
+    offset: int
+    key: str | None
+    timestamp_ms: int | None  # 메시지 생성 시각 (프로듀서)
+    event: dict[str, Any] | None
+
+
+class EventStreamReader(Protocol):
+    """이벤트 토픽 읽기 전용 · 읽은 위치 저장(commit) 없음 · 다른 소비자 그룹과 공유 금지"""
+
+    def snapshot_end_offsets(self) -> dict[int, int]: ...  # 파티션 → 현재 끝 위치 · Run 시작 직전
+
+    def read_since(self, start_offsets: dict[int, int], run_id: str) -> list[StreamRecord]: ...
+
+
+@dataclass(frozen=True)
 class SystemTarget:
     kind: TargetKind
     booking_api: BookingApi
@@ -73,3 +91,4 @@ class SystemTarget:
     pipeline_reader: PipelineReader
     live_metrics_reader: LiveMetricsReader
     process_control: ProcessControl
+    event_stream_reader: EventStreamReader | None = None  # None = 이벤트 전달 검증 건너뜀

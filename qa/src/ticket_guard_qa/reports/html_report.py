@@ -2,7 +2,7 @@
 from html import escape
 from pathlib import Path
 
-from ticket_guard_qa.domain.models import RunSummary
+from ticket_guard_qa.domain.models import MESSAGE_LINE_SEPARATOR, RunSummary
 from ticket_guard_qa.domain.pass_criteria import PASS_CRITERIA
 
 
@@ -16,7 +16,7 @@ def render_html_report(summary: RunSummary) -> str:
     )
     suite_rows = "".join(
         f"<tr><td>{escape(result.suite_name)}</td><td>{result.outcome.value}</td>"
-        f"<td>{escape(result.message)}</td></tr>"
+        f"<td>{'<br>'.join(escape(line) for line in result.message.split(MESSAGE_LINE_SEPARATOR))}</td></tr>"
         for result in summary.suite_results
     )
     return (

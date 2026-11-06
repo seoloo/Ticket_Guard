@@ -72,7 +72,11 @@
       <h2>테스트 실행</h2>
       {% if latest_summary %}
       <div class="choice-line"><i data-lucide="history"></i>최근 Run {{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</div>
-      <div class="choice-line"><i data-lucide="circle-alert"></i>FAIL 기준 <span class="is-fail">{{ latest_summary.failed_criteria_count }}건</span></div>
+      {% if latest_summary.status.value == 'FAILED' %}
+      <div class="choice-line"><i data-lucide="circle-alert"></i><span class="is-fail">FAIL · {{ latest_summary | verdict_detail }}</span></div>
+      {% else %}
+      <div class="choice-line"><i data-lucide="circle-check"></i>{{ 'PASS' if latest_summary.status.value == 'PASSED' else latest_summary.status.value }} · {{ latest_summary | verdict_detail }}</div>
+      {% endif %}
       {% else %}
       <div class="choice-line"><i data-lucide="sparkles"></i>Mock 대상 즉시 시작 가능</div>
       {% endif %}

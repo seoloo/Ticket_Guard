@@ -10,6 +10,7 @@ from ticket_guard_qa.system_targets.live_django_system import (
     SystemAdminAccount,
     VirtualUserAccountPool,
 )
+from ticket_guard_qa.system_targets.live_kafka_reader import KafkaEventStreamReader
 from ticket_guard_qa.system_targets.live_mongo_reader import LiveMongoPipelineReader, LiveMongoVerdictReader
 from ticket_guard_qa.system_targets.target_interfaces import SystemTarget
 
@@ -30,4 +31,8 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
         pipeline_reader=LiveMongoPipelineReader(settings.system_mongo_uri),
         live_metrics_reader=LiveDjangoLiveMetricsReader(),
         process_control=LiveDockerProcessControl(),
+        event_stream_reader=(
+            KafkaEventStreamReader(settings.kafka_bootstrap_servers, settings.kafka_events_topic)
+            if settings.kafka_bootstrap_servers else None
+        ),
     )

@@ -164,6 +164,28 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 
 - QA는 **전용 consumer group으로 읽기만** 해요. 토픽에 쓰지 않아요.
 
+### 4-1. QA 소비자 규칙 (이벤트 전달 검증 · `system_targets/live_kafka_reader.py`)
+
+| 항목 | 규칙 |
+|---|---|
+| 소비자 그룹 | `ticketguard-qa-{runId}` · 시스템 원본 적재 · Spark · `ticketguard-debug-*` 그룹과 공유 금지 |
+| 읽은 위치 저장 | 안 함 (`enable.auto.commit=false` · commit 없음) · 시스템 소비자 위치에 영향 없음 |
+| 읽는 범위 | Run 시작 직전 파티션별 끝 위치(high watermark) → 트래픽 종료 뒤 끝까지 · 끝 도달 뒤 5초 새 메시지 없으면 종료 · 최대 60초 |
+| 메시지 해석 | value = 이벤트 JSON (v1 · v2) · 해석 실패 = 형식 오류 · key = `bookingAttemptId` → 없으면 `userId` |
+| QA 메시지 식별 | `userId`가 `qa-user-*` · QA가 받은 예매 시도 번호 · QA가 만든 `eventId` |
+
+**이벤트 전달 검증 항목**
+
+| 항목 | 현업 용어 | 합격 |
+|---|---|---|
+| QA가 보낸 좌석 클릭 이벤트 전부 수신 | 완전성 | 누락 0 |
+| 예매 시도마다 서버 이벤트 수신 · 예매 완료 = `queue_enter` · `queue_register` · `queue_admitted` · `captcha_success` · `booking_confirm_request` · `booking_confirm_success` · 매진 = 확정 성공 대신 `booking_confirm_fail` + `queue_cancel` | 흐름 완전성 | 누락 0 |
+| 같은 `eventId` 한 번만 | 유일성 | 중복 0 |
+| JSON 해석 가능 | 형식 유효성 | 오류 0 |
+| 같은 예매 시도 = 같은 파티션 | 파티션 키 일관성 (순서 보장 조건) | 위반 0 |
+| 메시지 생성 시각 − `occurredAt` | 적시성 · 전달 지연 p95 | 기록 (기준선 미정) |
+| 스키마 v2 · `capture_chunk` | 관측 이벤트 수 | 기록 |
+
 ## 5. 계약 시험 데이터
 
 위치: `qa/case_data/event_contracts/` · db 팀도 자기 시험(Spark 등)에서 가져다 써요. Ground Truth · 봇 정보는 넣지 않아요.

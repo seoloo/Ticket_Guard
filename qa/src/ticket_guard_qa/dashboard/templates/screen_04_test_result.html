@@ -16,6 +16,14 @@
   .final-pill.is-failed { background: var(--fail-red-light); color: var(--fail-red-text); }
   .final-pill.is-passed { background: var(--pass-green-light); color: var(--pass-green); }
   .final-pill.is-other { background: var(--db-orange-light); color: var(--db-orange-text); }
+  .final-pill small { font-size: 18px; font-weight: 800; opacity: .85; }
+  .message-lines { list-style: none; margin: 0; padding: 0; }
+  .message-lines li { position: relative; padding-left: 13px; line-height: 1.7; }
+  .message-lines li::before { content: ""; position: absolute; left: 1px; top: 11px; width: 5px; height: 5px; border-radius: 50%; background: #9AA5B8; }
+  .message-lines li.is-fail { color: var(--fail-red-text); font-weight: 700; }
+  .message-lines li.is-fail::before { background: var(--fail-red); }
+  .message-lines .line-tag { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 6px; margin-right: 6px; background: var(--gray-chip-background); color: var(--sub-text-color); }
+  .message-lines li.is-fail .line-tag { background: var(--fail-red-light); color: var(--fail-red-text); }
   .criteria-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
   .metric-card.is-not-measured .metric-value { font-size: 18px; margin-top: 8px; }
   .report-card { background: #FAFBFD; }
@@ -59,9 +67,9 @@
       <div><div class="score-label">PASS 합격 기준</div><span class="score-number">{{ summary.passed_criteria_count }}</span><span class="score-total"> / {{ criterion_cards | length }}</span></div>
       <div><div class="score-label">최종 판정</div>
         {% if summary.status.value == 'FAILED' %}
-        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>FAIL {{ summary.failed_criteria_count }}건</span>
+        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>FAIL<small>· {{ summary | verdict_detail }}</small></span>
         {% elif summary.status.value == 'PASSED' %}
-        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>PASS</span>
+        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>PASS<small>· {{ summary | verdict_detail }}</small></span>
         {% else %}
         <span class="final-pill is-other"><i data-lucide="circle-alert"></i>{{ 'CANCELLED' if summary.status.value == 'CANCELLED' else 'ERROR' }}</span>
         {% endif %}
@@ -96,7 +104,16 @@
       <tr>
         <td>{{ suite_title_by_name.get(result.suite_name, result.suite_name) }}</td>
         <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': 'PASS', 'FAILED': 'FAIL', 'SKIPPED': 'SKIP', 'ERROR': 'ERROR'}[result.outcome.value] }}</span></td>
-        <td class="muted">{{ result.message or '-' }}</td>
+        <td class="muted">
+          {% set lines = result.message | message_lines %}
+          {% if lines %}
+          <ul class="message-lines">
+            {% for kind, text in lines %}
+            <li class="is-{{ kind }}">{% if kind != 'info' %}<span class="line-tag">{{ 'FAIL' if kind == 'fail' else '참고' }}</span>{% endif %}{{ text }}</li>
+            {% endfor %}
+          </ul>
+          {% else %}-{% endif %}
+        </td>
       </tr>
       {% endfor %}
     </table>

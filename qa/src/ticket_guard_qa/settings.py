@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     system_username: str = ""
     system_password: str = ""
     system_mongo_uri: str = ""  # 읽기 전용 계정만
+    # 이벤트 토픽 읽기 전용 · QA 대시보드는 팀 compose 안에서만 실행 · 비우면 이벤트 전달 검증 건너뜀
+    kafka_bootstrap_servers: str = "kafka:9092"
+    kafka_events_topic: str = "ticketguard.events.v1"
 
     # 시스템 테스트 훅과 같은 값 · 저장소 .env의 QA_TEST_ACCOUNT_* · QA_CAPTCHA_FIXED_ANSWER (Issue #6)
     test_account_count: int = 0

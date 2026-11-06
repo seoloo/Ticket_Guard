@@ -3,6 +3,7 @@ import math
 import random
 import re
 import statistics
+import time
 import uuid
 import zlib
 from dataclasses import dataclass, field
@@ -21,7 +22,7 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionPlan,
     VirtualUserSessionResult,
 )
-from ticket_guard_qa.system_targets.target_interfaces import HttpResult, SystemTarget
+from ticket_guard_qa.system_targets.target_interfaces import HttpResult, StreamRecord, SystemTarget
 
 TELEMETRY_EVENT_TYPES = frozenset({"browser_request", "resource_timing", "navigation_timing", "browser_error"})  # PR #12 · 자유 형식 details
 BROWSER_EVENT_TYPES = frozenset({
@@ -91,6 +92,14 @@ MOCK_RULE_FAST_INTERVAL = "MOCK-R2"
 MOCK_RULE_MULTI_SESSION = "MOCK-R3"
 MOCK_RULE_INSTANT_ENTRY = "MOCK-R4"
 MAX_RISK_SIGNAL_COUNT = 4
+
+# 가짜 이벤트 토픽 · 파티션 3 · 키 = 예매 시도 번호 · docs/contracts.md 4장
+FAKE_STREAM_PARTITION_COUNT = 3
+FAKE_CONTRACT_USER_ID = "ticketguard"
+FAKE_SEAT_CLICK_COUNT = 2
+FAKE_BOOKED_SERVER_EVENT_TYPES = (
+    "queue_enter", "queue_register", "queue_admitted", "captcha_success", "booking_confirm_request", "booking_confirm_success",
+)
 
 # 가짜 집계(SESSION_FEATURES) · 예시 값
 FEATURE_SAMPLE_CLICK_COUNT = 20
@@ -225,6 +234,19 @@ class FakeSystemState:
     session_features: list[SessionFeatureRecord] = field(default_factory=list)  # SESSION_FEATURES
     quarantine_records: list[QuarantineRecord] = field(default_factory=list)  # QUARANTINE_EVENTS
     accepted_event_by_id: dict[str, dict[str, Any]] = field(default_factory=dict)
+    stream_records: list[StreamRecord] = field(default_factory=list)  # 이벤트 토픽 흉내
+
+    def publish_to_stream(self, event: dict[str, Any], key: str) -> None:
+        partition = zlib.crc32(key.encode()) % FAKE_STREAM_PARTITION_COUNT  # 같은 키 = 같은 파티션
+        offset = sum(record.partition == partition for record in self.stream_records)
+        self.stream_records.append(StreamRecord(partition, offset, key, int(time.time() * 1000), event))
+
+
+def build_fake_event(event_type: str, user_id: str, booking_attempt_id: str | None, event_id: str | None = None) -> dict[str, Any]:
+    return {
+        "schemaVersion": 1, "eventId": event_id or str(uuid.uuid4()), "eventType": event_type,
+        "occurredAt": datetime.now(timezone.utc).isoformat(), "userId": user_id, "bookingAttemptId": booking_attempt_id,
+    }
 
 
 class FakeBookingApi:
@@ -246,6 +268,7 @@ class FakeBookingApi:
                 return HttpResult(400, {"error": "eventId 내용 충돌"}, latency_ms=1.0)
             return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": True}, latency_ms=1.0)
         self.state.accepted_event_by_id[event["eventId"]] = event
+        self.state.publish_to_stream({**event, "schemaVersion": 1, "userId": FAKE_CONTRACT_USER_ID}, FAKE_CONTRACT_USER_ID)
         return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": False}, latency_ms=1.0)
 
     def virtual_user_capacity(self) -> int | None:
@@ -275,7 +298,14 @@ class FakeBookingApi:
             decided_at=feature_record.computed_at,
         ))
         latency_ms = max(self.random_source.gauss(900, 350), 120)  # 예시 지연
-        return VirtualUserSessionResult(session_key, latency_ms, is_error=False, booking_outcome=BookingOutcome.BOOKED)
+        user_id = f"qa-user-{len(self.state.session_verdicts):04d}"
+        sent_event_ids = tuple(str(uuid.uuid4()) for _ in range(FAKE_SEAT_CLICK_COUNT))
+        for event_id in sent_event_ids:
+            self.state.publish_to_stream(build_fake_event("seat_select", user_id, session_key, event_id), session_key)
+        for event_type in FAKE_BOOKED_SERVER_EVENT_TYPES:
+            self.state.publish_to_stream(build_fake_event(event_type, user_id, session_key), session_key)
+        return VirtualUserSessionResult(session_key, latency_ms, is_error=False, booking_outcome=BookingOutcome.BOOKED,
+                                        sent_event_ids=sent_event_ids)
 
 
 class FakeVerdictReader:
@@ -351,6 +381,20 @@ class FakeProcessControl:
         self.stopped_services.discard(service_name)
 
 
+class FakeEventStreamReader:
+    def __init__(self, state: FakeSystemState) -> None:
+        self.state = state
+
+    def snapshot_end_offsets(self) -> dict[int, int]:
+        return {
+            partition: sum(record.partition == partition for record in self.state.stream_records)
+            for partition in range(FAKE_STREAM_PARTITION_COUNT)
+        }
+
+    def read_since(self, start_offsets: dict[int, int], run_id: str) -> list[StreamRecord]:
+        return [record for record in self.state.stream_records if record.offset >= start_offsets.get(record.partition, 0)]
+
+
 def build_fake_system_target(random_seed: int = 20261103) -> SystemTarget:
     state = FakeSystemState(random_seed=random_seed)
     return SystemTarget(
@@ -360,4 +404,5 @@ def build_fake_system_target(random_seed: int = 20261103) -> SystemTarget:
         pipeline_reader=FakePipelineReader(state),
         live_metrics_reader=FakeLiveMetricsReader(),
         process_control=FakeProcessControl(),
+        event_stream_reader=FakeEventStreamReader(state),
     )

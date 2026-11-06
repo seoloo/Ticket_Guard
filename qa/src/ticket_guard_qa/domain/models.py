@@ -132,6 +132,7 @@ class VirtualUserSessionResult:
     failed_step: str | None = None  # 예: "verify · CAPTCHA_WRONG"
     booking_outcome: BookingOutcome | None = None  # 오류면 None
     booked_seat_ids: tuple[str, ...] = ()  # 중복 판매 확인
+    sent_event_ids: tuple[str, ...] = ()  # VU가 직접 보낸 브라우저 이벤트 · 이벤트 전달 검증 대조
 
 
 @dataclass(frozen=True)
@@ -150,12 +151,17 @@ class CriterionResult:
     is_passed: bool | None
 
 
+MESSAGE_LINE_SEPARATOR = "\n"  # Suite 메시지 · 한 줄 = 한 항목 · 04 화면 목록
+FAIL_LINE_PREFIX = "FAIL: "
+REFERENCE_LINE_PREFIX = "참고: "
+
+
 @dataclass
 class SuiteResult:
     suite_name: str
     outcome: SuiteOutcome
     metrics: dict[str, float] = field(default_factory=dict)
-    message: str = ""
+    message: str = ""  # 여러 항목은 MESSAGE_LINE_SEPARATOR로 구분
     details: dict[str, Any] = field(default_factory=dict)  # 화면용 · 놓친 세션 · 정답 × 판정 표
 
 
@@ -176,6 +182,18 @@ class RunSummary:
     @property
     def failed_criteria_count(self) -> int:
         return sum(1 for result in self.criterion_results if result.is_passed is False)
+
+    @property
+    def measured_criteria_count(self) -> int:
+        return sum(1 for result in self.criterion_results if result.is_passed is not None)
+
+    @property
+    def failed_suite_count(self) -> int:
+        return sum(1 for result in self.suite_results if result.outcome in (SuiteOutcome.FAILED, SuiteOutcome.ERROR))
+
+    @property
+    def passed_suite_count(self) -> int:
+        return sum(1 for result in self.suite_results if result.outcome is SuiteOutcome.PASSED)
 
     def find_suite_result(self, suite_name: str) -> SuiteResult | None:
         return next((result for result in self.suite_results if result.suite_name == suite_name), None)

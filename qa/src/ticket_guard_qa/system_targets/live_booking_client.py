@@ -70,6 +70,7 @@ class LiveBookingClient:
         self.show_id = DEFAULT_SHOW_ID
         self.confirm_sequence = 0
         self.is_booked = False
+        self.sent_event_ids: list[str] = []  # 받음(200 · 202) 응답 받은 이벤트만
 
     async def close(self) -> None:
         await self.http_client.aclose()
@@ -127,14 +128,16 @@ class LiveBookingClient:
         select_page_view_id = str(uuid.uuid4())
         for index, seat_id in enumerate(seat_ids):
             await asyncio.sleep(click_intervals_ms[index % len(click_intervals_ms)] / 1000)
+            event_id = str(uuid.uuid4())
             result = await self.post_json("/api/events/", {
-                "eventType": "seat_select", "eventId": str(uuid.uuid4()), "occurredAt": utc_now_iso(),
+                "eventType": "seat_select", "eventId": event_id, "occurredAt": utc_now_iso(),
                 "pageInstanceId": self.page_instance_id, "pageViewId": select_page_view_id,
                 "showId": self.show_id, "scheduleId": f"{self.show_id}-evening",
                 "details": {"seatId": seat_id, "selectedCount": index + 1},
             })
             if result.status_code not in EVENT_ACCEPTED_STATUS_CODES:
                 raise BookingFlowError("seat_select", result.status_code, result.body.get("code"))
+            self.sent_event_ids.append(event_id)
         await asyncio.sleep(click_intervals_ms[-1] / 1000)  # 마지막 클릭 → 확정 버튼
 
     async def confirm_seats(self, seat_ids: list[str]) -> HttpResult:
