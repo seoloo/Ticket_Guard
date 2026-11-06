@@ -1,0 +1,3 @@
+confluent-kafka==2.16.1
+pymongo==4.15.5
+dnspython==2.8.0
