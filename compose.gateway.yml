@@ -17,6 +17,8 @@ services:
       TICKET_GUARD_QA_SYSTEM_BASE_URL: http://web:8000
       TICKET_GUARD_QA_SYSTEM_USERNAME: ${DEMO_USERNAME:-ticketguard}
       TICKET_GUARD_QA_SYSTEM_PASSWORD: ${DEMO_PASSWORD:-ticketguard-demo}
+      # Read-only system MongoDB URI; keep credentials in the ignored local .env.
+      TICKET_GUARD_QA_SYSTEM_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_MONGO_URI:-}
       # web 테스트 훅과 같은 값 · .env 한 곳에서 (Issue #6)
       TICKET_GUARD_QA_TEST_ACCOUNT_COUNT: ${QA_TEST_ACCOUNT_COUNT:-0}
       TICKET_GUARD_QA_TEST_ACCOUNT_PASSWORD: ${QA_TEST_ACCOUNT_PASSWORD:-}

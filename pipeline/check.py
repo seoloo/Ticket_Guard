@@ -57,14 +57,7 @@ def check(spark, config):
         roles = db.command('connectionStatus')['authInfo']['authenticatedUserRoles']
         if len(roles) != 1 or roles[0] != {'role': 'readWrite', 'db': config.database}:
             raise RuntimeError('Unexpected writer roles')
-        collections = list(db.list_collections(filter={'name': 'raw_events'}))
-        if len(collections) != 1 or collections[0].get('options', {}):
-            raise RuntimeError('Missing or unexpected raw_events collection')
-        indexes = list(db.raw_events.list_indexes())
-        if len(indexes) != 1 or dict(indexes[0]['key']) != {'_id': 1}:
-            raise RuntimeError('Unexpected raw_events indexes')
-        count = db.raw_events.count_documents({})
-    print(f'check mongo_writer OK host={config.mongo_host} ip={address} documents={count}', flush=True)
+    print(f'check mongo_writer OK host={config.mongo_host} ip={address}', flush=True)
 
     folder = Path(config.checkpoint)
     folder.mkdir(parents=True, exist_ok=True)

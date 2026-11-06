@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from ticket_guard_qa.dashboard.dependencies import render_screen
+from ticket_guard_qa.system_targets.live_mongo_reader import LiveMongoPipelineReader
 
 SYSTEM_DATABASE_NOT_READY_MESSAGE = "시스템 MongoDB 연결 전 · AGENTS.md 5장"
 
@@ -11,12 +12,20 @@ router = APIRouter()
 
 @router.get("/db", response_class=HTMLResponse)
 def show_db_dashboard(request: Request, run_id: str | None = None) -> HTMLResponse:
-    # TODO(MongoDB 연결 후): live_mongo_reader로 컬렉션 건수 · 정답과 다른 세션 목록
+    settings = request.app.state.settings
+    summary = None
+    error_message = None
+    if settings.system_mongo_uri:
+        try:
+            summary = LiveMongoPipelineReader(settings.system_mongo_uri).summary()
+        except Exception:
+            error_message = "시스템 MongoDB를 읽을 수 없습니다. 연결 설정과 read-only 권한을 확인하세요."
     return render_screen(request, "screen_05_db_dashboard.html", {
         "active_tab": "db",
         "run_id": run_id,
         "session_key": None,
-        "not_ready_message": SYSTEM_DATABASE_NOT_READY_MESSAGE,
+        "not_ready_message": error_message or (None if summary else SYSTEM_DATABASE_NOT_READY_MESSAGE),
+        "pipeline_summary": summary,
     })
 
 
