@@ -25,6 +25,31 @@ class HttpResult:
     latency_ms: float
 
 
+@dataclass(frozen=True)
+class InventorySnapshot:
+    """좌석 선택 단계 진입 시점 재고 · 지정석 판매 목록 · 자유석 잔여 수량"""
+    sold_seat_ids: frozenset[str]
+    remaining_quantity: int
+
+
+@dataclass(frozen=True)
+class ConfirmResponse:
+    """확정 요청 하나의 응답 · status_code 0 = 연결 오류"""
+    status_code: int
+    error_code: str | None
+    booking_id: str | None  # 200일 때만
+    remaining_quantity: int | None  # 409 재고 응답 본문
+    latency_ms: float
+
+
+@dataclass
+class SeatContender:
+    """좌석 선택 단계에서 대기 중인 VU · 동시 확정용 · handle은 구현체 전용"""
+    contender_id: str  # bookingAttemptId
+    inventory: InventorySnapshot
+    handle: Any
+
+
 class BookingApi(Protocol):
     def check_health(self) -> bool: ...
 
@@ -37,6 +62,15 @@ class BookingApi(Protocol):
     async def run_virtual_user_session(
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
     ) -> VirtualUserSessionResult: ...  # 사람 / 봇 여부는 넘기지 않음
+
+    # 좌석 동시성 · 선택 단계까지 준비 → 동시 확정 → 정리 · E12 · E20
+    async def prepare_seat_contender(self, show_id: str) -> SeatContender: ...
+
+    async def send_confirms(
+        self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, repeat_count: int = 1
+    ) -> list[ConfirmResponse]: ...  # repeat_count 2 = 같은 확정 동시 재전송
+
+    async def release_seat_contender(self, contender: SeatContender) -> None: ...
 
 
 class VerdictReader(Protocol):

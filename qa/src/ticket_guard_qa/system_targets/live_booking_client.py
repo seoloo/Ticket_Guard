@@ -140,12 +140,18 @@ class LiveBookingClient:
             self.sent_event_ids.append(event_id)
         await asyncio.sleep(click_intervals_ms[-1] / 1000)  # 마지막 클릭 → 확정 버튼
 
+    async def post_confirm(self, seat_ids: list[str], quantity: int, sequence: int) -> HttpResult:
+        """확정 요청 그대로 · 판단 없음 · 지정석 = 좌석 목록 · 자유석 = 빈 목록 + 수량"""
+        result = await self._post_action("confirm", sequence=sequence, seats=seat_ids, quantity=quantity)
+        if result.status_code == 200:
+            self.is_booked = True
+        return result
+
     async def confirm_seats(self, seat_ids: list[str]) -> HttpResult:
         """200 = 예매 완료 · 409 SEAT_SOLD = 먼저 팔림(본문 sold) · 그 외는 오류"""
         self.confirm_sequence += 1
-        result = await self._post_action("confirm", sequence=self.confirm_sequence, seats=seat_ids, quantity=len(seat_ids))
+        result = await self.post_confirm(seat_ids, len(seat_ids), self.confirm_sequence)
         if result.status_code == 200:
-            self.is_booked = True
             return result
         if result.body.get("code") == SEAT_SOLD_ERROR_CODE:
             return result
@@ -155,6 +161,16 @@ class LiveBookingClient:
         """시험 끝 정리 · 계정당 진행 중 예매 1건 규칙 · 다음 Run에서 같은 계정 재사용"""
         if self.booking_attempt_id and not self.is_booked:
             await self._post_action("cancel", reason="user_cancel")
+
+    async def enter_seat_selection(self, username: str, password: str, captcha_answer: str, show_id: str,
+                                   poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC) -> HttpResult:
+        """로그인 → 예매 시작 → 대기열 → 보안문자 · 응답 본문 sold · remaining = 그 시점 재고"""
+        await self.login(username, password)
+        await self.start_booking(show_id)
+        admission = await self.wait_for_admission(poll_interval_sec)
+        if admission.body.get("stage") != STAGE_CAPTCHA:
+            raise BookingFlowError("heartbeat", admission.status_code, f"UNEXPECTED_STAGE_{admission.body.get('stage')}")
+        return await self.pass_captcha(captcha_answer)
 
     async def run_booking_flow(self, username: str, password: str, captcha_answer: str,
                                session_plan: VirtualUserSessionPlan, open_at_monotonic: float,

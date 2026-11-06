@@ -154,8 +154,9 @@ def test_virtual_users_run_together_with_own_accounts():
     logins = sorted(action["username"] for action in fake_django.actions if action["action"] == "login")
     assert logins == [build_test_account_username(1), build_test_account_username(2)] == ["qa-user-0001", "qa-user-0002"]
     assert not any(action["action"] == "cancel" for action in fake_django.actions)  # 확정한 계정은 취소 없음
+    assert booking_api.virtual_user_capacity() == 2  # 끝난 VU 계정 반환 · 다음 Suite에서 재사용
     with pytest.raises(AccountPoolExhaustedError):
-        send_virtual_user_traffic(booking_api, [build_instant_plan()], 10)
+        send_virtual_user_traffic(booking_api, [build_instant_plan()] * 3, 10)
 
 
 def test_failed_session_cancels_to_return_account():

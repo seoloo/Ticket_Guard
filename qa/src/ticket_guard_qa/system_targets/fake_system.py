@@ -1,4 +1,5 @@
 """가짜 대상 · 시스템 없이 시험 흐름 점검 · 규칙은 docs/contracts.md와 같게 · 화면 숫자는 예시 값"""
+import asyncio
 import math
 import random
 import re
@@ -22,7 +23,14 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionPlan,
     VirtualUserSessionResult,
 )
-from ticket_guard_qa.system_targets.target_interfaces import HttpResult, StreamRecord, SystemTarget
+from ticket_guard_qa.system_targets.target_interfaces import (
+    ConfirmResponse,
+    HttpResult,
+    InventorySnapshot,
+    SeatContender,
+    StreamRecord,
+    SystemTarget,
+)
 
 TELEMETRY_EVENT_TYPES = frozenset({"browser_request", "resource_timing", "navigation_timing", "browser_error"})  # PR #12 · 자유 형식 details
 BROWSER_EVENT_TYPES = frozenset({
@@ -100,6 +108,13 @@ FAKE_SEAT_CLICK_COUNT = 2
 FAKE_BOOKED_SERVER_EVENT_TYPES = (
     "queue_enter", "queue_register", "queue_admitted", "captcha_success", "booking_confirm_request", "booking_confirm_success",
 )
+
+# 가짜 재고 · main web/services.py 초기 상태와 같게 · 지정석 공연끼리 · 자유석 공연끼리 재고 공유
+FAKE_INITIAL_SOLD_SEAT_IDS = frozenset({"A5", "B2", "B8", "D3", "D9", "F4", "F8", "H1", "H10", "I4"})
+FAKE_INITIAL_REMAINING_QUANTITY = 28
+FAKE_GENERAL_SHOW_IDS = frozenset({"open-air", "starlight"})
+FAKE_RESERVED_SEAT_IDS = frozenset(f"{row}{number}" for row in "ABCDEFGHIJ" for number in range(1, 11))
+MAX_SEATS_PER_BOOKING = 4
 
 # 가짜 집계(SESSION_FEATURES) · 예시 값
 FEATURE_SAMPLE_CLICK_COUNT = 20
@@ -235,6 +250,10 @@ class FakeSystemState:
     quarantine_records: list[QuarantineRecord] = field(default_factory=list)  # QUARANTINE_EVENTS
     accepted_event_by_id: dict[str, dict[str, Any]] = field(default_factory=dict)
     stream_records: list[StreamRecord] = field(default_factory=list)  # 이벤트 토픽 흉내
+    sold_seat_ids: set[str] = field(default_factory=lambda: set(FAKE_INITIAL_SOLD_SEAT_IDS))
+    remaining_quantity: int = FAKE_INITIAL_REMAINING_QUANTITY
+    booking_count: int = 0
+    is_seat_lock_broken: bool = False  # True = 확인과 차감 사이 잠금 없음 · 초과 판매 결함 흉내 · FAIL 검출 확인용
 
     def publish_to_stream(self, event: dict[str, Any], key: str) -> None:
         partition = zlib.crc32(key.encode()) % FAKE_STREAM_PARTITION_COUNT  # 같은 키 = 같은 파티션
@@ -306,6 +325,43 @@ class FakeBookingApi:
             self.state.publish_to_stream(build_fake_event(event_type, user_id, session_key), session_key)
         return VirtualUserSessionResult(session_key, latency_ms, is_error=False, booking_outcome=BookingOutcome.BOOKED,
                                         sent_event_ids=sent_event_ids)
+
+    async def prepare_seat_contender(self, show_id: str) -> SeatContender:
+        contender_id = f"contender-{uuid.uuid4().hex[:8]}"
+        inventory = InventorySnapshot(frozenset(self.state.sold_seat_ids), self.state.remaining_quantity)
+        return SeatContender(contender_id, inventory, {"show_id": show_id, "booking_id": None})
+
+    async def send_confirms(
+        self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, repeat_count: int = 1
+    ) -> list[ConfirmResponse]:
+        return list(await asyncio.gather(*(self.confirm(contender, seat_ids, quantity) for _ in range(repeat_count))))
+
+    async def release_seat_contender(self, contender: SeatContender) -> None:
+        return None
+
+    async def confirm(self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int) -> ConfirmResponse:
+        """main web/services.py confirm 규칙 · 이미 예매한 시도 = 같은 예매 번호 · 확인과 차감은 한 번에"""
+        attempt = contender.handle
+        if attempt["booking_id"]:
+            return ConfirmResponse(200, None, attempt["booking_id"], None, 1.0)
+        is_general = attempt["show_id"] in FAKE_GENERAL_SHOW_IDS
+        if is_general and not 1 <= quantity <= MAX_SEATS_PER_BOOKING:
+            return ConfirmResponse(400, "SELECTION_LIMIT", None, None, 1.0)
+        if not is_general and (not 1 <= len(seat_ids) <= MAX_SEATS_PER_BOOKING or not set(seat_ids) <= FAKE_RESERVED_SEAT_IDS):
+            return ConfirmResponse(400, "SELECTION_LIMIT", None, None, 1.0)
+        if is_general and quantity > self.state.remaining_quantity:
+            return ConfirmResponse(409, "INSUFFICIENT_STOCK", None, self.state.remaining_quantity, 1.0)
+        if not is_general and self.state.sold_seat_ids.intersection(seat_ids):
+            return ConfirmResponse(409, "SEAT_SOLD", None, self.state.remaining_quantity, 1.0)
+        if self.state.is_seat_lock_broken:
+            await asyncio.sleep(0)  # 다른 확정 요청이 같은 재고를 먼저 확인
+        if is_general:
+            self.state.remaining_quantity -= quantity
+        else:
+            self.state.sold_seat_ids.update(seat_ids)
+        self.state.booking_count += 1
+        attempt["booking_id"] = f"TG-FAKE{self.state.booking_count:05d}"
+        return ConfirmResponse(200, None, attempt["booking_id"], None, 1.0)
 
 
 class FakeVerdictReader:

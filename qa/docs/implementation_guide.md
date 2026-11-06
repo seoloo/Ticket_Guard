@@ -162,7 +162,7 @@ qa/
 | 판정 정확도 | `test_suites/verdict_accuracy.py` | 가짜만 동작 (행동 값으로 가짜 판정 · 정답표 저장 · 탐지율 · 오탐률) | 실제 대상: 시스템 판정 없음 · 저장 위치 미정 | |
 | Gold 반영 시간 | `test_suites/pipeline_latency.py` · `live_mongo_reader.py` | 가짜만 동작 | Kafka · Spark · MongoDB 없음 | 시험 이벤트 먼저 보내기 |
 | 03 실시간 수치 | `test_runs/run_service.py` · `LiveMetricsReader` | 가짜: `fake_run_duration_sec` 동안 수치 · 실제: 경과 시간 / 시험 시간 표시 · 트래픽이 먼저 끝나면 04로 | 실제 대상: 판정 지연 · EPS · Gold 수치 없음 (MongoDB 연결 전) | |
-| 좌석 동시 확정 | `test_suites/seat_concurrency.py` | 껍데기 | 좌석 점유 · Redis 미정 | |
+| 좌석 동시성 (E12 · E20) | `test_suites/seat_concurrency.py` · `BookingApi.prepare_seat_contender` · `send_confirms` · Mock 재고 · `is_seat_lock_broken` | 동작 (Run 설정 "좌석 동시성" · VU를 좌석 선택 단계까지 준비 → 확정 동시 전송 · 같은 지정석 2석 VU 20명 → 예매 1건 · 자유석 잔여 수량보다 많은 4석 요청 → 판매 합계 ≤ 잔여 · 잔여 수량 일치 · 같은 확정 동시 2회 → 예매 번호 1개 · 재고는 선택 단계 응답(sold · remaining) 기준 · 끝난 계정은 다음 시나리오에서 재사용) | 좌석 점유 5분(E16) 측정 불가 · 초기화 없으면 자유석 잔여 0 → 측정 불가 | 관리자 계정 전달 (develop PR) · Redis 결정 후 E16 |
 | 부하 | `test_suites/load_capacity.py` · `traffic_generators/` | 껍데기 | 개발 계정 2개뿐 | |
 | 장애 복구 | `test_suites/failure_recovery.py` | 껍데기 | 복구할 파이프라인 없음 | |
 | 봇 설정 저장 · 규칙 미리 보기 | `macro_bots/` | 저장 · 실행에 반영 동작 · 규칙 미리 보기는 대기 표시 | 판정 규칙 R1 ~ R6 정의 대기 | `RULE_CHECKS` 채우기 |
