@@ -3,6 +3,7 @@ import time
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from web.event_schema import validate_event
+from web.events import CaptureReassembler
 
 
 class Command(BaseCommand):
@@ -12,6 +13,7 @@ class Command(BaseCommand):
         parser.add_argument('--max-messages',type=int,default=10)
         parser.add_argument('--timeout',type=int,default=20)
         parser.add_argument('--from-beginning',action='store_true')
+        parser.add_argument('--raw-chunks',action='store_true',help='Print transport chunks without reassembly')
 
     def handle(self,*args,**options):
         from confluent_kafka import Consumer, OFFSET_BEGINNING, OFFSET_END
@@ -28,6 +30,7 @@ class Command(BaseCommand):
             self.stderr.write('Consumer assigned; ready for events.')
         consumer.subscribe([settings.KAFKA_EVENTS_TOPIC],on_assign=assign)
         count=0
+        reassembler=CaptureReassembler()
         deadline=time.monotonic()+options['timeout']
         try:
             while count<options['max_messages'] and time.monotonic()<deadline:
@@ -40,9 +43,12 @@ class Command(BaseCommand):
                 try:
                     event=json.loads(message.value())
                     validate_event(event)
+                    if not options['raw_chunks']:
+                        event=reassembler.feed(event)
+                        if event is None: continue
                     item.update(key=message.key().decode() if message.key() else None,event=event)
                 except (ValueError,TypeError,UnicodeDecodeError): item['error']='invalid event; payload suppressed'
                 self.stdout.write(json.dumps(item,ensure_ascii=False))
                 count+=1
         finally: consumer.close()
-        self.stderr.write('Read '+str(count)+' message(s). No offsets committed.')
+        self.stderr.write('Read '+str(count)+' logical message(s). No offsets committed. Incomplete chunk records='+str(len(reassembler.pending)))

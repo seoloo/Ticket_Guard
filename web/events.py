@@ -1,5 +1,7 @@
 """Asynchronous, bounded delivery. This is NOT a durable outbox."""
 import atexit
+import base64
+import math
 import copy
 import hashlib
 import json
@@ -11,9 +13,9 @@ from collections import Counter, OrderedDict, deque
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import wraps
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 from django.conf import settings
-from .event_schema import CLIENT_EVENTS, EventValidationError, validate_event
+from .event_schema import CLIENT_EVENTS, SERVER_EVENTS, EventValidationError, validate_event
 
 logger = logging.getLogger('ticketguard.events')
 request_context = ContextVar('event_context', default={})
@@ -39,7 +41,7 @@ def event_request_context(view):
 
 
 class MockEventPublisher:
-    def publish(self,event,callback): callback(None,{'mock':True})
+    def publish(self,event,callback): callback(None,{'mock':True,'chunks':len(transport_records(event))})
     def close(self): pass
 
 
@@ -68,14 +70,35 @@ class KafkaEventPublisher:
 
     def publish(self,event,callback):
         from confluent_kafka import KafkaError
+        records=transport_records(event)
+        pending=len(records)
+        results=[]
+        errors=[]
+        lock=threading.RLock()
         def delivered(error,message):
-            if error:
-                callback({'code':str(error.code()),'retryable':error.retriable() or error.code() in
-                          (KafkaError._MSG_TIMED_OUT,KafkaError._TRANSPORT,KafkaError._ALL_BROKERS_DOWN)},None)
-            else:
-                callback(None,{'topic':message.topic(),'partition':message.partition(),'offset':message.offset()})
-        key = event['bookingAttemptId'] or event['userId'] or event['eventId']
-        self.producer.produce(settings.KAFKA_EVENTS_TOPIC,key=key.encode(),value=validate_event(event),on_delivery=delivered)
+            nonlocal pending
+            with lock:
+                if error:
+                    errors.append({'code':str(error.code()),'retryable':error.retriable() or error.code() in
+                        (KafkaError._MSG_TIMED_OUT,KafkaError._TRANSPORT,KafkaError._ALL_BROKERS_DOWN)})
+                else:
+                    results.append({'topic':message.topic(),'partition':message.partition(),'offset':message.offset()})
+                pending-=1
+                if pending==0:
+                    if errors: callback({'code':errors[0]['code'],'retryable':all(e['retryable'] for e in errors)},None)
+                    else: callback(None,results[0] if len(records)==1 else {'chunks':results,'recordId':event['eventId']})
+        key=event['bookingAttemptId'] or event['userId'] or event.get('capture',{}).get('anonymousId') or event['eventId']
+        for record in records:
+            try:
+                self.producer.produce(settings.KAFKA_EVENTS_TOPIC,key=key.encode(),value=record,on_delivery=delivered)
+            except Exception as exc:
+                # Partial enqueue can still yield messages. Report one logical failure;
+                # deterministic chunk IDs let downstream remove retry duplicates.
+                with lock:
+                    errors.append({'code':'BUFFER_FULL' if isinstance(exc,BufferError) else type(exc).__name__,
+                                   'retryable':isinstance(exc,BufferError)})
+                    pending-=1
+                    if pending==0: callback(errors[0],None)
 
     def close(self):
         if os.getpid()!=self.pid: return
@@ -129,22 +152,27 @@ class EventDispatcher:
         result['retryable']=result['retryable'] and record['attempts']<settings.EVENT_MAX_ATTEMPTS
         return result
 
-    def status(self,event_id,user):
+    def status(self,event_id,user,owner=None):
         with self.lock:
             self._prune()
             record = self.receipts.get(event_id)
-            return self.public(record) if record and record['event']['userId']==user else None
+            if not record: return None
+            allowed = record.get('owner') == owner if owner is not None else record.get('owner') is None and record['event']['userId']==user
+            return self.public(record) if allowed else None
 
-    def publish(self,event):
+    def publish(self,event,owner=None):
         validate_event(event,require_details=True)
         excluded={'receivedAt','isSimulation','scenarioName'}
-        if event['source']=='browser': excluded.add('bookingAttemptId')
+        if event['source']=='browser':
+            excluded.add('bookingAttemptId')
+            if event['schemaVersion']==2: excluded.add('userId')
         stable = {k:v for k,v in event.items() if k not in excluded}
         fingerprint = hashlib.sha256(json.dumps(stable,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         with self.lock:
             self._prune()
             record = self.receipts.get(event['eventId'])
             if record:
+                if record.get('owner') != owner: raise EventValidationError('event owner conflict')
                 if record['fingerprint']!=fingerprint: raise EventValidationError('eventId payload conflict')
                 if record['state']!='failed' or not record['retryable'] or record['attempts']>=settings.EVENT_MAX_ATTEMPTS:
                     return dict(self.public(record),duplicate=True)
@@ -154,7 +182,7 @@ class EventDispatcher:
                 if len(self.receipts)>=settings.EVENT_RECEIPT_MAX:
                     self.counters['capacity_rejected']+=1
                     raise BufferError('receipt capacity reached')
-                record = dict(event=copy.deepcopy(event),fingerprint=fingerprint,state='received',attempts=0,
+                record = dict(event=copy.deepcopy(event),owner=owner,fingerprint=fingerprint,state='received',attempts=0,
                               retryable=True,errorCode=None,metadata=None,updated=time.monotonic())
                 self.receipts[event['eventId']] = record
                 self.records.append(copy.deepcopy(event))
@@ -205,6 +233,12 @@ def build_event(user,event_type,attempt=None,**fields):
                      showId=attempt['show_id'],scheduleId=attempt['show_id']+'-evening',
                      isSimulation=bool(attempt.get('scenario')),scenarioName=attempt.get('scenario'))
     event.update(fields)
+    if event.get('schemaVersion')==1:
+        from .telemetry import sanitize_capture
+        cleaned,audit=sanitize_capture(event['details'])
+        event['details']=cleaned
+        if audit['redactions'] or event_type not in CLIENT_EVENTS|SERVER_EVENTS or len(json.dumps(event,ensure_ascii=False,allow_nan=False).encode('utf-8'))>16384:
+            event.update(schemaVersion=2,capture={**audit,'collectorVersion':'2.0','policyVersion':'simulation-raw-1'})
     validate_event(event,require_details=True)
     return event
 
@@ -218,3 +252,67 @@ def emit(user,event_type,attempt=None,**fields):
         publisher.failed+=1
         logger.error('event_emit_failed eventType=%s errorClass=%s',event_type,type(exc).__name__)
         return None
+
+
+def build_capture(user,kind,details,context=None,event_id=None,occurred_at=None,source='server',client_capture=None,known=()):
+    from .telemetry import sanitize_capture
+    context=context or {}
+    cleaned,audit=sanitize_capture(details,known)
+    audit['collectorVersion']='2.0'
+    audit['policyVersion']='simulation-raw-1'
+    audit['anonymousId']=context.get('anonymousId')
+    # Do not trust browser claims as server verification; retain them as provenance.
+    if client_capture:
+        audit['observer']=sanitize_capture(client_capture,known)[0]
+        if client_capture.get('redactions') and audit['status']=='complete': audit['status']='redacted'
+    fields={k:context[k] for k in ('pageInstanceId','pageViewId','bookingAttemptId','showId','scheduleId') if k in context}
+    if event_id: fields['eventId']=event_id
+    if occurred_at: fields['occurredAt']=occurred_at
+    status=cleaned.get('response',{}).get('status') if isinstance(cleaned.get('response'),dict) else None
+    result='failure' if isinstance(status,int) and status>=400 else 'success'
+    return build_event(user,kind,source=source,schemaVersion=2,capture=audit,details=cleaned,result=result,**fields)
+
+
+def transport_records(event):
+    """Keep the complete sanitized event; split it, never truncate it."""
+    raw=validate_event(event)
+    wire_limit=getattr(settings,'CAPTURE_KAFKA_RECORD_BYTES',16384)
+    if len(raw)<=wire_limit: return [raw]
+    if event['schemaVersion']!=2: raise EventValidationError('v1 event too large')
+    chunk_size=wire_limit//2
+    if chunk_size<128: raise EventValidationError('transport limit too small')
+    total=math.ceil(len(raw)/chunk_size)
+    records=[]
+    for index in range(total):
+        item=dict(event)
+        item.update(eventId=str(uuid5(NAMESPACE_URL,event['eventId']+':'+str(index))),eventType='capture_chunk',
+                    details={'recordId':event['eventId'],'index':index,'count':total,'encoding':'base64-json-utf8',
+                             'totalBytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),'data':base64.b64encode(raw[index*chunk_size:(index+1)*chunk_size]).decode()},
+                    capture={'status':'transport_chunk','anonymousId':event['capture'].get('anonymousId')})
+        encoded=validate_event(item)
+        if len(encoded)>wire_limit: raise EventValidationError('chunk envelope exceeds transport limit')
+        records.append(encoded)
+    return records
+
+
+class CaptureReassembler:
+    """Diagnostic helper; raw consumers may store chunks as-is instead."""
+    def __init__(self): self.pending={}
+    def feed(self,event):
+        if event.get('eventType')!='capture_chunk': return event
+        part=event['details'];record_id=part['recordId']
+        if type(part['index']) is not int or type(part['count']) is not int or not 0<=part['index']<part['count']:
+            raise ValueError('invalid chunk position')
+        state=self.pending.setdefault(record_id,{'count':part['count'],'sha256':part['sha256'],'parts':{}})
+        if state['count']!=part['count'] or state['sha256']!=part['sha256']: raise ValueError('conflicting chunk metadata')
+        data=base64.b64decode(part['data'],validate=True)
+        prior=state['parts'].get(part['index'])
+        if prior is not None and prior!=data: raise ValueError('conflicting chunk data')
+        state['parts'][part['index']]=data
+        if len(state['parts'])<state['count']: return None
+        raw=b''.join(state['parts'][i] for i in range(state['count']))
+        if len(raw)!=part['totalBytes'] or hashlib.sha256(raw).hexdigest()!=state['sha256']: raise ValueError('chunk integrity failed')
+        result=json.loads(raw);validate_event(result)
+        if result['eventId']!=record_id: raise ValueError('record ID mismatch')
+        del self.pending[record_id]
+        return result
