@@ -1,18 +1,40 @@
 {
-  "description": "목록에 없는 필드 추가 · 그 필드는 저장 안 됨 (저장 값 확인은 MongoDB 연결 후)",
+  "description": "목록에 없는 필드(seatPrice · schemaVersion) · 거부",
   "endpoint": "events",
   "requests": [
     {
-      "schemaVersion": 1,
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
       "occurredAt": "{{now}}",
       "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
       "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      },
       "seatPrice": 0
+    },
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      },
+      "schemaVersion": 1
     }
   ],
   "expected_status_codes": [
-    200
-  ]
+    400,
+    400
+  ],
+  "expected_storage": {
+    "activity_event_count": 0,
+    "quarantine_reason_codes": []
+  }
 }

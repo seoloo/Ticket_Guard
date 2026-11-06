@@ -39,7 +39,7 @@ def _find_metric_mismatches(actual: dict[str, float], expected: dict[str, float]
 
 class SelfCheckSuite:
     suite_name = "self_check"
-    title = "QA 자기 검사"
+    title = "QA Self-check"
     related_codes: tuple[str, ...] = ()
 
     def run(self, context: SuiteContext) -> SuiteResult:
@@ -47,22 +47,22 @@ class SelfCheckSuite:
 
         correct_verdicts: SystemVerdicts = FakeVerdictReader().read_session_verdicts(context.run_id)
         detection_metrics = calculate_detection_metrics(FIXED_ANSWER_KEY, correct_verdicts)
-        problems += [f"계산 틀림: {name}" for name in _find_metric_mismatches(detection_metrics, EXPECTED_DETECTION_METRICS)]
+        problems += [f"계산 오류: {name}" for name in _find_metric_mismatches(detection_metrics, EXPECTED_DETECTION_METRICS)]
 
         human_row = build_confusion_matrix(FIXED_ANSWER_KEY, correct_verdicts)[ActorType.HUMAN]
         if human_row != EXPECTED_HUMAN_ROW:
-            problems.append("정답 × 판정 표 틀림")
+            problems.append("혼동 행렬 오류")
 
         gold_latency_p95_sec = calculate_p95(FakePipelineReader().read_gold_latency_sec(context.run_id))
         if not math.isclose(gold_latency_p95_sec, EXPECTED_GOLD_LATENCY_P95_SEC):
-            problems.append("p95 계산 틀림")
+            problems.append("p95 계산 오류")
 
         wrong_verdicts = AlwaysWrongVerdictReader().read_session_verdicts(context.run_id)
         wrong_metrics = calculate_detection_metrics(FIXED_ANSWER_KEY, wrong_verdicts)
         if not _find_metric_mismatches(wrong_metrics, EXPECTED_DETECTION_METRICS):
-            problems.append("틀리는 대상을 못 잡음")
+            problems.append("오답 대상 미검출")
 
-        context.report_progress(f"자기 검사 문제 {len(problems)}건")
+        context.report_progress(f"Self-check 이슈 {len(problems)}건")
         return SuiteResult(
             suite_name=self.suite_name,
             outcome=SuiteOutcome.FAILED if problems else SuiteOutcome.PASSED,

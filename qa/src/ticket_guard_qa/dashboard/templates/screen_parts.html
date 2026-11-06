@@ -1,7 +1,7 @@
 {# 여러 화면이 같이 쓰는 조각 #}
 
 {% macro test_steps(current_step_number) %}
-{% set step_titles = ["시험 설정", "실행", "결과"] %}
+{% set step_titles = ["Run 설정", "Run 모니터", "Run 리포트"] %}
 <div class="steps">
   {% for title in step_titles %}
   {% set step_number = loop.index %}
@@ -11,4 +11,29 @@
   </span>
   {% endfor %}
 </div>
+{% endmacro %}
+
+{# 매크로 봇 화면 공통 · 봇은 우리 앱에만 접속 · docs/ui.md 매크로 봇 #}
+{% macro bot_screen_header(title, description) %}
+<div class="bot-header">
+  <div>
+    <h1 class="page-heading">{{ title }}</h1>
+    <div class="sub-text">{{ description }}</div>
+  </div>
+  <span class="spacer"></span>
+  <span class="bot-scope"><i data-lucide="shield-check"></i>테스트 범위 · 자사 서비스 한정(티켓가드)</span>
+</div>
+{% endmacro %}
+
+{% macro actor_chip(type_info, version_number=none) %}
+<span class="actor-chip"><span class="actor-dot" style="background:var(--{{ type_info.color_token }})"></span>{{ type_info.short_name }}{% if version_number %}<span class="muted">v{{ version_number }}</span>{% endif %}</span>
+{% endmacro %}
+
+{% macro empty_state(icon, title, description, link_url, link_title) %}
+<section class="card empty-state">
+  <span class="empty-icon"><i data-lucide="{{ icon }}"></i></span>
+  <h2 class="section-heading">{{ title }}</h2>
+  <div class="sub-text">{{ description }}</div>
+  {% if link_url %}<a class="button" style="margin-top:16px" href="{{ link_url }}">{{ link_title }}</a>{% endif %}
+</section>
 {% endmacro %}

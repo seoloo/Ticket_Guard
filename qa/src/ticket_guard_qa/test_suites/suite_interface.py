@@ -17,7 +17,7 @@ class SuiteContext:
     system_target: SystemTarget
     answer_key_repository: AnswerKeyRepository
     case_data_dir: Path
-    report_progress: Callable[[str], None]  # 03 화면 진행 메시지
+    report_progress: Callable[..., None]  # (글, **ProgressMessage 필드) · 03 · B3 화면
     bot_profile_registry: BotProfileRegistry = field(default_factory=BotProfileRegistry)
 
 

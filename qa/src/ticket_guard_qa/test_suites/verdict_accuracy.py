@@ -1,7 +1,10 @@
 """판정 정확도 · 탐지율 · 오탐률 · 기획서 21쪽 · 탐지 = CHALLENGE 이상"""
+from collections import Counter
+
 from ticket_guard_qa.answer_key.expected_verdicts import build_answer_key, plan_virtual_users
-from ticket_guard_qa.domain.enums import SuiteOutcome
+from ticket_guard_qa.domain.enums import BookingOutcome, SessionStep, SuiteOutcome
 from ticket_guard_qa.domain.models import (
+    ActorProgress,
     AnswerKey,
     PlannedUser,
     SessionKey,
@@ -10,25 +13,66 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionResult,
 )
 from ticket_guard_qa.scoring.confusion_matrix import build_confusion_matrix
+from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.scoring.detection_metrics import calculate_detection_metrics, find_false_positives, find_missed_bots
 from ticket_guard_qa.scoring.latency_metrics import calculate_error_rate_percent, calculate_p95
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
+    build_session_plans,
+    reset_before_traffic,
+    send_virtual_user_traffic,
+)
 
+VERDICT_ACCURACY_SUITE_NAME = "verdict_accuracy"  # 04 · B1 · B4가 결과를 찾는 이름
 MAX_LISTED_SESSION_COUNT = 200  # 04 · 05 화면 목록 길이
+PLANNED_PROGRESS_KEY = "PLANNED"
 
 
-def send_virtual_user_traffic(
+def build_actor_progress(planned_users: list[PlannedUser], reached_count_by_step: dict[SessionStep, Counter]) -> ActorProgress:
+    planned_count_by_actor = Counter(user.actor_type for user in planned_users)
+    return {
+        actor_type.value: {
+            PLANNED_PROGRESS_KEY: planned_count,
+            **{step.value: counts[actor_type] for step, counts in reached_count_by_step.items()},
+        }
+        for actor_type, planned_count in planned_count_by_actor.items()
+    }
+
+
+def count_reached_steps(
+    planned_users: list[PlannedUser], results: list[VirtualUserSessionResult | None]
+) -> dict[SessionStep, Counter]:
+    finished = [(user, result) for user, result in zip(planned_users, results) if result is not None]
+    return {
+        SessionStep.ENTERED: Counter(user.actor_type for user, _ in finished),
+        SessionStep.CONFIRMED: Counter(
+            user.actor_type for user, result in finished if result.booking_outcome is BookingOutcome.BOOKED
+        ),
+    }
+
+
+def send_planned_user_traffic(
     context: SuiteContext, planned_users: list[PlannedUser]
 ) -> tuple[dict[str, SessionKey], list[VirtualUserSessionResult]]:
-    """가상 사용자 라벨 → 시스템이 준 세션 키 · 시스템에는 행동 값만 보냄"""
+    """가상 사용자 라벨 → 시스템이 준 세션 키 · 시스템에는 행동 값만 보냄 · VU 동시 실행"""
     booking_api = context.system_target.booking_api
-    session_key_by_label: dict[str, SessionKey] = {}
-    session_results: list[VirtualUserSessionResult] = []
-    for user in planned_users:
-        behavior = context.bot_profile_registry.get_profile(user.actor_type).to_session_behavior()
-        session_result = booking_api.start_virtual_user_session(behavior)
-        session_key_by_label[user.virtual_user_label] = session_result.session_key
-        session_results.append(session_result)
+    behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
+    context.report_progress(reset_before_traffic(booking_api))
+
+    def report_traffic_progress(results: list[VirtualUserSessionResult | None]) -> None:
+        finished_count = sum(result is not None for result in results)
+        context.report_progress(
+            f"Entered {finished_count}/{len(planned_users)}",
+            actor_progress=build_actor_progress(planned_users, count_reached_steps(planned_users, results)),
+        )
+
+    session_results = send_virtual_user_traffic(
+        booking_api, build_session_plans(behaviors, context.run_config.random_seed),
+        context.run_config.duration_sec, report_traffic_progress,
+    )
+    session_key_by_label = {
+        user.virtual_user_label: result.session_key for user, result in zip(planned_users, session_results)
+    }
     return session_key_by_label, session_results
 
 
@@ -52,22 +96,35 @@ def build_result_details(answer_key: AnswerKey, system_verdicts: SystemVerdicts)
     }
 
 
+def read_rule_hit_counts_or_none(context: SuiteContext) -> dict[str, int] | None:
+    """SESSION_VERDICTS.matchedRules · 시스템이 아직 판정 이유를 안 주면 None · B4 룰 메타데이터 미수신 표시"""
+    try:
+        return count_rule_hits(context.system_target.verdict_reader.read_verdict_records(context.run_id))
+    except NotImplementedError:
+        return None
+
+
 class VerdictAccuracySuite:
-    suite_name = "verdict_accuracy"
+    suite_name = VERDICT_ACCURACY_SUITE_NAME
     title = "판정 정확도"
     related_codes: tuple[str, ...] = ()
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config
         planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
-        context.report_progress(f"가상 사용자 {len(planned_users)}명 접속")
-        session_key_by_label, session_results = send_virtual_user_traffic(context, planned_users)
+        context.report_progress(f"VU {len(planned_users)} 접속")
+        session_key_by_label, session_results = send_planned_user_traffic(context, planned_users)
 
         answer_key = build_answer_key(planned_users, session_key_by_label)
         context.answer_key_repository.save(context.run_id, answer_key)  # QA DB만
-        context.report_progress(f"정답표 저장 · 세션 {len(answer_key)}개")
+        context.report_progress(f"Ground Truth 저장 · {len(answer_key)}세션")
 
         system_verdicts = context.system_target.verdict_reader.read_session_verdicts(context.run_id)
+        rule_hit_count_by_rule_id = read_rule_hit_counts_or_none(context)
+        context.report_progress(f"Verdict {len(system_verdicts)}", actor_progress=build_actor_progress(planned_users, {
+            SessionStep.ENTERED: Counter(answer_key.values()),
+            SessionStep.VERDICT_RECEIVED: Counter(answer_key[key] for key in answer_key if key in system_verdicts),
+        }))
         # 판정 API 응답 = 세션 시작 응답 · 실제 대상에서는 Locust 통계로 교체
         latency_values_sec = [result.latency_ms / 1000 for result in session_results]
         error_count = sum(1 for result in session_results if result.is_error)
@@ -80,5 +137,5 @@ class VerdictAccuracySuite:
             suite_name=self.suite_name,
             outcome=SuiteOutcome.PASSED,  # 측정 완료 · 합격은 합격 기준이 판단
             metrics=metrics,
-            details=build_result_details(answer_key, system_verdicts),
+            details={**build_result_details(answer_key, system_verdicts), "rule_hit_count_by_rule_id": rule_hit_count_by_rule_id},
         )

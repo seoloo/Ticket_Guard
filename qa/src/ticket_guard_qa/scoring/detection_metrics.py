@@ -1,6 +1,7 @@
 """탐지율 · 오탐률 · 놓친 봇 · 오탐 세션"""
 from collections.abc import Iterable
 
+from ticket_guard_qa.domain.detection_targets import DETECTION_TARGETS
 from ticket_guard_qa.domain.enums import ActorType, VerdictStage
 from ticket_guard_qa.domain.models import AnswerKey, SessionKey, SystemVerdicts
 
@@ -44,14 +45,9 @@ def find_false_positives(answer_key: AnswerKey, system_verdicts: SystemVerdicts)
 
 
 def calculate_detection_metrics(answer_key: AnswerKey, system_verdicts: SystemVerdicts) -> dict[str, float]:
-    """합격 기준 metric_name 그대로 반환 · 측정 안 된 값은 빠짐"""
+    """합격 기준 metric_name 그대로 반환 · 측정 안 된 값은 빠짐 · 묶음은 domain/detection_targets.py"""
     candidates = {
-        "bot_abd_detection_rate_percent": calculate_detection_rate_percent(
-            answer_key, system_verdicts, (ActorType.BOT_A, ActorType.BOT_B, ActorType.BOT_D)
-        ),
-        "bot_c_detection_rate_percent": calculate_detection_rate_percent(
-            answer_key, system_verdicts, (ActorType.BOT_C,)
-        ),
-        "human_false_positive_rate_percent": calculate_false_positive_rate_percent(answer_key, system_verdicts),
+        target.criterion.metric_name: calculate_detection_rate_percent(answer_key, system_verdicts, target.actor_types)
+        for target in DETECTION_TARGETS
     }
     return {name: value for name, value in candidates.items() if value is not None}

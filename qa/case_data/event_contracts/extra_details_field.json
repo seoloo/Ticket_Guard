@@ -1,0 +1,26 @@
+{
+  "description": "details 목록 밖 항목 · 관측 필드 보존 · 허용 (PR #12)",
+  "endpoint": "events",
+  "requests": [
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows",
+        "scrollDepthPercent": 40
+      }
+    }
+  ],
+  "expected_status_codes": [
+    "accepted"
+  ],
+  "expected_storage": {
+    "activity_event_count": 1,
+    "quarantine_reason_codes": []
+  }
+}

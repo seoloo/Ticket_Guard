@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% block title %}01 홈 · 티켓가드 QA{% endblock %}
+{% block title %}홈 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
   .hero { position: relative; border-radius: 22px; padding: 42px 48px; color: #fff; overflow: hidden;
@@ -24,7 +24,7 @@
   .choice-body h2 { margin: 10px 0 12px; font-size: 30px; font-weight: 800; letter-spacing: -.04em; }
   .choice-line { display: flex; align-items: center; gap: 8px; color: var(--strong-text-color); font-size: 15px; margin-bottom: 10px; }
   .choice-line .is-fail { color: var(--fail-red-text); font-weight: 800; }
-  .flow-chips { display: flex; align-items: center; gap: 6px; margin: 14px 0 18px; color: var(--muted-text-color); }
+  .flow-chips { display: flex; align-items: center; gap: 6px; margin: 14px 0 18px; color: var(--muted-text-color); flex-wrap: wrap; }
   .flow-chips .tag { font-size: 13px; padding: 5px 10px; }
   .first-steps { padding: 24px; }
   .first-step { display: flex; gap: 12px; margin-top: 16px; }
@@ -39,29 +39,30 @@
 {% block content %}
 <section class="hero">
   <div>
-    <h1>무엇을 확인할까요?</h1>
-    <p>시험을 돌리거나, 시스템이 남긴 데이터를 바로 찾아보세요.</p>
+    <h1>QA 운영 현황</h1>
+    <p>테스트 실행 · 시스템 데이터 검증</p>
     <form class="hero-search" action="{{ base_path }}/search" method="get">
       <i data-lucide="search"></i>
-      <input name="q" placeholder="실행 번호, 세션 키로 검색" aria-label="통합 검색">
+      <input name="q" placeholder="Run ID · 세션 키 검색" aria-label="통합 검색">
       <button type="submit" aria-label="검색"><i data-lucide="search"></i></button>
     </form>
   </div>
   <div class="status-panel">
-    <div class="status-title">지금 상태</div>
+    <div class="status-title">현재 상태</div>
     {% if latest_summary %}
-    <div class="status-row"><span>마지막 실행</span><b>{{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</b></div>
-    <div class="status-row"><span>합격 기준</span><b>{{ criteria_total }}개 중 {{ latest_summary.passed_criteria_count }}개 통과</b></div>
-    <div class="status-row"><span>정답과 다른 판정</span><b class="is-warning">{{ '-' if mismatch_count is none else mismatch_count ~ '건' }}</b></div>
+    <div class="status-row"><span>최근 Run</span><b>{{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</b></div>
+    <div class="status-row"><span>최종 판정</span><b>{{ {'PASSED': 'PASS', 'FAILED': 'FAIL'}.get(latest_summary.status.value, latest_summary.status.value) }} · Suite 통과 {{ latest_summary.passed_suite_count }}/{{ latest_summary.suite_results | length }}</b></div>
+    <div class="status-row"><span>합격 기준</span><b>측정 {{ latest_summary.measured_criteria_count }}/{{ criteria_total }} · 실패 {{ latest_summary.failed_criteria_count }}</b></div>
+    <div class="status-row"><span>오분류 판정</span><b class="is-warning">{{ '-' if mismatch_count is none else mismatch_count ~ '건' }}</b></div>
     {% else %}
-    <div class="status-row"><span>마지막 실행</span><b>아직 없음</b></div>
-    <div class="status-row"><span>처음이라면</span><b>자체 점검부터</b></div>
+    <div class="status-row"><span>최근 Run</span><b>없음</b></div>
+    <div class="status-row"><span>권장 시작</span><b>Self-check</b></div>
     {% endif %}
   </div>
 </section>
 
 {% if active_run_id %}
-<a class="notice is-qa" style="margin-top:18px" href="{{ base_path }}/runs/{{ active_run_id }}/live"><i data-lucide="loader"></i>지금 실행 중: {{ active_run_id }} · 실행 화면으로</a>
+<a class="notice is-qa" style="margin-top:18px" href="{{ base_path }}/runs/{{ active_run_id }}/live"><i data-lucide="loader"></i>실행 중 Run {{ active_run_id }} · Run 모니터</a>
 {% endif %}
 
 <div class="choice-grid">
@@ -69,57 +70,65 @@
     <div class="choice-visual is-qa"><i data-lucide="flask-conical"></i>QA</div>
     <div class="choice-body">
       <span class="tag is-qa">QA 대시보드</span>
-      <h2>시험하기</h2>
+      <h2>테스트 실행</h2>
       {% if latest_summary %}
-      <div class="choice-line"><i data-lucide="history"></i>마지막 실행 {{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</div>
-      <div class="choice-line"><i data-lucide="circle-alert"></i>합격 기준 미달 <span class="is-fail">{{ latest_summary.failed_criteria_count }}건</span></div>
+      <div class="choice-line"><i data-lucide="history"></i>최근 Run {{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</div>
+      {% if latest_summary.status.value == 'FAILED' %}
+      <div class="choice-line" style="white-space:nowrap"><i data-lucide="circle-alert"></i><span class="is-fail">FAIL · Suite 실패 {{ latest_summary.failed_suite_count }}</span></div>
       {% else %}
-      <div class="choice-line"><i data-lucide="sparkles"></i>가짜 대상으로 바로 시작할 수 있어요</div>
+      <div class="choice-line" style="white-space:nowrap"><i data-lucide="circle-check"></i>{{ 'PASS' if latest_summary.status.value == 'PASSED' else latest_summary.status.value }} · Suite 통과 {{ latest_summary.passed_suite_count }}/{{ latest_summary.suite_results | length }}</div>
       {% endif %}
-      <div class="flow-chips"><span class="tag is-qa">조건 설정</span><i data-lucide="chevron-right"></i><span class="tag is-qa">실행</span><i data-lucide="chevron-right"></i><span class="tag is-qa">결과</span></div>
-      <a class="button is-wide" href="{{ base_path }}/runs/new">시험 시작하기<i data-lucide="chevron-right"></i></a>
+      {% else %}
+      <div class="choice-line"><i data-lucide="sparkles"></i>Mock 대상 즉시 시작 가능</div>
+      {% endif %}
+      <div class="flow-chips"><span class="tag is-qa">Run 설정</span><i data-lucide="chevron-right"></i><span class="tag is-qa">Run 모니터</span><i data-lucide="chevron-right"></i><span class="tag is-qa">Run 리포트</span></div>
+      <a class="button is-wide" href="{{ base_path }}/runs/new">테스트 시작<i data-lucide="chevron-right"></i></a>
     </div>
   </section>
   <section class="card choice-card">
     <div class="choice-visual is-db"><i data-lucide="database"></i>DB</div>
     <div class="choice-body">
       <span class="tag is-db">DB 대시보드</span>
-      <h2>확인하기</h2>
+      <h2>데이터 검증</h2>
       <div class="choice-line"><i data-lucide="layers"></i>Bronze · 격리 · Silver · Gold 기록</div>
       <div class="choice-line"><i data-lucide="lock"></i>읽기 전용 · 조회 계정</div>
-      <div class="flow-chips"><span class="tag is-db">세션 고르기</span><i data-lucide="chevron-right"></i><span class="tag is-db">정답 비교</span><i data-lucide="chevron-right"></i><span class="tag is-db">기록 확인</span></div>
-      <a class="button is-wide is-db" href="{{ base_path }}/db">DB 대시보드 열기<i data-lucide="chevron-right"></i></a>
+      <div class="flow-chips"><span class="tag is-db">세션 선택</span><i data-lucide="chevron-right"></i><span class="tag is-db">Ground Truth 비교</span><i data-lucide="chevron-right"></i><span class="tag is-db">DB 기록</span></div>
+      <a class="button is-wide is-db" href="{{ base_path }}/db">DB 대시보드<i data-lucide="chevron-right"></i></a>
     </div>
   </section>
   <section class="card first-steps">
-    <h3 class="section-heading"><i data-lucide="compass" style="color:var(--qa-blue)"></i>처음이라면</h3>
-    <div class="sub-text">이 순서로 한 번 따라 해 보세요</div>
-    <div class="first-step"><span class="step-number">1</span><div><b>가짜 대상으로 자체 점검</b><span class="muted">채점기가 맞는지 확인</span></div></div>
-    <div class="first-step"><span class="step-number">2</span><div><b>실제 대상으로 시험</b><span class="muted">조건 설정 → 실행 → 결과</span></div></div>
-    <div class="first-step"><span class="step-number">3</span><div><b>DB에서 원인 확인</b><span class="muted">정답과 다른 세션을 추적</span></div></div>
+    <h3 class="section-heading"><i data-lucide="compass" style="color:var(--qa-blue)"></i>온보딩 순서</h3>
+    <div class="sub-text">권장 진행 순서</div>
+    <div class="first-step"><span class="step-number">1</span><div><b>Mock 대상 Self-check</b><span class="muted">채점 로직 검증</span></div></div>
+    <div class="first-step"><span class="step-number">2</span><div><b>Live 대상 테스트</b><span class="muted">Run 설정 → Run 모니터 → Run 리포트</span></div></div>
+    <div class="first-step"><span class="step-number">3</span><div><b>DB 원인 분석</b><span class="muted">오분류 세션 추적</span></div></div>
   </section>
 </div>
 
-<h3 class="section-heading" style="margin-top:28px">이어서 하기</h3>
+<h3 class="section-heading" style="margin-top:28px">최근 작업</h3>
 <div class="continue-grid">
   {% if latest_summary %}
   <a class="card continue-card" href="{{ base_path }}/runs/{{ latest_summary.run_id }}">
+    {% if latest_summary.status.value == 'PASSED' %}
+    <span class="continue-icon" style="background:var(--pass-green-light);color:var(--pass-green)"><i data-lucide="circle-check"></i></span>
+    {% else %}
     <span class="continue-icon" style="background:var(--fail-red-light);color:var(--fail-red-text)"><i data-lucide="circle-alert"></i></span>
-    <span class="spacer"><b>{{ latest_summary.run_id[-11:] }} 결과 다시 보기</b><span class="muted">QA 대시보드 · 결과</span></span><i data-lucide="chevron-right"></i>
+    {% endif %}
+    <span class="spacer"><b>{{ latest_summary.run_id[-11:] }} Run 리포트</b><span class="muted">QA 대시보드 · Run 리포트</span></span><i data-lucide="chevron-right"></i>
   </a>
   {% if first_missed_session_key %}
   <a class="card continue-card" href="{{ base_path }}/db/sessions/{{ first_missed_session_key }}?run_id={{ latest_summary.run_id }}">
     <span class="continue-icon" style="background:var(--db-orange-light);color:var(--db-orange-text)"><i data-lucide="scan-search"></i></span>
-    <span class="spacer"><b>세션 {{ first_missed_session_key }} 추적</b><span class="muted">DB 대시보드 · 놓친 봇</span></span><i data-lucide="chevron-right"></i>
+    <span class="spacer"><b>세션 {{ first_missed_session_key }} 추적</b><span class="muted">DB 대시보드 · 미탐(FN)</span></span><i data-lucide="chevron-right"></i>
   </a>
   {% endif %}
   <a class="card continue-card" href="{{ base_path }}/runs/new?from_run_id={{ latest_summary.run_id }}">
     <span class="continue-icon" style="background:var(--qa-blue-light);color:var(--qa-blue-text)"><i data-lucide="refresh-cw"></i></span>
-    <span class="spacer"><b>{{ latest_summary.run_id[-11:] }}과 같은 조건으로 실행</b>
-      <span class="muted">{{ latest_summary.run_config.virtual_user_count }}명 · {{ latest_summary.run_config.duration_sec }}초{{ ' · 오픈 몰림' if latest_summary.run_config.is_open_burst }}</span></span><i data-lucide="chevron-right"></i>
+    <span class="spacer"><b>{{ latest_summary.run_id[-11:] }} 동일 조건 재실행</b>
+      <span class="muted">VU {{ latest_summary.run_config.virtual_user_count }} · {{ latest_summary.run_config.duration_sec }}초{{ ' · 버스트' if latest_summary.run_config.is_open_burst }}</span></span><i data-lucide="chevron-right"></i>
   </a>
   {% else %}
-  <div class="card continue-card"><span class="muted">아직 실행 기록이 없어요. 시험을 한 번 돌리면 여기에 이어서 할 일이 생겨요.</span></div>
+  <div class="card continue-card"><span class="muted">Run 기록 없음 · 첫 Run 이후 표시</span></div>
   {% endif %}
 </div>
 {% endblock %}

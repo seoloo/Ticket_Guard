@@ -3,24 +3,36 @@
   "endpoint": "events",
   "requests": [
     {
-      "schemaVersion": 1,
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
       "occurredAt": "{{now_minus_25_hours}}",
       "pageInstanceId": "qa-page-0001",
-      "showId": "blue-hour"
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      }
     },
     {
-      "schemaVersion": 1,
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
       "occurredAt": "{{now_plus_25_hours}}",
       "pageInstanceId": "qa-page-0001",
-      "showId": "blue-hour"
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "pageName": "detail",
+        "previousPageName": "shows"
+      }
     }
   ],
   "expected_status_codes": [
     400,
     400
-  ]
+  ],
+  "expected_storage": {
+    "activity_event_count": 0,
+    "quarantine_reason_codes": []
+  }
 }

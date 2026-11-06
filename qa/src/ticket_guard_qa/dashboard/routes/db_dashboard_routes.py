@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from ticket_guard_qa.dashboard.dependencies import render_screen
 from ticket_guard_qa.system_targets.live_mongo_reader import LiveMongoPipelineReader
 
-SYSTEM_DATABASE_NOT_READY_MESSAGE = "시스템 MongoDB 연결 전 · AGENTS.md 5장"
+SYSTEM_DATABASE_NOT_READY_MESSAGE = "시스템 MongoDB 미연결 · AGENTS.md 5장"
 
 router = APIRouter()
 

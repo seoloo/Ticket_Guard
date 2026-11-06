@@ -16,12 +16,12 @@ class HumanUser(HttpUser):
 
 class BotAUser(HumanUser):
     actor_type = ActorType.BOT_A
-    wait_time = between(0.05, 0.1)  # 오픈 즉시형
+    wait_time = between(0.05, 0.1)  # 고속 반복 매크로
 
 
 class BotBUser(HumanUser):
     actor_type = ActorType.BOT_B
-    wait_time = between(0.37, 0.43)  # 사람 흉내형 · 편차 작음
+    wait_time = between(0.37, 0.43)  # 위장 매크로 · 편차 작음
 
 
 class BotDUser(HumanUser):

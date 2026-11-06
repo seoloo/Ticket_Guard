@@ -1,10 +1,19 @@
-"""터미널 명령 · ticket-guard-qa run | list-suites | dashboard · 종료 코드 0 통과 / 1 실패 / 2 오류"""
+"""터미널 명령 · ticket-guard-qa run | list-suites | export-archive | copy-database | dashboard · 종료 코드 0 통과 / 1 실패 / 2 오류"""
 import argparse
+import json
 import sys
 
 from ticket_guard_qa.domain.enums import RunStatus, TargetKind
 from ticket_guard_qa.domain.models import RunConfig
+from ticket_guard_qa.qa_database.archive_export import (
+    DEFAULT_COLLECTION_NAMES,
+    EXPORT_COLLECTIONS,
+    MANIFEST_FILE_NAME,
+    ArchiveExportError,
+    export_archive,
+)
 from ticket_guard_qa.qa_database.database import create_qa_database_engine, create_session_factory
+from ticket_guard_qa.qa_database.database_copy import DatabaseCopyError, copy_qa_database
 from ticket_guard_qa.settings import load_settings
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunService
@@ -12,6 +21,7 @@ from ticket_guard_qa.test_suites.suite_registry import list_suites
 
 CONTAINER_HOST = "0.0.0.0"
 CONTAINER_PORT = 8000
+ARCHIVE_FOLDER_NAME = "archives"  # qa_data/archives · QA 볼륨 안 · 저장소 밖
 
 EXIT_CODE_BY_STATUS = {
     RunStatus.PASSED: 0,
@@ -32,6 +42,22 @@ def build_argument_parser() -> argparse.ArgumentParser:
     run_command.add_argument("--duration-sec", dest="duration_sec", type=int, default=300)
 
     commands.add_parser("list-suites", help="시험 묶음 목록")
+
+    archive_command = commands.add_parser(
+        "export-archive", help="QA 데이터 넘기기 · 끝난 Run → 컬렉션별 JSON (MongoDB 가져오기용) · QA 담당 승인 후에만"
+    )
+    archive_command.add_argument("--run", dest="run_ids", action="append", required=True, help="여러 번 지정 가능")
+    archive_command.add_argument("--recipient", required=True, help="받는 사람 · 기록용")
+    archive_command.add_argument("--reason", required=True, help="내보내는 이유 · 기록용")
+    archive_command.add_argument(
+        "--collection", dest="collection_names", action="append", choices=list(EXPORT_COLLECTIONS),
+        help=f"여러 번 지정 가능 · 기본 {' · '.join(DEFAULT_COLLECTION_NAMES)} · 정답표 · 봇 설정은 직접 지정",
+    )
+
+    copy_command = commands.add_parser(
+        "copy-database", help="QA DB 옮기기 · --source(예: SQLite) → 설정의 QA DB(PostgreSQL) · 대상이 비어 있을 때만"
+    )
+    copy_command.add_argument("--source", dest="source_url", required=True, help="예: sqlite:////qa/qa_data/qa.db")
 
     commands.add_parser("dashboard", help="QA 대시보드 띄우기 · 팀 compose 컨테이너 안에서만")
     return parser
@@ -56,6 +82,44 @@ def run_suites(arguments: argparse.Namespace) -> int:
     return EXIT_CODE_BY_STATUS[summary.status]
 
 
+def export_archive_files(arguments: argparse.Namespace) -> int:
+    settings = load_settings()
+    session_factory = create_session_factory(create_qa_database_engine(settings.qa_database_url))
+    try:
+        archive_folder = export_archive(
+            session_factory, arguments.run_ids, arguments.recipient, arguments.reason,
+            settings.report_output_dir.parent / ARCHIVE_FOLDER_NAME,
+            collection_names=tuple(arguments.collection_names or DEFAULT_COLLECTION_NAMES),
+        )
+    except ArchiveExportError as error:
+        print(f"내보내기 중단 · {error}")
+        return 2
+    manifest = json.loads((archive_folder / MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
+    print(f"{manifest['archiveId']} · Run {len(manifest['runIds'])}개 · {manifest['documentCounts']}")
+    print(f"  폴더: {archive_folder}")
+    if manifest["publishedBotVersionNumbers"]:
+        print(f"  공개 처리된 봇 버전: {manifest['publishedBotVersionNumbers']} · 다음 시험은 새 버전 · 새 시드")
+    print("  받는 쪽 가져오기 명령:")
+    for command in manifest["importCommands"]:
+        print(f"    {command}")
+    return 0
+
+
+def copy_database(arguments: argparse.Namespace) -> int:
+    settings = load_settings()
+    if arguments.source_url == settings.qa_database_url:
+        print("옮기기 중단 · 원본과 대상이 같음")
+        return 2
+    target_engine = create_qa_database_engine(settings.qa_database_url)
+    try:
+        copied_counts = copy_qa_database(create_qa_database_engine(arguments.source_url), target_engine)
+    except DatabaseCopyError as error:
+        print(f"옮기기 중단 · {error}")
+        return 2
+    print(f"대상 {target_engine.dialect.name} · " + " · ".join(f"{name} {count}" for name, count in copied_counts.items()))
+    return 0
+
+
 def print_suites() -> int:
     for suite in list_suites():
         print(f"{suite.suite_name:<20} {suite.title}")
@@ -78,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_suites(arguments)
     if arguments.command == "list-suites":
         return print_suites()
+    if arguments.command == "export-archive":
+        return export_archive_files(arguments)
+    if arguments.command == "copy-database":
+        return copy_database(arguments)
     return start_dashboard()
 
 

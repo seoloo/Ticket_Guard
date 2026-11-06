@@ -1,0 +1,25 @@
+{
+  "description": "브라우저 성능 관측 이벤트 · navigation_timing · 자유 형식 details (PR #12)",
+  "endpoint": "events",
+  "requests": [
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "navigation_timing",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {
+        "durationMs": 120,
+        "transferSize": 2048
+      }
+    }
+  ],
+  "expected_status_codes": [
+    "accepted"
+  ],
+  "expected_storage": {
+    "activity_event_count": 1,
+    "quarantine_reason_codes": []
+  }
+}

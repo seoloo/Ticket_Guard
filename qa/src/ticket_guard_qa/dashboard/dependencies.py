@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.domain.enums import TargetKind
-from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
+from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
 from ticket_guard_qa.settings import Settings
 from ticket_guard_qa.system_targets.target_factory import build_system_target
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
@@ -23,7 +23,7 @@ def require_admin(request: Request) -> None:
     """팀 입구(nginx)가 Django에 확인하고 붙인 헤더만 믿음 · A안"""
     admin_user = request.headers.get(ADMIN_USER_HEADER, "").strip()
     if not admin_user:
-        raise HTTPException(status_code=403, detail="관리자만 들어올 수 있어요.")
+        raise HTTPException(status_code=403, detail="관리자 권한 필요")
     request.state.admin_user = admin_user
 
 
@@ -46,10 +46,10 @@ class TargetStatusChecker:
         if self._cached_status and time.monotonic() - self._checked_at < TARGET_STATUS_CACHE_SEC:
             return self._cached_status
         if self.settings.target_kind is TargetKind.FAKE:
-            status = TargetStatus(TargetKind.FAKE, "가짜 대상", True)
+            status = TargetStatus(TargetKind.FAKE, "Mock", True)
         else:
             is_connected = build_system_target(self.settings).booking_api.check_health()
-            status = TargetStatus(TargetKind.LIVE, "실제 대상", is_connected)
+            status = TargetStatus(TargetKind.LIVE, "Live", is_connected)
         self._cached_status, self._checked_at = status, time.monotonic()
         return status
 
@@ -70,8 +70,8 @@ def get_answer_key_repository(request: Request) -> AnswerKeyRepository:
     return request.app.state.answer_key_repository
 
 
-def get_bot_profile_registry(request: Request) -> BotProfileRegistry:
-    return request.app.state.bot_profile_registry
+def get_bot_profile_store(request: Request) -> BotProfileStore:
+    return request.app.state.run_service.bot_profile_store  # 실행과 같은 저장소
 
 
 def build_page_url(request: Request, path: str) -> str:

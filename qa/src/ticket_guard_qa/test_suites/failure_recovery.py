@@ -5,7 +5,7 @@ from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 class FailureRecoverySuite:
     suite_name = "failure_recovery"
-    title = "장애 복구"
+    title = "장애 복구 테스트"
     related_codes: tuple[str, ...] = ()
 
     def run(self, context: SuiteContext) -> SuiteResult:

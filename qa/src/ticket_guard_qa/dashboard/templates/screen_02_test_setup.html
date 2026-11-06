@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% from "screen_parts.html" import test_steps %}
-{% block title %}02 시험 설정 · 티켓가드 QA{% endblock %}
+{% block title %}Run 설정 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
   .setup-grid { display: grid; grid-template-columns: 1fr 440px; gap: 24px; align-items: start; }
@@ -39,20 +39,20 @@
 {% block content %}
 <div class="setup-grid">
   <form id="setup-form" class="card card-padding" method="post" action="{{ base_path }}/runs">
-    <h1 class="page-heading">어떤 시험을 할까요?</h1>
-    <div class="sub-text" style="margin-bottom:10px">기본값은 기획서 합격 기준에 맞춰 채워 두었어요. 바꿀 것만 바꾸면 돼요.</div>
+    <h1 class="page-heading">Run 설정</h1>
+    <div class="sub-text" style="margin-bottom:10px">기본값 · 기획서 합격 기준 기준 · 필요한 항목만 변경</div>
     {% if error_message %}<div class="notice is-error"><i data-lucide="circle-alert"></i>{{ error_message }}</div>{% endif %}
 
     <div class="setup-row">
-      <div class="row-title">시험 대상</div>
+      <div class="row-title">테스트 대상</div>
       <div class="chips">
-        <label class="chip"><input type="radio" name="target_kind" value="fake" {{ 'checked' if run_config.target_kind.value == 'fake' }}><i data-lucide="flask-conical"></i>가짜 대상 <span class="chip-hint">시스템 없이</span></label>
-        <label class="chip"><input type="radio" name="target_kind" value="live" {{ 'checked' if run_config.target_kind.value == 'live' }}><i data-lucide="server"></i>실제 대상 <span class="chip-hint">지금의 Django</span></label>
+        <label class="chip"><input type="radio" name="target_kind" value="fake" {{ 'checked' if run_config.target_kind.value == 'fake' }}><i data-lucide="flask-conical"></i>Mock <span class="chip-hint">시스템 불필요</span></label>
+        <label class="chip"><input type="radio" name="target_kind" value="live" {{ 'checked' if run_config.target_kind.value == 'live' }}><i data-lucide="server"></i>Live <span class="chip-hint">현재 Django</span></label>
       </div>
     </div>
 
     <div class="setup-row">
-      <div><div class="row-title">시험 묶음</div><div class="row-hint">여러 개 고를 수 있어요</div></div>
+      <div><div class="row-title">Suite</div><div class="row-hint">복수 선택 가능</div></div>
       <div class="chips">
         {% for suite in suites %}
         <label class="chip is-multi"><input type="checkbox" name="suite_names" value="{{ suite.suite_name }}" {{ 'checked' if suite.suite_name in run_config.suite_names }}>{{ suite.title }}</label>
@@ -61,19 +61,19 @@
     </div>
 
     <div class="setup-row">
-      <div><div class="row-title">가상 사용자 수</div><div class="row-hint">동시에 접속하는 사람 · 봇</div></div>
+      <div><div class="row-title">가상 사용자(VU)</div><div class="row-hint">동시 접속 정상 트래픽 · 봇</div></div>
       <div class="user-count">
         <input id="user-range" type="range" min="10" max="1000" step="10" value="{{ run_config.virtual_user_count }}">
         <span class="big-number"><span id="user-count-text">{{ run_config.virtual_user_count }}</span>명</span>
         {% for preset in virtual_user_presets %}
         <button type="button" class="chip" data-user-preset="{{ preset }}">{{ preset }}</button>
         {% endfor %}
-        <input id="user-count-input" class="number-input" type="number" name="virtual_user_count" min="1" value="{{ run_config.virtual_user_count }}" aria-label="직접 입력">
+        <input id="user-count-input" class="number-input" type="number" name="virtual_user_count" min="1" value="{{ run_config.virtual_user_count }}" aria-label="수동 입력">
       </div>
     </div>
 
     <div class="setup-row">
-      <div><div class="row-title">시험 시간</div>{% if run_config.target_kind.value == 'fake' %}<div class="row-hint">가짜 대상은 {{ fake_run_duration_sec }}초만 흉내</div>{% endif %}</div>
+      <div><div class="row-title">테스트 시간</div>{% if run_config.target_kind.value == 'fake' %}<div class="row-hint">Mock · {{ fake_run_duration_sec }}초 시뮬레이션</div>{% endif %}</div>
       <div class="chips">
         {% for preset in duration_presets_sec %}
         <label class="chip"><input type="radio" name="duration_sec" value="{{ preset }}" {{ 'checked' if preset == run_config.duration_sec }}>{{ preset }}초</label>
@@ -85,10 +85,10 @@
     </div>
 
     <div class="setup-row">
-      <div><div class="row-title">트래픽 구성</div><div class="row-hint">정답표가 함께 생성돼요</div></div>
+      <div><div class="row-title">트래픽 구성</div><div class="row-hint">Ground Truth 자동 생성</div></div>
       <div>
         <div class="traffic-bar" id="traffic-bar">
-          <span data-share="human_percent" style="background:var(--bot-human)">사람</span>
+          <span data-share="human_percent" style="background:var(--bot-human)">정상</span>
           <span data-share="bot_a_percent" style="background:var(--bot-a)">A</span>
           <span data-share="bot_b_percent" style="background:var(--bot-b)">B</span>
           <span data-share="bot_c_percent" style="background:var(--bot-c)">C</span>
@@ -96,20 +96,24 @@
         </div>
         <div class="traffic-inputs">
           {% set mix = run_config.traffic_mix %}
-          <label>사람 <input type="number" min="0" max="100" name="human_percent" value="{{ mix.human_percent }}"></label>
+          <label>정상 <input type="number" min="0" max="100" name="human_percent" value="{{ mix.human_percent }}"></label>
           <label>봇 A <input type="number" min="0" max="100" name="bot_a_percent" value="{{ mix.bot_a_percent }}"></label>
           <label>봇 B <input type="number" min="0" max="100" name="bot_b_percent" value="{{ mix.bot_b_percent }}"></label>
           <label>봇 C <input type="number" min="0" max="100" name="bot_c_percent" value="{{ mix.bot_c_percent }}"></label>
           <label>봇 D <input type="number" min="0" max="100" name="bot_d_percent" value="{{ mix.bot_d_percent }}"></label>
           <span class="traffic-sum" id="traffic-sum"></span>
         </div>
-        <div class="row-hint" style="margin-top:6px">봇 A 오픈 즉시형 · B 사람 흉내형 · C 브라우저 자동화 · D 한 기기 다중 세션</div>
+        <div class="row" style="margin-top:6px">
+          <span class="row-hint">A 고속 반복 · B 위장 · C 브라우저 매크로 · D 세션 복제 · 최신 프로필 적용</span>
+          <span class="spacer"></span>
+          <a class="button is-soft is-small" href="{{ base_path }}/bots"><i data-lucide="bot"></i>봇 프로필</a>
+        </div>
       </div>
     </div>
 
     <div class="setup-row">
-      <div class="row-title">오픈 몰림</div>
-      <div class="row"><label class="switch"><input type="checkbox" name="is_open_burst" {{ 'checked' if run_config.is_open_burst }}><span></span></label>오픈 시각에 맞춰 <b>한꺼번에 진입</b> (T1 대기열 시험 포함)</div>
+      <div class="row-title">오픈 버스트</div>
+      <div class="row"><label class="switch"><input type="checkbox" name="is_open_burst" {{ 'checked' if run_config.is_open_burst }}><span></span></label>오픈 시각 <b>동시 진입</b> (T1 대기열 테스트 포함)</div>
     </div>
 
     <div class="setup-row">
@@ -127,34 +131,34 @@
         {% for criterion in pass_criteria %}
         <span class="criteria-chip">{{ criterion.title }} {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}</span>
         {% endfor %}
-        <span class="muted row"><i data-lucide="lock"></i>바꾸려면 관리자 승인</span>
+        <span class="muted row"><i data-lucide="lock"></i>변경 시 관리자 승인 필요</span>
       </div>
     </div>
   </form>
 
   <aside>
     <section class="card summary-panel">
-      <h2 class="section-heading" style="font-size:24px">실행 요약</h2>
+      <h2 class="section-heading" style="font-size:24px">Run 요약</h2>
       <div style="margin-top:14px">
         <div class="summary-row"><span>대상</span><b id="summary-target"></b></div>
-        <div class="summary-row"><span>시험 묶음</span><b id="summary-suites"></b></div>
-        <div class="summary-row"><span>정답표</span><b style="color:var(--pass-green)">자동 생성 ✓</b></div>
+        <div class="summary-row"><span>Suite</span><b id="summary-suites"></b></div>
+        <div class="summary-row"><span>Ground Truth</span><b style="color:var(--pass-green)">자동 생성 ✓</b></div>
         <div class="summary-row"><span>결과 알림</span><b id="summary-alert"></b></div>
       </div>
       <div class="summary-box">
         <div class="summary-row"><span>조건</span><b id="summary-condition"></b></div>
         <div class="summary-row"><span>예상 소요</span><b id="summary-duration" style="color:var(--qa-blue-text);font-size:20px"></b></div>
       </div>
-      <button class="button is-wide" type="submit" form="setup-form" {{ 'disabled' if active_run_id }}><i data-lucide="play"></i>시험 시작</button>
+      <button class="button is-wide" type="submit" form="setup-form" {{ 'disabled' if active_run_id }}><i data-lucide="play"></i>Run 시작</button>
       {% if latest_run_id %}
-      <div style="text-align:center;margin-top:14px"><a class="muted" href="{{ base_path }}/runs/new?from_run_id={{ latest_run_id }}">지난 조건 불러오기 · {{ latest_run_id[-11:] }}</a></div>
+      <div style="text-align:center;margin-top:14px"><a class="muted" href="{{ base_path }}/runs/new?from_run_id={{ latest_run_id }}">이전 Run 조건 불러오기 · {{ latest_run_id[-11:] }}</a></div>
       {% endif %}
     </section>
     {% if active_run_id %}
     <section class="card busy-card">
-      <b>다른 시험이 실행 중이에요</b>
-      <div class="busy-timer"><i data-lucide="clock"></i>{{ active_run_id[-11:] }} 끝나기까지 <b id="busy-remaining" data-remaining-sec="{{ active_run_remaining_sec or 0 }}">--:--</b></div>
-      <a class="button is-outline" style="width:100%" href="{{ base_path }}/runs/{{ active_run_id }}/live">실행 화면 보기</a>
+      <b>다른 Run 실행 중</b>
+      <div class="busy-timer"><i data-lucide="clock"></i>{{ active_run_id[-11:] }} 종료까지 <b id="busy-remaining" data-remaining-sec="{{ active_run_remaining_sec or 0 }}">--:--</b></div>
+      <a class="button is-outline" style="width:100%" href="{{ base_path }}/runs/{{ active_run_id }}/live">Run 모니터</a>
     </section>
     {% endif %}
   </aside>
@@ -201,11 +205,11 @@
     const targetKind = setupForm.elements.target_kind.value;
     const durationSec = Number(setupForm.elements.duration_sec.value);
     const expectedSec = targetKind === "fake" ? fakeRunDurationSec : durationSec;
-    document.getElementById("summary-target").textContent = targetKind === "fake" ? "가짜 대상" : "실제 대상";
-    document.getElementById("summary-suites").textContent = readCheckedLabels("suite_names").join(" · ") || "고르지 않음";
+    document.getElementById("summary-target").textContent = targetKind === "fake" ? "Mock" : "Live";
+    document.getElementById("summary-suites").textContent = readCheckedLabels("suite_names").join(" · ") || "미선택";
     document.getElementById("summary-alert").textContent = readCheckedLabels("alert_policy")[0] || "";
     document.getElementById("summary-condition").textContent =
-      `${userInput.value}명 · ${durationSec}초${setupForm.elements.is_open_burst.checked ? " · 오픈 몰림" : ""}`;
+      `VU ${userInput.value} · ${durationSec}초${setupForm.elements.is_open_burst.checked ? " · 버스트" : ""}`;
     document.getElementById("summary-duration").textContent = expectedSec < 60 ? `약 ${expectedSec}초` : `약 ${Math.round(expectedSec / 60)}분`;
   }
 

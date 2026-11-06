@@ -3,11 +3,20 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, NewType
 
-from ticket_guard_qa.domain.enums import AlertPolicy, ActorType, RunStatus, SuiteOutcome, TargetKind, VerdictStage
+from ticket_guard_qa.domain.enums import (
+    ActorType,
+    AlertPolicy,
+    BookingOutcome,
+    RunStatus,
+    SuiteOutcome,
+    TargetKind,
+    VerdictStage,
+)
 
 SessionKey = NewType("SessionKey", str)  # 지금은 bookingAttemptId · AGENTS.md 11장
 AnswerKey = dict[SessionKey, ActorType]
 SystemVerdicts = dict[SessionKey, VerdictStage]
+ActorProgress = dict[str, dict[str, int]]  # 종류 → {"PLANNED" · SessionStep 값: 사람 수} · B3
 
 
 @dataclass(frozen=True)
@@ -20,7 +29,7 @@ class TrafficMix:
 
     def __post_init__(self) -> None:
         if sum(self.percent_by_actor_type().values()) != 100:
-            raise ValueError("트래픽 구성 합계는 100이어야 해요.")
+            raise ValueError("트래픽 구성 합계 오류 · 100% 필요")
 
     def percent_by_actor_type(self) -> dict[ActorType, int]:
         return {
@@ -42,6 +51,7 @@ class RunConfig:
     random_seed: int = 20261103
     is_open_burst: bool = True  # 오픈 시각에 한꺼번에 진입 · T1
     alert_policy: AlertPolicy = AlertPolicy.ON_FAILURE
+    bot_version_numbers: dict[str, int] = field(default_factory=dict)  # 종류 → 봇 버전 · 실행 시작 때 채움
 
 
 @dataclass(frozen=True)
@@ -52,11 +62,65 @@ class PlannedUser:
 
 @dataclass(frozen=True)
 class SessionBehavior:
-    """시스템에 보내는 행동 값 · 사람 / 봇 여부는 담지 않음"""
+    """시스템에 보내는 행동 값 · 사람 / 봇 여부는 담지 않음 · 화면 입력 칸은 macro_bots/behavior_fields.py"""
     entry_delay_after_open_ms: int
+    entry_delay_deviation_ms: int
     click_interval_mean_ms: int
     click_interval_deviation_ms: int
     sessions_per_device: int
+
+
+@dataclass(frozen=True)
+class VirtualUserSessionPlan:
+    """VU 한 명의 실행 계획 · 행동 값에서 뽑은 실제 대기 시간 · 사람 / 봇 여부는 담지 않음"""
+    behavior: SessionBehavior
+    entry_delay_ms: float  # 오픈(T0) → 예매 시작
+    click_intervals_ms: tuple[float, ...]  # 좌석 클릭 간격 · 마지막 = 클릭 → 확정 · 재시도 때 반복 사용
+    preferred_seat_ids: tuple[str, ...]  # 고를 좌석 순서 · 팔린 좌석은 건너뜀
+
+
+@dataclass(frozen=True)
+class SessionVerdictRecord:
+    """SESSION_VERDICTS 한 행 · docs/contracts.md 3-1"""
+    booking_attempt_id: SessionKey
+    stage: VerdictStage
+    score: float
+    matched_rules: tuple[str, ...]  # R1 ~ R6
+    rule_set_version: str
+    decided_at: datetime
+
+
+@dataclass(frozen=True)
+class SessionFeatureRecord:
+    """SESSION_FEATURES 한 행 · 시스템이 계산한 세션 행동 값 · SessionBehavior와 1:1 대조"""
+    booking_attempt_id: SessionKey
+    entry_delay_after_open_ms: float
+    click_interval_mean_ms: float
+    click_interval_std_ms: float
+    sessions_per_device: int
+    event_count: int
+    window_start: datetime
+    window_end: datetime
+    computed_at: datetime  # Gold 반영 시각
+
+
+# 봇 파라미터 → SESSION_FEATURES 필드 · 집계 정확도 대조 · None = 세션 하나로는 계산 불가(세션 분포로 대조)
+FEATURE_FIELD_BY_BEHAVIOR_FIELD: dict[str, str | None] = {
+    "entry_delay_after_open_ms": "entry_delay_after_open_ms",
+    "entry_delay_deviation_ms": None,
+    "click_interval_mean_ms": "click_interval_mean_ms",
+    "click_interval_deviation_ms": "click_interval_std_ms",
+    "sessions_per_device": "sessions_per_device",
+}
+
+
+@dataclass(frozen=True)
+class QuarantineRecord:
+    """QUARANTINE_EVENTS 한 행 · 사유 코드는 docs/contracts.md 3-4"""
+    raw_event_id: str
+    stage: str
+    reason_code: str
+    quarantined_at: datetime
 
 
 @dataclass(frozen=True)
@@ -64,6 +128,11 @@ class VirtualUserSessionResult:
     session_key: SessionKey
     latency_ms: float
     is_error: bool
+    step_latency_ms: dict[str, float] = field(default_factory=dict)  # Live만 · login · start · queue · captcha · seat_select · confirm
+    failed_step: str | None = None  # 예: "verify · CAPTCHA_WRONG"
+    booking_outcome: BookingOutcome | None = None  # 오류면 None
+    booked_seat_ids: tuple[str, ...] = ()  # 중복 판매 확인
+    sent_event_ids: tuple[str, ...] = ()  # VU가 직접 보낸 브라우저 이벤트 · 이벤트 전달 검증 대조
 
 
 @dataclass(frozen=True)
@@ -82,12 +151,17 @@ class CriterionResult:
     is_passed: bool | None
 
 
+MESSAGE_LINE_SEPARATOR = "\n"  # Suite 메시지 · 한 줄 = 한 항목 · 04 화면 목록
+FAIL_LINE_PREFIX = "FAIL: "
+REFERENCE_LINE_PREFIX = "참고: "
+
+
 @dataclass
 class SuiteResult:
     suite_name: str
     outcome: SuiteOutcome
     metrics: dict[str, float] = field(default_factory=dict)
-    message: str = ""
+    message: str = ""  # 여러 항목은 MESSAGE_LINE_SEPARATOR로 구분
     details: dict[str, Any] = field(default_factory=dict)  # 화면용 · 놓친 세션 · 정답 × 판정 표
 
 
@@ -108,6 +182,18 @@ class RunSummary:
     @property
     def failed_criteria_count(self) -> int:
         return sum(1 for result in self.criterion_results if result.is_passed is False)
+
+    @property
+    def measured_criteria_count(self) -> int:
+        return sum(1 for result in self.criterion_results if result.is_passed is not None)
+
+    @property
+    def failed_suite_count(self) -> int:
+        return sum(1 for result in self.suite_results if result.outcome in (SuiteOutcome.FAILED, SuiteOutcome.ERROR))
+
+    @property
+    def passed_suite_count(self) -> int:
+        return sum(1 for result in self.suite_results if result.outcome is SuiteOutcome.PASSED)
 
     def find_suite_result(self, suite_name: str) -> SuiteResult | None:
         return next((result for result in self.suite_results if result.suite_name == suite_name), None)
@@ -138,4 +224,9 @@ def run_config_from_dict(raw: dict[str, Any]) -> RunConfig:
         random_seed=raw["random_seed"],
         is_open_burst=raw.get("is_open_burst", True),  # 이전 기록 호환
         alert_policy=AlertPolicy(raw.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
+        bot_version_numbers=raw.get("bot_version_numbers", {}),
     )
+
+
+def verdicts_from_records(records: list[SessionVerdictRecord]) -> SystemVerdicts:
+    return {record.booking_attempt_id: record.stage for record in records}

@@ -8,10 +8,10 @@ from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunServ
 
 def test_unfinished_suite_is_skipped_not_failed(qa_settings, session_factory):
     run_service = RunService(qa_settings, session_factory, RunProgressStream())
-    summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", "seat_concurrency")))
+    summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", "load_capacity")))
 
     outcome_by_suite = {result.suite_name: result.outcome for result in summary.suite_results}
-    assert outcome_by_suite == {"self_check": SuiteOutcome.PASSED, "seat_concurrency": SuiteOutcome.SKIPPED}
+    assert outcome_by_suite == {"self_check": SuiteOutcome.PASSED, "load_capacity": SuiteOutcome.SKIPPED}
     assert summary.status is RunStatus.PASSED
     assert run_service.run_repository.get_summary(summary.run_id).status is RunStatus.PASSED
     assert (qa_settings.report_output_dir / f"{summary.run_id}.html").exists()

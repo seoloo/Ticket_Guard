@@ -1,0 +1,21 @@
+{
+  "description": "details 없음 · 종류별 필수 항목 누락",
+  "endpoint": "events",
+  "requests": [
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "page_enter",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour"
+    }
+  ],
+  "expected_status_codes": [
+    400
+  ],
+  "expected_storage": {
+    "activity_event_count": 0,
+    "quarantine_reason_codes": []
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "description": "브라우저 성능 관측 이벤트 · 빈 details · 거부 (PR #12)",
+  "endpoint": "events",
+  "requests": [
+    {
+      "eventId": "{{event_id}}",
+      "eventType": "navigation_timing",
+      "occurredAt": "{{now}}",
+      "pageInstanceId": "qa-page-0001",
+      "pageViewId": "{{page_view_id}}",
+      "showId": "blue-hour",
+      "details": {}
+    }
+  ],
+  "expected_status_codes": [
+    400
+  ],
+  "expected_storage": {
+    "activity_event_count": 0,
+    "quarantine_reason_codes": []
+  }
+}
