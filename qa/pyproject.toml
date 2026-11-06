@@ -20,6 +20,7 @@ dashboard = [
     "jinja2==3.1.5",
     "python-multipart==0.0.20",
     "confluent-kafka==2.16.1",
+    "psycopg[binary]==3.2.3",
 ]
 load = ["locust==2.32.4"]
 browser = ["playwright==1.49.1"]

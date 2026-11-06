@@ -73,6 +73,14 @@ main ← develop ← qa   (qa/ 만)
   - QA 대시보드는 **팀 compose(`compose.gateway.yml`)의 `qa-dashboard` 컨테이너로만** 띄워요. 내 PC 포트를 따로 열지 않아요. 화면 확인: `127.0.0.1:8000`에서 관리자로 로그인.
   - 컨테이너는 서로 포트 공간이 달라서 `web`과 `qa-dashboard`가 둘 다 안쪽 8000을 써도 충돌하지 않아요.
   - `TICKET_GUARD_QA_SYSTEM_BASE_URL`(컨테이너 안에서는 `http://web:8000`)은 시험 대상 주소예요.
+- **팀 DB 포트 (2026-11-06 main 기준)**: 전부 `127.0.0.1`만 · 필요할 때만 여는 별도 파일(`*.local.yml`)
+
+  | 내 PC 포트 | 무엇 | 담당 · 파일 |
+  |---|---|---|
+  | 8000 | 팀 입구 | 공통 · `compose.gateway.yml` |
+  | 27017 | 시스템 MongoDB (`MONGO_HOST_PORT`) | db · `mongo/compose.local.yml` |
+  | 27020 | 원본 MongoDB (`ticketguard_raw`) | db · `compose.raw.local.yml` |
+  | 15432 | QA DB PostgreSQL (`QA_POSTGRES_HOST_PORT`) · 컨테이너 안 5432 | qa · `qa/compose.qa-db.local.yml` |
 - **커밋 제목**: `[QA] 무엇을 했는지` (예: `[QA] add fake verdict api`)
 - **PR 체크리스트**
   - [ ] 정답표 · 봇 설정이 포함되지 않았다
@@ -99,7 +107,7 @@ main ← develop ← qa   (qa/ 만)
 | 저장소 | 시스템 | QA |
 |---|---|---|
 | 시스템 MongoDB (`ticketguard`) · 운영 데이터 구조만 | 읽기 · 쓰기 | **읽기만** |
-| QA DB (정답표 · 봇 설정 · 실행 기록 · 점수) · 지금 SQLite · 서버 배포 시 PostgreSQL | **접근 못 함** | 읽기 · 쓰기 |
+| QA DB (정답표 · 봇 설정 · 실행 기록 · 점수) · PostgreSQL `qa-postgres` (`qa/compose.qa-db.yml` · `qa-backend` 네트워크) · SQLite는 단위 테스트 · 단독 실행용 | **접근 못 함** | 읽기 · 쓰기 |
 | QA 전달용 (`ticketguard_qa_archive` 또는 JSON 파일) · 요청 시에만 | 분석 담당만 읽기 · 판정 코드 읽기 금지 | 만듦 |
 | 실행 보고서 | 볼 수 있음 | 만듦 |
 
@@ -228,10 +236,9 @@ SEAT_HOLD_TIMEOUT_SEC = 300      # 좌석 점유 5분 · E16
 ## 11. 열린 결정
 
 - [x] 매크로 봇 화면 연결 확정 (`docs/ui.md` 매크로 봇) · 2026-11-04
-- [ ] QA DB를 SQLite로 시작할지 확정
+- [x] QA DB = PostgreSQL · 컨테이너 안 5432 · 내 PC 15432 (팀 8000 · 27017 · 27020과 분리) · 2026-11-06
 - [ ] 판정 결과를 어느 컬렉션에 저장할지 (db 팀과)
 - [ ] QA가 읽을 운영 필드 확인 (`bookingAttemptId` · 처리 시각 · `ruleSetVersion`) · QA 읽기 전용 계정 (db 팀 · Issue)
-- [ ] QA DB를 PostgreSQL로 옮기는 시점 (서버 배포 · 팀원 직접 조회 필요할 때)
 - [ ] Redis를 쓸지 (좌석 점유 시험 E16 여부가 달라짐)
 - [ ] 세션 구분 키: 기획서의 `session_hash`인지, 시스템의 `bookingAttemptId`인지
 - [ ] MongoDB가 붙는 시점 (QA가 실제 대상으로 넘어가는 시점)
