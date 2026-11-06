@@ -51,7 +51,8 @@
     <div class="status-title">현재 상태</div>
     {% if latest_summary %}
     <div class="status-row"><span>최근 Run</span><b>{{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</b></div>
-    <div class="status-row"><span>합격 기준</span><b>PASS {{ latest_summary.passed_criteria_count }} / {{ criteria_total }}</b></div>
+    <div class="status-row"><span>최종 판정</span><b>{{ {'PASSED': 'PASS', 'FAILED': 'FAIL'}.get(latest_summary.status.value, latest_summary.status.value) }} · Suite 통과 {{ latest_summary.passed_suite_count }}/{{ latest_summary.suite_results | length }}</b></div>
+    <div class="status-row"><span>합격 기준</span><b>측정 {{ latest_summary.measured_criteria_count }}/{{ criteria_total }} · 실패 {{ latest_summary.failed_criteria_count }}</b></div>
     <div class="status-row"><span>오분류 판정</span><b class="is-warning">{{ '-' if mismatch_count is none else mismatch_count ~ '건' }}</b></div>
     {% else %}
     <div class="status-row"><span>최근 Run</span><b>없음</b></div>
@@ -73,9 +74,9 @@
       {% if latest_summary %}
       <div class="choice-line"><i data-lucide="history"></i>최근 Run {{ latest_summary.run_id[-11:] }} · {{ latest_summary.started_at | time_ago }}</div>
       {% if latest_summary.status.value == 'FAILED' %}
-      <div class="choice-line"><i data-lucide="circle-alert"></i><span class="is-fail">FAIL · {{ latest_summary | verdict_detail }}</span></div>
+      <div class="choice-line" style="white-space:nowrap"><i data-lucide="circle-alert"></i><span class="is-fail">FAIL · Suite 실패 {{ latest_summary.failed_suite_count }}</span></div>
       {% else %}
-      <div class="choice-line"><i data-lucide="circle-check"></i>{{ 'PASS' if latest_summary.status.value == 'PASSED' else latest_summary.status.value }} · {{ latest_summary | verdict_detail }}</div>
+      <div class="choice-line" style="white-space:nowrap"><i data-lucide="circle-check"></i>{{ 'PASS' if latest_summary.status.value == 'PASSED' else latest_summary.status.value }} · Suite 통과 {{ latest_summary.passed_suite_count }}/{{ latest_summary.suite_results | length }}</div>
       {% endif %}
       {% else %}
       <div class="choice-line"><i data-lucide="sparkles"></i>Mock 대상 즉시 시작 가능</div>
@@ -108,7 +109,11 @@
 <div class="continue-grid">
   {% if latest_summary %}
   <a class="card continue-card" href="{{ base_path }}/runs/{{ latest_summary.run_id }}">
+    {% if latest_summary.status.value == 'PASSED' %}
+    <span class="continue-icon" style="background:var(--pass-green-light);color:var(--pass-green)"><i data-lucide="circle-check"></i></span>
+    {% else %}
     <span class="continue-icon" style="background:var(--fail-red-light);color:var(--fail-red-text)"><i data-lucide="circle-alert"></i></span>
+    {% endif %}
     <span class="spacer"><b>{{ latest_summary.run_id[-11:] }} Run 리포트</b><span class="muted">QA 대시보드 · Run 리포트</span></span><i data-lucide="chevron-right"></i>
   </a>
   {% if first_missed_session_key %}

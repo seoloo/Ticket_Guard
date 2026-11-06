@@ -6,28 +6,51 @@
   .result-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
   .result-main { padding: 30px 32px; }
   .result-head { display: flex; align-items: flex-start; gap: 12px; }
-  .score-box { display: grid; grid-template-columns: 1fr 1fr; background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 18px; padding: 24px; margin: 22px 0; text-align: center; }
-  .score-box > div + div { border-left: 1px solid var(--line-color); }
-  .score-label { font-size: 17px; font-weight: 700; }
-  .score-number { font-size: 76px; font-weight: 800; color: var(--qa-blue); letter-spacing: -.05em; line-height: 1.05; }
-  .score-total { font-size: 30px; font-weight: 800; color: var(--sub-text-color); }
-  .final-pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 14px 30px; font-size: 32px; font-weight: 800; margin-top: 14px; }
-  .final-pill svg { width: 30px; height: 30px; }
+  .report-actions { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+  .score-label { font-size: 15px; font-weight: 800; color: var(--sub-text-color); white-space: nowrap; }
+  .verdict-box { display: grid; grid-template-columns: minmax(250px, auto) minmax(0, 1fr); background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 18px; margin: 22px 0; }
+  .verdict-box > div { padding: 20px 24px; min-width: 0; }
+  .verdict-side { border-right: 1px solid var(--line-color); }
+  .final-pill { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 10px 26px; font-size: 28px; font-weight: 800; margin-top: 10px; white-space: nowrap; }
+  .final-pill svg { width: 26px; height: 26px; }
   .final-pill.is-failed { background: var(--fail-red-light); color: var(--fail-red-text); }
   .final-pill.is-passed { background: var(--pass-green-light); color: var(--pass-green); }
   .final-pill.is-other { background: var(--db-orange-light); color: var(--db-orange-text); }
-  .final-pill small { font-size: 18px; font-weight: 800; opacity: .85; }
-  .message-lines { list-style: none; margin: 0; padding: 0; }
-  .message-lines li { position: relative; padding-left: 13px; line-height: 1.7; }
-  .message-lines li::before { content: ""; position: absolute; left: 1px; top: 11px; width: 5px; height: 5px; border-radius: 50%; background: #9AA5B8; }
-  .message-lines li.is-fail { color: var(--fail-red-text); font-weight: 700; }
-  .message-lines li.is-fail::before { background: var(--fail-red); }
-  .message-lines .line-tag { display: inline-block; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 6px; margin-right: 6px; background: var(--gray-chip-background); color: var(--sub-text-color); }
-  .message-lines li.is-fail .line-tag { background: var(--fail-red-light); color: var(--fail-red-text); }
-  .criteria-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-  .metric-card.is-not-measured .metric-value { font-size: 18px; margin-top: 8px; }
-  .report-card { background: #FAFBFD; }
-  .report-card .report-links { display: flex; gap: 8px; margin-top: 12px; }
+  .verdict-chips { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .verdict-chip { font-size: 12.5px; font-weight: 800; border-radius: 999px; padding: 4px 11px; background: #fff; border: 1px solid var(--line-color); color: var(--sub-text-color); white-space: nowrap; }
+  .verdict-chip.is-passed { color: var(--pass-green); border-color: #BFE6CD; }
+  .verdict-chip.is-failed { color: var(--fail-red-text); border-color: #F6C2C4; }
+  .criteria-bar { display: flex; gap: 5px; margin-top: 10px; }
+  .criteria-segment { flex: 1; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; }
+  .criteria-segment.is-pass { background: var(--pass-green); }
+  .criteria-segment.is-fail { background: var(--fail-red); }
+  .criteria-segment.is-skip { background: #D5DBE5; color: #6B7280; }
+  .criteria-segment.is-blocked { background: var(--db-orange-light); border: 2px dashed #F3B48A; color: var(--db-orange-text); }
+  .criteria-legend { display: flex; gap: 14px; margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--sub-text-color); white-space: nowrap; }
+  .status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  .status-dot.is-pass { background: var(--pass-green); } .status-dot.is-fail { background: var(--fail-red); }
+  .status-dot.is-skip { background: #D5DBE5; } .status-dot.is-blocked { background: var(--db-orange); }
+  .block-heading { margin: 24px 0 10px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .heading-tag { font-size: 11.5px; font-weight: 800; border-radius: 6px; padding: 2px 8px; background: var(--gray-chip-background); color: var(--sub-text-color); }
+  .suite-check-table td.suite-name { white-space: nowrap; font-weight: 700; }
+  .run-description { font-size: 16px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .suite-check-table { table-layout: fixed; width: 100%; }
+  .suite-check-table th:nth-child(1) { width: 150px; } .suite-check-table th:nth-child(2) { width: 76px; }
+  .check-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .check-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; font-weight: 700; border-radius: 8px; padding: 3px 9px; background: var(--qa-blue-soft); border: 1px solid var(--line-color); color: var(--text-color); white-space: nowrap; }
+  .check-chip b { margin-right: 6px; font-size: 11px; }
+  .check-chip.is-fail { background: var(--fail-red-light); border-color: #F6C2C4; color: var(--fail-red-text); }
+  .check-chip.is-ref { background: var(--gray-chip-background); color: var(--sub-text-color); }
+  .criteria-card { margin-top: 24px; padding: 24px 28px; }
+  .criteria-table th, .criteria-table td { white-space: nowrap; }
+  .criteria-table td.criteria-number { width: 32px; text-align: center; font-weight: 800; color: var(--muted-text-color, #8A94A6); }
+  .criteria-term { display: block; font-size: 12px; color: #8A94A6; margin-top: 2px; }
+  .criteria-table td.strong { font-weight: 800; }
+  .status-chip { display: inline-block; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .status-chip.is-pass { background: var(--pass-green-light); color: var(--pass-green); }
+  .status-chip.is-fail { background: var(--fail-red-light); color: var(--fail-red-text); }
+  .status-chip.is-skip { background: var(--gray-chip-background); color: #6B7280; }
+  .status-chip.is-blocked { background: var(--db-orange-light); color: var(--db-orange-text); }
   .side-card { padding: 26px 28px; }
   .failure-card { border-color: #F6C2C4; background: #FFFAFA; }
   .failure-card .failure-head { display: flex; gap: 16px; align-items: center; margin-bottom: 18px; }
@@ -56,63 +79,62 @@
     <div class="result-head">
       <div class="spacer">
         <h1 class="page-heading" style="font-size:38px">Run 리포트</h1>
-        <div class="sub-text" style="font-size:16px">Run {{ summary.run_id }} ·
-          {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}
-          · {{ 'Mock' if run_config.target_kind.value == 'fake' else 'Live' }} · VU {{ run_config.virtual_user_count }}</div>
       </div>
-      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color);padding:7px 12px"><i data-lucide="file-check"></i>리포트 자동 저장</span>
+      <div class="report-actions">
+        <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color);padding:7px 12px"><i data-lucide="file-check"></i>리포트 자동 저장</span>
+        <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.html" target="_blank">HTML</a>
+        <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.json" target="_blank">JSON</a>
+      </div>
     </div>
+    {% set suite_titles = [] %}{% for suite_name in run_config.suite_names %}{% set _ = suite_titles.append(suite_title_by_name.get(suite_name, suite_name)) %}{% endfor %}
+    {% set run_description = 'Run ' ~ summary.run_id ~ ' · ' ~ (suite_titles | join(' · ')) ~ ' · ' ~ ('Mock' if run_config.target_kind.value == 'fake' else 'Live') ~ ' · VU ' ~ run_config.virtual_user_count %}
+    <div class="sub-text run-description" title="{{ run_description }}">{{ run_description }}</div>
 
-    <div class="score-box">
-      <div><div class="score-label">PASS 합격 기준</div><span class="score-number">{{ summary.passed_criteria_count }}</span><span class="score-total"> / {{ criterion_cards | length }}</span></div>
-      <div><div class="score-label">최종 판정</div>
+    <div class="verdict-box">
+      <div class="verdict-side">
+        <div class="score-label">최종 판정</div>
         {% if summary.status.value == 'FAILED' %}
-        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>FAIL<small>· {{ summary | verdict_detail }}</small></span>
+        <span class="final-pill is-failed"><i data-lucide="circle-x"></i>FAIL</span>
         {% elif summary.status.value == 'PASSED' %}
-        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>PASS<small>· {{ summary | verdict_detail }}</small></span>
+        <span class="final-pill is-passed"><i data-lucide="circle-check"></i>PASS</span>
         {% else %}
         <span class="final-pill is-other"><i data-lucide="circle-alert"></i>{{ 'CANCELLED' if summary.status.value == 'CANCELLED' else 'ERROR' }}</span>
         {% endif %}
-      </div>
-    </div>
-
-    <div class="criteria-grid">
-      {% for card in criterion_cards %}
-      {% set result = card.result %}
-      <div class="metric-card {{ 'is-not-measured' if result.is_passed is none else ('is-passed' if result.is_passed else 'is-failed') }}">
-        <div class="metric-label">{{ card.criterion.title }}</div>
-        <div class="metric-value">{{ result.measured_value | metric(card.criterion.metric_name) if result.measured_value is not none else 'N/A' }}</div>
-        <div class="metric-check">
-          {% if result.is_passed is none %}<i data-lucide="minus"></i>{% elif result.is_passed %}<i data-lucide="check"></i>{% else %}<i data-lucide="x"></i>{% endif %}
-          {{ card.criterion.comparison.value | threshold(card.criterion.threshold, card.criterion.metric_name) }}
+        <div class="verdict-chips">
+          {% if summary.status.value == 'FAILED' %}
+          <span class="verdict-chip {{ 'is-failed' if summary.failed_suite_count }}">Suite 실패 {{ summary.failed_suite_count }}</span>
+          <span class="verdict-chip {{ 'is-failed' if summary.failed_criteria_count }}">합격 기준 실패 {{ summary.failed_criteria_count }}</span>
+          {% else %}
+          <span class="verdict-chip is-passed">Suite 통과 {{ summary.passed_suite_count }}/{{ summary.suite_results | length }}</span>
+          <span class="verdict-chip">합격 기준 측정 {{ summary.measured_criteria_count }}/{{ criterion_rows | length }}</span>
+          {% endif %}
         </div>
       </div>
-      {% endfor %}
-      <div class="metric-card report-card">
-        <div class="metric-label">리포트</div>
-        <div class="report-links">
-          <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.html" target="_blank">HTML</a>
-          <a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/report.json" target="_blank">JSON</a>
+      <div class="criteria-side">
+        <div class="score-label">합격 기준 {{ criterion_rows | length }}개 · 기획서 목표치</div>
+        <div class="criteria-bar">
+          {% for row in criterion_rows %}<span class="criteria-segment is-{{ row.status.value }}" title="{{ row.number }} · {{ row.criterion.display_name }} · {{ criterion_status_titles[row.status] }}">{{ row.number }}</span>{% endfor %}
+        </div>
+        <div class="criteria-legend">
+          {% for status, count in criterion_status_counts.items() %}<span><i class="status-dot is-{{ status.value }}"></i>{{ criterion_status_titles[status] }} {{ count }}</span>{% endfor %}
         </div>
       </div>
     </div>
 
-    <h3 class="section-heading" style="margin:26px 0 10px;font-size:16px">Suite 결과</h3>
-    <table class="result-table">
-      <tr><th>Suite</th><th>결과</th><th>메시지</th></tr>
+    <h3 class="section-heading block-heading">Suite 자체 검증<span class="heading-tag">Suite마다 고유 검사</span></h3>
+    <table class="result-table suite-check-table">
+      <tr><th>Suite</th><th>결과</th><th>검사 항목</th></tr>
       {% for result in summary.suite_results %}
       <tr>
-        <td>{{ suite_title_by_name.get(result.suite_name, result.suite_name) }}</td>
-        <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': 'PASS', 'FAILED': 'FAIL', 'SKIPPED': 'SKIP', 'ERROR': 'ERROR'}[result.outcome.value] }}</span></td>
-        <td class="muted">
+        <td class="suite-name">{{ suite_title_by_name.get(result.suite_name, result.suite_name) }}</td>
+        <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': '통과', 'FAILED': '실패', 'SKIPPED': '건너뜀', 'ERROR': '오류'}[result.outcome.value] }}</span></td>
+        <td>
           {% set lines = result.message | message_lines %}
           {% if lines %}
-          <ul class="message-lines">
-            {% for kind, text in lines %}
-            <li class="is-{{ kind }}">{% if kind != 'info' %}<span class="line-tag">{{ 'FAIL' if kind == 'fail' else '참고' }}</span>{% endif %}{{ text }}</li>
-            {% endfor %}
-          </ul>
-          {% else %}-{% endif %}
+          <div class="check-chips">
+            {% for kind, text in lines %}<span class="check-chip is-{{ kind }}" title="{{ text }}">{% if kind != 'info' %}<b>{{ 'FAIL' if kind == 'fail' else '참고' }}</b>{% endif %}{{ text }}</span>{% endfor %}
+          </div>
+          {% else %}<span class="muted">-</span>{% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -124,7 +146,7 @@
     <section class="card side-card failure-card">
       <div class="failure-head">
         <span class="failure-icon"><i data-lucide="circle-alert"></i></span>
-        <div><h2 class="section-heading" style="font-size:24px">{{ first_failed_card.criterion.title }} · FAIL</h2>
+        <div><h2 class="section-heading" style="font-size:24px">{{ first_failed_card.criterion.display_name }} · 실패</h2>
           <div class="sub-text" style="font-size:16px"><b style="color:var(--fail-red-text)">{{ first_failed_card.result.measured_value | metric(first_failed_card.criterion.metric_name) }}</b>
             · 기준선 {{ first_failed_card.criterion.comparison.value | threshold(first_failed_card.criterion.threshold, first_failed_card.criterion.metric_name) }}</div></div>
       </div>
@@ -133,8 +155,8 @@
     </section>
     {% else %}
     <section class="card side-card pass-card">
-      <h2 class="section-heading" style="font-size:24px"><i data-lucide="circle-check" style="color:var(--pass-green)"></i>측정 기준 전체 PASS</h2>
-      <div class="sub-text">N/A = 미구현 Suite 또는 미선택 Suite</div>
+      <h2 class="section-heading" style="font-size:24px"><i data-lucide="circle-check" style="color:var(--pass-green)"></i>실패한 합격 기준 없음</h2>
+      <div class="sub-text">대상 아님 · 측정 불가 기준은 최종 판정 영향 없음</div>
       <a class="button is-outline is-wide" style="font-size:17px;margin-top:16px" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="refresh-cw"></i>동일 조건 재실행</a>
     </section>
     {% endif %}
@@ -158,12 +180,30 @@
   </aside>
 </div>
 
+<section class="card criteria-card">
+  <h3 class="section-heading block-heading" style="margin-top:0">합격 기준 {{ criterion_rows | length }}개<span class="heading-tag">기획서 목표치</span></h3>
+  <table class="result-table criteria-table">
+    <tr><th></th><th>합격 기준</th><th>의미</th><th>목표</th><th>이번 Run</th><th>상태</th><th>측정 Suite · 사유</th></tr>
+    {% for row in criterion_rows %}
+    <tr>
+      <td class="criteria-number">{{ row.number }}</td>
+      <td><b>{{ row.criterion.display_name }}</b><span class="criteria-term">{{ row.criterion.title }}</span></td>
+      <td class="muted">{{ row.criterion.meaning }}</td>
+      <td class="strong">{{ row.criterion | target_words }}</td>
+      <td class="strong">{{ row.result.measured_value | metric(row.criterion.metric_name) if row.result.measured_value is not none else '-' }}</td>
+      <td><span class="status-chip is-{{ row.status.value }}">{{ criterion_status_titles[row.status] }}</span></td>
+      <td class="muted">{{ row.detail }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+
 <div class="compare-row">
   <div class="card"><b style="font-size:18px">이전 Run 비교</b>
     <div class="muted" style="margin-top:4px">{{ '동일 조건 직전 Run' if comparisons else '동일 조건 이전 Run 없음' }}</div></div>
   {% for comparison in comparisons[:4] %}
   <div class="card">
-    <div class="muted">{{ comparison.criterion.title }}</div>
+    <div class="muted">{{ comparison.criterion.display_name }}</div>
     <div class="compare-value">
       {{ comparison.previous_value | metric(comparison.criterion.metric_name) }} → {{ comparison.current_value | metric(comparison.criterion.metric_name) }}
       <span class="{{ 'delta-good' if comparison.is_improved else 'delta-bad' }}">{{ '▲' if comparison.current_value >= comparison.previous_value else '▼' }}</span>

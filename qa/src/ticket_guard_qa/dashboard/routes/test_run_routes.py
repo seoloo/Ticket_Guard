@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
+from ticket_guard_qa.dashboard.criterion_status import STATUS_TITLES, build_criterion_rows, count_statuses
 from ticket_guard_qa.dashboard.dependencies import (
     get_progress_stream,
     get_run_service,
@@ -182,15 +183,20 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
     ]
     failed_cards = [card for card in criterion_cards if card.result.is_passed is False]
     verdict_result = summary.find_suite_result(VERDICT_ACCURACY_SUITE_NAME)
+    suite_title_by_name = {suite.suite_name: suite.title for suite in list_suites()}
+    criterion_rows = build_criterion_rows(summary, suite_title_by_name)
     return render_screen(request, "screen_04_test_result.html", {
         "active_tab": "qa",
         "summary": summary,
         "criterion_cards": criterion_cards,
+        "criterion_rows": criterion_rows,
+        "criterion_status_counts": count_statuses(criterion_rows),
+        "criterion_status_titles": STATUS_TITLES,
         "first_failed_card": failed_cards[0] if failed_cards else None,
         "next_actions": [NEXT_ACTION_BY_CRITERION_ID[card.criterion.criterion_id] for card in failed_cards],
         "verdict_details": verdict_result.details if verdict_result else {},
         "comparisons": build_criterion_comparisons(summary, run_service.run_repository.find_previous_same_config_summary(summary)),
-        "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
+        "suite_title_by_name": suite_title_by_name,
         "alert_policy_titles": ALERT_POLICY_TITLES,
     })
 
