@@ -1,6 +1,7 @@
 """가짜 대상 · 시스템 없이 시험 흐름 점검 · 규칙은 docs/contracts.md와 같게 · 화면 숫자는 예시 값"""
 import math
 import random
+import re
 import statistics
 import uuid
 import zlib
@@ -22,17 +23,25 @@ from ticket_guard_qa.domain.models import (
 )
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult, SystemTarget
 
+TELEMETRY_EVENT_TYPES = frozenset({"browser_request", "resource_timing", "navigation_timing", "browser_error"})  # PR #12 · 자유 형식 details
 BROWSER_EVENT_TYPES = frozenset({
     "page_enter", "page_exit", "search_change", "genre_change", "show_select",
     "schedule_select", "seat_select", "seat_cancel", "quantity_change",
-})
-# POST /api/events/ 규칙 · main web/views.py · web/event_schema.py (2026-11-05)
+}) | TELEMETRY_EVENT_TYPES
+# 인증 정보 키 · 마스킹 대상 · main web/telemetry.py SECRET 기준
+CREDENTIAL_KEY_PATTERN = re.compile(
+    r"^(?:password|passwd|(?:current|new|confirm)[-_]?password|(?:proxy[-_]?)?authorization|(?:set[-_]?)?cookie|sessionid"
+    r"|csrf(?:[-_]?token)?|x[-_]?csrf[-_]?token|csrfmiddlewaretoken|(?:x[-_]?)?api[-_]?key|(?:access|refresh|id)[-_]?token"
+    r"|token|auth|secret|client[-_]?secret|answer|captcha[-_]?(?:answer|response)|g[-_]?recaptcha[-_]?response|otp)$",
+    re.IGNORECASE,
+)
+# POST /api/events/ 규칙 · main web/views.py · web/event_schema.py (2026-11-06 · PR #12)
 ALLOWED_BROWSER_EVENT_FIELDS = frozenset({
     "eventType", "eventId", "occurredAt", "pageInstanceId", "pageViewId", "showId", "scheduleId", "details",
 })
 KNOWN_SHOW_IDS = frozenset({"blue-hour", "open-air", "spring-concert", "city-night", "starlight", "summer-rhythm"})
 SCHEDULE_ID_SUFFIX = "-evening"
-PAGE_NAMES = frozenset({"login", "shows", "detail", "queue", "captcha", "select", "complete", "history"})
+PAGE_NAMES = frozenset({"login", "shows", "detail", "queue", "captcha", "select", "complete", "history", "signup"})
 DETAIL_FIELDS_BY_BROWSER_EVENT_TYPE = {
     "page_enter": {"pageName", "previousPageName"},
     "page_exit": {"pageName", "previousPageName"},
@@ -100,10 +109,24 @@ def is_uuid(value: Any) -> bool:
     return isinstance(value, str)
 
 
+def has_credential_key(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(CREDENTIAL_KEY_PATTERN.match(str(key)) or has_credential_key(item) for key, item in value.items())
+    if isinstance(value, list):
+        return any(has_credential_key(item) for item in value)
+    return False
+
+
 def find_details_error(event_type: str, details: Any) -> str | None:
-    """항목 누락 · 목록 밖 항목 · pageName 값 · 나머지 값 범위는 Live에서 확인"""
-    if not isinstance(details, dict) or set(details) != DETAIL_FIELDS_BY_BROWSER_EVENT_TYPE[event_type]:
-        return "details 항목 오류"
+    """필수 항목 누락 · 인증 정보 · pageName 값 · 목록 밖 항목은 보존(허용) · 나머지 값 범위는 Live에서 확인"""
+    if not isinstance(details, dict):
+        return "details 형식 오류"
+    if has_credential_key(details):
+        return "details 인증 정보 · 마스킹 필요"
+    if event_type in TELEMETRY_EVENT_TYPES:
+        return None if details else "관측 이벤트 details 비어 있음"
+    if DETAIL_FIELDS_BY_BROWSER_EVENT_TYPE[event_type] - set(details):
+        return "details 필수 항목 누락"
     for page_field in ("pageName", "previousPageName"):
         if page_field in details and details[page_field] not in PAGE_NAMES | ({None} if page_field == "previousPageName" else set()):
             return "details 값 오류"

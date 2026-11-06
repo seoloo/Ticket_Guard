@@ -2,7 +2,7 @@
 
 QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보는 문서예요. 규칙 전체는 [`../AGENTS.md`](../AGENTS.md).
 
-- **원본**: 시스템 저장소의 `docs/architecture.md` (develop `d323060` 기준, 2026-11-03) · 이벤트 규칙은 `web/event_schema.py` · `web/views.py` `events` (main `3b9a53b` 기준, 2026-11-05)
+- **원본**: 시스템 저장소의 `docs/architecture.md` (develop `d323060` 기준, 2026-11-03) · 이벤트 규칙은 `web/event_schema.py` · `web/views.py` `events` · `web/telemetry.py` (main `d294864` · PR #12 기준, 2026-11-06)
 - 이 문서는 원본을 **QA 쪽에서 쓰기 좋게 옮긴 것**이에요. 서로 다르면 원본이 맞고, 이 문서를 고쳐요.
 - 고치는 절차는 AGENTS.md 7장 "형식이 바뀔 때"를 따라요.
 
@@ -26,17 +26,27 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | `result` · `errorCode` | `result` · `error_code` | `success` · `failure` · `rejected` · 실패 이유 |
 | `source` | `source` | `browser` · `server` |
 | `isSimulation` · `scenarioName` | `is_simulation` · `scenario_name` | 시연 시나리오(`admit` 등)를 쓴 세션이면 `true` · 시나리오 이름 |
-| `details` | `details` | 종류별 항목 · 필수 항목 누락 · 목록 밖 항목 · 허용 값 밖이면 거부 (예: `page_enter` = `pageName` · `previousPageName`) |
+| `details` | `details` | 종류별 항목 · **필수 항목 누락 · 허용 값 밖 · 인증 정보 키(`password` · `token` · `answer` 등)면 거부** · 목록 밖 항목은 관측 필드로 보존(허용 · PR #12) (예: `page_enter` = `pageName` · `previousPageName` 필수) |
 
 - 브라우저 이벤트는 `POST /api/events/`로 받아요. 보낼 수 있는 필드는 `eventType` · `eventId` · `occurredAt` · `pageInstanceId` · `pageViewId` · `showId` · `scheduleId` · `details` 8개뿐이고, **그 밖의 필드가 있으면 400**이에요.
 - 응답: **200** Kafka 전달 완료 · **202** 전달 대기 · **400** 형식 오류 · **401** 로그인 안 함 · **503** 전달 실패(재시도 가능). 200과 202는 둘 다 "받음"이에요.
-- 비밀번호 · 보안문자 답 · 세션 토큰은 이벤트에 들어가지 않아요.
+- 비밀번호 · 보안문자 답 · 세션 토큰은 이벤트에 들어가지 않아요. 관측 데이터의 인증 정보는 `[REDACTED]`로 가려요 (요청 본문 원문 사본 포함 · 2026-11-06 확인).
+
+### 1-1. 관측 이벤트 (PR #12 · 스키마 v2 · `CAPTURE_ENABLED=1` 기본 켜짐)
+
+| 항목 | 내용 |
+|---|---|
+| 서버 관측 | 미들웨어가 요청마다 `server_request` · `server_response_headers` 이벤트를 Kafka로 전송 (`/api/events/` · `/api/capture/` · `/health/` 제외) |
+| 브라우저 관측 | `static/telemetry.js` · `POST /api/capture/` · 이벤트 종류 `browser_request` · `resource_timing` · `navigation_timing` · `browser_error` (`/api/events/`로도 받음) |
+| 형식 | `schemaVersion: 2` · 스키마 v1 필드 18개 + `capture` · `details` 자유 형식 · 인증 정보 마스킹 · 빈 `details` 거부 |
+| QA 영향 | 같은 토픽(`ticketguard.events.v1`)에 v1 · v2가 섞임 → QA가 토픽 · `raw_events`를 읽을 때 `schemaVersion`으로 구분 · VU 요청마다 관측 이벤트가 늘어 Kafka 부하 증가
 
 ## 2. 이벤트 종류
 
 | 보내는 쪽 | 종류 |
 |---|---|
-| 브라우저 (믿지 않는 관찰 값) | `page_enter` · `page_exit` · `search_change` · `genre_change` · `show_select` · `schedule_select` · `seat_select` · `seat_cancel` · `quantity_change` |
+| 브라우저 (믿지 않는 관찰 값) | `page_enter` · `page_exit` · `search_change` · `genre_change` · `show_select` · `schedule_select` · `seat_select` · `seat_cancel` · `quantity_change` · 관측 `browser_request` · `resource_timing` · `navigation_timing` · `browser_error` |
+| 서버 관측 (스키마 v2) | `server_request` · `server_response_headers` |
 | 서버 (확정된 사실) | `login_success` · `login_fail` · `queue_enter` · `queue_register` · `queue_admitted` · `queue_cancel` · `connection_timeout` · `captcha_success` · `captcha_wrong` · `captcha_refresh` · `captcha_limit_reached` · `booking_access_rejected` · `booking_not_open` · `booking_confirm_request` · `booking_confirm_success` · `booking_confirm_fail` · `booking_confirm_rejected` · `booking_confirm_replayed` · `scenario_executed` |
 
 - `page_exit`는 유실될 수 있어요. QA는 이 이벤트가 없다고 실패로 보지 않아요.
@@ -197,7 +207,11 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | `unknown_show_id.json` | 없는 공연 | 400 | 0 |
 | `invalid_schedule_id.json` | 공연과 맞지 않는 회차 | 400 | 0 |
 | `missing_details.json` | `details` 없음 | 400 | 0 |
-| `invalid_details.json` | `details` 목록 밖 항목 · 허용 값 밖 | 400 | 0 |
+| `invalid_details.json` | `details` 허용 값 밖 (`pageName` 목록 외) | 400 | 0 |
+| `extra_details_field.json` | `details` 목록 밖 항목 · 관측 필드 보존 (PR #12) | accepted | ACTIVITY 1 |
+| `credential_in_details.json` | `details` 안 인증 정보 키(`password`) | 400 | 0 |
+| `valid_telemetry_event.json` | 관측 이벤트 `navigation_timing` · 자유 형식 `details` | accepted | ACTIVITY 1 |
+| `empty_telemetry_details.json` | 관측 이벤트 · 빈 `details` | 400 | 0 |
 | `spoofed_user_id.json` | 브라우저가 `userId` · `receivedAt` 직접 전송 | 400 | 0 |
 | `extra_fields.json` | 목록에 없는 필드(`seatPrice` · `schemaVersion`) | 400 | 0 |
 | `stale_request_sequence.json` | 예매 확정에 이미 받은 순번 재전송 | 거부 | 확정 이벤트 중복 없음 |

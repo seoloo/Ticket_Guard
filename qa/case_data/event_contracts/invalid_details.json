@@ -1,20 +1,7 @@
 {
-  "description": "details 목록 밖 항목 · 허용 값 밖",
+  "description": "details 허용 값 밖 · pageName 목록 외",
   "endpoint": "events",
   "requests": [
-    {
-      "eventId": "{{event_id}}",
-      "eventType": "page_enter",
-      "occurredAt": "{{now}}",
-      "pageInstanceId": "qa-page-0001",
-      "pageViewId": "{{page_view_id}}",
-      "showId": "blue-hour",
-      "details": {
-        "pageName": "detail",
-        "previousPageName": "shows",
-        "seatPrice": 0
-      }
-    },
     {
       "eventId": "{{event_id}}",
       "eventType": "page_enter",
@@ -29,7 +16,6 @@
     }
   ],
   "expected_status_codes": [
-    400,
     400
   ],
   "expected_storage": {
