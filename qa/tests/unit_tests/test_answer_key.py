@@ -23,11 +23,11 @@ def test_same_seed_gives_same_plan():
     assert first_plan == second_plan
 
 
-def test_answer_key_round_trip(session_factory):
+def test_answer_key_round_trip(qa_database):
     planned_users = plan_virtual_users(TrafficMix(), virtual_user_count=10, random_seed=1)
     session_key_by_label = {user.virtual_user_label: SessionKey(f"attempt-{index}") for index, user in enumerate(planned_users)}
     answer_key = build_answer_key(planned_users, session_key_by_label)
 
-    repository = AnswerKeyRepository(session_factory)
+    repository = AnswerKeyRepository(qa_database)
     repository.save("run-test", answer_key)
     assert repository.load("run-test") == answer_key

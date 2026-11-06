@@ -1,5 +1,5 @@
-# QA DB를 내 PC DB 도구로 볼 때만 · 127.0.0.1만 · 팀 포트 8000 · 27017 · 27020과 겹치지 않게 15432
+# QA DB를 내 PC Compass로 볼 때만 · 127.0.0.1만 · 팀 포트 8000 · 27017 · 27020과 겹치지 않게 27021
 services:
-  qa-postgres:
+  qa-mongo:
     ports:
-      - "127.0.0.1:${QA_POSTGRES_HOST_PORT:-15432}:5432"
+      - "127.0.0.1:${QA_MONGO_HOST_PORT:-27021}:27017"

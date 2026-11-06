@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy.orm import Session, sessionmaker
+from pymongo.database import Database
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
@@ -61,15 +61,15 @@ class RunService:
     def __init__(
         self,
         settings: Settings,
-        session_factory: sessionmaker[Session],
+        qa_database: Database,
         progress_stream: RunProgressStream,
         system_target_builder: Callable[[Settings, TargetKind], SystemTarget] = build_system_target,
     ) -> None:
         self.settings = settings
-        self.session_factory = session_factory
-        self.run_repository = RunRepository(session_factory)
-        self.answer_key_repository = AnswerKeyRepository(session_factory)
-        self.bot_profile_store = BotProfileStore(session_factory)
+        self.qa_database = qa_database
+        self.run_repository = RunRepository(qa_database)
+        self.answer_key_repository = AnswerKeyRepository(qa_database)
+        self.bot_profile_store = BotProfileStore(qa_database)
         self.progress_stream = progress_stream
         self.system_target_builder = system_target_builder
         self._lock = threading.Lock()
@@ -131,7 +131,7 @@ class RunService:
                 bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
             )
             published_in_use = find_published_versions_in_use(
-                find_published_bot_versions(self.session_factory), run_config.bot_version_numbers
+                find_published_bot_versions(self.qa_database), run_config.bot_version_numbers
             )
             if published_in_use:  # 보관본으로 내보낸 봇 버전 · 탐지율 신뢰 낮음
                 self.progress_stream.publish(run_id, f"주의: 공개된 봇 버전 사용 · {' · '.join(published_in_use)} · 새 버전 저장 필요")

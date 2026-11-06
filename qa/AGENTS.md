@@ -80,7 +80,7 @@ main ← develop ← qa   (qa/ 만)
   | 8000 | 팀 입구 | 공통 · `compose.gateway.yml` |
   | 27017 | 시스템 MongoDB (`MONGO_HOST_PORT`) | db · `mongo/compose.local.yml` |
   | 27020 | 원본 MongoDB (`ticketguard_raw`) | db · `compose.raw.local.yml` |
-  | 15432 | QA DB PostgreSQL (`QA_POSTGRES_HOST_PORT`) · 컨테이너 안 5432 | qa · `qa/compose.qa-db.local.yml` |
+  | 27021 | QA DB MongoDB (`QA_MONGO_HOST_PORT`) · 컨테이너 안 27017 · QA 전용 인스턴스 | qa · `qa/compose.qa-db.local.yml` |
 - **커밋 제목**: `[QA] 무엇을 했는지` (예: `[QA] add fake verdict api`)
 - **PR 체크리스트**
   - [ ] 정답표 · 봇 설정이 포함되지 않았다
@@ -107,7 +107,7 @@ main ← develop ← qa   (qa/ 만)
 | 저장소 | 시스템 | QA |
 |---|---|---|
 | 시스템 MongoDB (`ticketguard`) · 운영 데이터 구조만 | 읽기 · 쓰기 | **읽기만** |
-| QA DB (정답표 · 봇 설정 · 실행 기록 · 점수) · PostgreSQL `qa-postgres` (`qa/compose.qa-db.yml` · `qa-backend` 네트워크) · SQLite는 단위 테스트 · 단독 실행용 | **접근 못 함** | 읽기 · 쓰기 |
+| QA DB `ticketguard_qa` (정답표 · 봇 설정 · 실행 기록 · 점수) · MongoDB QA 전용 인스턴스 `qa-mongo` (`qa/compose.qa-db.yml` · `qa-backend` 네트워크 · 시스템 MongoDB와 서버 · 계정 분리) | **접근 못 함** | 읽기 · 쓰기 |
 | QA 전달용 (`ticketguard_qa_archive` 또는 JSON 파일) · 요청 시에만 | 분석 담당만 읽기 · 판정 코드 읽기 금지 | 만듦 |
 | 실행 보고서 | 볼 수 있음 | 만듦 |
 
@@ -183,7 +183,7 @@ main ← develop ← qa   (qa/ 만)
 | 대시보드 사용자 = **관리자** | DB 관련 기능(조회 · 시험 데이터)까지 화면에 포함 |
 | 포트폴리오 고려 | QA 자동화 · 데이터 품질 · 탐지 모델 평가를 숫자로 보여 줄 수 있게 |
 
-**스택**: Python 3.13 · pytest · httpx · Locust · Playwright · Maestro · confluent-kafka · pymongo · redis-py(Redis 결정 후) · Docker SDK · FastAPI + Jinja2 + HTMX(QA 대시보드) · Chart.js · SQLAlchemy(QA DB) · GitHub Actions · Docker Compose
+**스택**: Python 3.13 · pytest · httpx · Locust · Playwright · Maestro · confluent-kafka · redis-py(Redis 결정 후) · Docker SDK · FastAPI + Jinja2 + HTMX(QA 대시보드) · Chart.js · pymongo(QA DB · 시스템 MongoDB 읽기) · mongomock(단위 테스트) · GitHub Actions · Docker Compose
 
 - 시스템 쪽 프레임워크(지금은 Django)와 상관없이 QA는 HTTP · DB로만 붙어요.
 
@@ -236,7 +236,7 @@ SEAT_HOLD_TIMEOUT_SEC = 300      # 좌석 점유 5분 · E16
 ## 11. 열린 결정
 
 - [x] 매크로 봇 화면 연결 확정 (`docs/ui.md` 매크로 봇) · 2026-11-04
-- [x] QA DB = PostgreSQL · 컨테이너 안 5432 · 내 PC 15432 (팀 8000 · 27017 · 27020과 분리) · 2026-11-06
+- [x] QA DB = MongoDB QA 전용 인스턴스 (팀 메인 DB와 같은 엔진 · 서버 · 계정 · 네트워크 분리) · 컨테이너 안 27017 · 내 PC 27021 (팀 8000 · 27017 · 27020과 분리) · 2026-11-06
 - [ ] 판정 결과를 어느 컬렉션에 저장할지 (db 팀과)
 - [ ] QA가 읽을 운영 필드 확인 (`bookingAttemptId` · 처리 시각 · `ruleSetVersion`) · QA 읽기 전용 계정 (db 팀 · Issue)
 - [ ] Redis를 쓸지 (좌석 점유 시험 E16 여부가 달라짐)

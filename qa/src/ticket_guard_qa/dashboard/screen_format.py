@@ -37,7 +37,7 @@ def format_time_ago(moment: datetime | None) -> str:
     if moment is None:
         return "-"
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)  # SQLite는 시간대를 버림
+        moment = moment.replace(tzinfo=timezone.utc)  # 시간대 없는 값 = UTC
     elapsed_sec = (datetime.now(timezone.utc) - moment).total_seconds()
     if elapsed_sec < SECONDS_PER_MINUTE:
         return "방금 전"

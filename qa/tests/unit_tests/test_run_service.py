@@ -6,8 +6,8 @@ from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunService
 
 
-def test_unfinished_suite_is_skipped_not_failed(qa_settings, session_factory):
-    run_service = RunService(qa_settings, session_factory, RunProgressStream())
+def test_unfinished_suite_is_skipped_not_failed(qa_settings, qa_database):
+    run_service = RunService(qa_settings, qa_database, RunProgressStream())
     summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", "load_capacity")))
 
     outcome_by_suite = {result.suite_name: result.outcome for result in summary.suite_results}
@@ -17,14 +17,14 @@ def test_unfinished_suite_is_skipped_not_failed(qa_settings, session_factory):
     assert (qa_settings.report_output_dir / f"{summary.run_id}.html").exists()
 
 
-def test_only_one_run_at_a_time(qa_settings, session_factory):
-    run_service = RunService(qa_settings, session_factory, RunProgressStream())
+def test_only_one_run_at_a_time(qa_settings, qa_database):
+    run_service = RunService(qa_settings, qa_database, RunProgressStream())
     run_service._active_run_id = "run-already-active"
     with pytest.raises(RunAlreadyActiveError):
         run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check",)))
 
 
-def test_progress_ends_with_finished_message(qa_settings, session_factory):
+def test_progress_ends_with_finished_message(qa_settings, qa_database):
     progress_stream = RunProgressStream()
-    summary = RunService(qa_settings, session_factory, progress_stream).run_now(RunConfig(TargetKind.FAKE, ("self_check",)))
+    summary = RunService(qa_settings, qa_database, progress_stream).run_now(RunConfig(TargetKind.FAKE, ("self_check",)))
     assert progress_stream.read_after(summary.run_id, 0)[-1].is_finished

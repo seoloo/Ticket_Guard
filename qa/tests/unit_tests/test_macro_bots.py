@@ -44,8 +44,8 @@ def test_behavior_form_rejects_out_of_range_value():
         parse_behavior_form(form)
 
 
-def test_saved_version_becomes_current_and_old_version_stays_readable(session_factory):
-    store = BotProfileStore(session_factory)
+def test_saved_version_becomes_current_and_old_version_stays_readable(qa_database):
+    store = BotProfileStore(qa_database)
     changed = replace(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_B], click_interval_deviation_ms=200)
     saved = store.save_new_version(ActorType.BOT_B, changed, " 흔들림 키움 ", SAVED_AT)
 
@@ -59,9 +59,9 @@ def test_saved_version_becomes_current_and_old_version_stays_readable(session_fa
     assert [profile.version_number for profile in store.list_version_history(ActorType.BOT_B)] == [2, 1]
 
 
-def test_locked_bot_cannot_be_saved(session_factory):
+def test_locked_bot_cannot_be_saved(qa_database):
     with pytest.raises(BotProfileLockedError):
-        BotProfileStore(session_factory).save_new_version(
+        BotProfileStore(qa_database).save_new_version(
             ActorType.BOT_NEW, DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_NEW], "", SAVED_AT
         )
 

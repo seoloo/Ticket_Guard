@@ -43,7 +43,7 @@ qa/
 │  │                      pipeline_latency · seat_concurrency · load_capacity · failure_recovery
 │  ├─ scoring/            latency_metrics · detection_metrics · confusion_matrix · detection_breakdown
 │  ├─ test_runs/          run_service · run_repository · run_progress_stream
-│  ├─ qa_database/        database · tables
+│  ├─ qa_database/        database (MongoDB 연결 · 컬렉션 이름) · archive_export
 │  ├─ reports/            json_report · html_report
 │  └─ dashboard/          dashboard_app · dependencies · screen_format · routes/ · templates/(layout · screen_parts · screen_*) · static/css/(theme_tokens · screen_layout)
 ├─ traffic_generators/    virtual_user_traffic (VU 동시 실행) · locust_traffic · bot_c_browser
@@ -83,7 +83,7 @@ qa/
 | 6 | `test_suites/verdict_accuracy.py` 등 | 트래픽 보내기(`traffic_generators`) → 시스템 결과 읽기(`system_targets`) |
 | 7 | `scoring/detection_metrics.py` 등 | 정답표와 비교해 숫자 계산 |
 | 8 | `domain/pass_criteria.py` | 숫자를 합격 기준에 대 보기 |
-| 9 | `test_runs/run_repository.py` · `qa_database/tables.py` | 결과 저장 |
+| 9 | `test_runs/run_repository.py` · `qa_database/database.py` | 결과 저장 (`runs` 문서 하나 = Run 하나 · Suite 결과 포함) |
 | 10 | `reports/html_report.py` · `json_report.py` | 보고서 만들기 |
 | 11 | `test_runs/run_progress_stream.py` | 단계마다 03 화면에 진행 보내기 · 끝나면 04로 |
 | 12 | `dashboard/templates/screen_04_test_result.html` | 결과 보여 주기 |
@@ -152,7 +152,7 @@ qa/
 | Live 예매 흐름 (1-b ~ 1-d) | `system_targets/live_booking_client.py` · `live_django_system.py` · `traffic_generators/virtual_user_traffic.py` · `test_suites/booking_flow.py` | 동작 (Run 설정 "예매 흐름 테스트" · VU 동시 실행 · 오픈 전 로그인 → 오픈 + 진입 지연 → 대기열 → 보안문자 → 좌석 클릭(봇 프로필 간격 · seat_select 이벤트) → 확정 · 먼저 팔린 좌석은 다른 좌석으로 최대 3번 · 확정 못 한 계정은 예매 취소로 반환 · 시험 시간 넘으면 TIMEOUT · 예매 완료 · 매진 · 중복 판매 · 단계별 p95) · 시스템 테스트 훅 필요 (Issue #6) | 초기화: QA 대시보드에 시스템 관리자 계정 미전달(compose.gateway.yml) → 건너뜀 · 디바이스당 세션(봇 D) · 페이지 흐름 미적용 · Run 중지는 Suite 사이에서만 | 관리자 계정 전달 (develop PR) · 부하 테스트 Locust |
 | 이벤트 전달 검증 (2단계) | `system_targets/live_kafka_reader.py` · `test_suites/event_delivery.py` · Mock `FakeEventStreamReader` | 동작 (Run 설정 "이벤트 전달 검증" · Run 직전 토픽 끝 위치 기록 → VU 트래픽 → QA 전용 소비자 그룹으로 읽기(commit 없음) → 좌석 클릭 · 서버 이벤트 완전성 · 중복 · 형식 · 파티션 키 · 전달 지연 p95 · 관측 이벤트 수) · `docs/contracts.md` 4-1 | 전달 지연 기준선 미정 · MongoDB 원본(`raw_events`) 대조는 2-b | 2-b 원본 적재 검증 (같은 대조 로직 재사용) |
 | QA 데이터 넘기기 | `qa_database/archive_export.py` · `command_line.py` (`export-archive`) · `archive_exports` 테이블 | 동작 (요청 · QA 담당 승인 시 · 끝난 Run만 · 기본 결과 숫자 + 적발 목록 · 정답표 · 봇 설정은 `--collection` 직접 지정 · 컬렉션별 JSON + manifest → 받는 쪽 `ticketguard_qa_archive` · 시스템 DB에는 쓰지 않음 · 필드 추가 = `*_FIELDS` 한 줄 · 정답표 · 봇 설정을 넘긴 봇 버전으로 Run 시작 시 03 경고) | 대시보드 버튼 없음(의도) · 받는 쪽 가져오기는 수동(`mongoimport`) | |
-| QA DB PostgreSQL | `compose.qa-db.yml` · `compose.qa-db.local.yml` · `qa_database/database_copy.py` · `command_line.py` (`copy-database`) | 동작 (팀 compose에 덧붙여 실행 · `qa-backend` 네트워크 = qa-dashboard · qa-postgres만 · 컨테이너 안 5432 · 내 PC 15432는 local 파일로만 · SQLite → PostgreSQL 복사는 대상이 비어 있을 때만 · 번호 자동 증가 이어서) | 스키마 변경 도구 없음(`create_all`) · 백업 미구성 | Alembic · 서버 배포 시 백업 |
+| QA DB MongoDB | `compose.qa-db.yml` · `compose.qa-db.local.yml` · `compose.qa-db.init.js` · `qa_database/database.py` | 동작 (QA 전용 인스턴스 `qa-mongo` · 팀 compose에 덧붙여 실행 · `qa-backend` 네트워크 = qa-dashboard · qa-mongo만 · QA 계정 = `ticketguard_qa` 읽기 · 쓰기만 · 컬렉션 `runs` · `answer_keys` · `bot_versions` · `archive_exports` · 컨테이너 안 27017 · 내 PC 27021은 local 파일로만 · 단위 테스트는 `mongomock://` 메모리 DB) | 백업 미구성 | 서버 배포 시 백업 (`mongodump`) |
 | 터미널 명령 · 종료 코드 | `command_line.py` | 동작 | | |
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |
