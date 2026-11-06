@@ -2,7 +2,21 @@
 {% block title %}05 DB 대시보드 · 티켓가드 QA{% endblock %}
 {% block content %}
 <h1 class="page-heading">DB 대시보드 <span class="muted">읽기 전용{% if run_id %} · {{ run_id }}{% endif %}</span></h1>
-<p class="notice is-db">{{ not_ready_message }}</p>
+{% if not_ready_message %}<p class="notice is-db">{{ not_ready_message }}</p>{% endif %}
+{% if pipeline_summary %}
+<section class="card-grid">
+  <section class="card card-padding"><h2>정제 이벤트</h2><p class="metric-value">{{ pipeline_summary.clean_events }}</p></section>
+  <section class="card card-padding"><h2>격리 이벤트</h2><p class="metric-value">{{ pipeline_summary.quarantine_events }}</p></section>
+</section>
+<section class="card card-padding">
+  <h2>이벤트 타입별 집계</h2>
+  <table><thead><tr><th>이벤트 타입</th><th>전체</th><th>성공</th><th>실패</th><th>거부</th></tr></thead><tbody>
+  {% for metric in pipeline_summary.metrics if metric.metricType == 'event_type' %}
+  <tr><td>{{ metric.eventType }}</td><td>{{ metric.total }}</td><td>{{ metric.success }}</td><td>{{ metric.failure }}</td><td>{{ metric.rejected }}</td></tr>
+  {% else %}<tr><td colspan="5">집계 데이터가 없습니다.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
 <div class="card-grid">
   <section class="card card-padding">
     <h2>정답과 다른 세션</h2>
@@ -13,5 +27,4 @@
     <p class="muted">QA 정답 VS 시스템 판정 · 예매 단계별 흐름 · DB 기록</p>
   </section>
 </div>
-<!-- TODO(MongoDB 연결 후): Bronze · 격리 · Silver · Gold 건수 줄 · QA 사례로 저장 -->
 {% endblock %}
