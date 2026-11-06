@@ -24,6 +24,7 @@ def required(name):
 @dataclass(frozen=True, repr=False)
 class Settings:
     kafka: str
+    group_id: str
     topic: str
     mongo_host: str
     mongo_port: int
@@ -40,19 +41,22 @@ class Settings:
     @classmethod
     def load(cls):
         kafka = os.environ.get('SPARK_KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
+        group_id = os.environ.get('SPARK_KAFKA_GROUP_ID', 'ticketguard-spark-consumer')
         topic = os.environ.get('KAFKA_EVENTS_TOPIC', 'ticketguard.events.v1')
         host = os.environ.get('SPARK_MONGO_HOST', 'ticket-guard-workspace-db-mongo-1')
         database = os.environ.get('MONGO_DATABASE', 'ticketguard')
-        checkpoint = os.environ.get('SPARK_CHECKPOINT_DIR', '/checkpoints/events')
+        checkpoint = os.environ.get('SPARK_CHECKPOINT_DIR', '/checkpoints/spark-consumer')
         if not kafka or not re.fullmatch(r'[A-Za-z0-9._-]+', topic) or topic in ('.', '..'):
             raise ValueError('Invalid Kafka address or topic')
+        if not re.fullmatch(r'[A-Za-z0-9._-]+', group_id) or group_id in ('.', '..'):
+            raise ValueError('Invalid Kafka consumer group ID')
         if host == 'mongo' or not re.fullmatch(r'[A-Za-z0-9._-]+', host):
             raise ValueError('Invalid or ambiguous MongoDB hostname; use the workspace DB container name')
         if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]*', database) or database in ('admin', 'config', 'local'):
             raise ValueError('Invalid application database')
         if not checkpoint.startswith('/checkpoints/') or '..' in checkpoint.split('/'):
             raise ValueError('Checkpoint must be a directory under /checkpoints')
-        return cls(kafka, topic, host, positive('SPARK_MONGO_PORT', 27017, 65535),
+        return cls(kafka, group_id, topic, host, positive('SPARK_MONGO_PORT', 27017, 65535),
                    database, required('MONGO_WRITER_USERNAME'), required('MONGO_WRITER_PASSWORD'),
                    checkpoint, positive('SPARK_TRIGGER_SECONDS', 5, 86400),
                    positive('SPARK_MAX_OFFSETS_PER_TRIGGER', 1000, 10000000),
