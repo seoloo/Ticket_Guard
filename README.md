@@ -39,6 +39,28 @@ docker compose logs --tail 50 web
 
 `compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. 기본 Compose는 Kafka와 토픽 초기화를 함께 실행합니다. MongoDB는 별도 mongo 프로필로 추가했습니다. 같은 이름을 쓰는 이전 폴더 자원과 충돌하지 않도록 MongoDB 명령에는 `-p ticket-guard-workspace-db`를 반드시 사용합니다. 실행·초기화·검증은 [MongoDB 문서](docs/mongodb.md)를 따릅니다. Spark는 별도 `ticket-guard-workspace-pipeline` 프로젝트와 spark 프로필로 빌드·점검합니다. 실제 적재 명령은 [Spark 문서](docs/spark.md)를 먼저 확인하세요. 기존 `.env`를 복사 명령으로 덮어쓰지 마세요.
 
+### QA 대시보드 접속 (관리자)
+
+관리자 로그인과 QA 대시보드(`/qa/`)는 팀 입구 `compose.gateway.yml`과 QA DB `qa/compose.qa-db.yml`을 함께 붙여 실행할 때만 켜집니다. `docker compose up -d`만으로 띄우면 관리자 로그인이 꺼져 있어 "아이디 또는 비밀번호를 확인해 주세요"가 표시됩니다.
+
+1. 기존 `.env`에 두 묶음을 직접 추가합니다. `.env`는 Git에서 제외되므로 pull로 갱신되지 않습니다.
+   - 관리자 계정: `.env.example`의 `DEMO_ADMIN_USERNAME` · `DEMO_ADMIN_PASSWORD` 두 줄
+   - QA DB 계정: `QA_MONGO_*` 여섯 줄 · 형식은 [qa/README.md](qa/README.md)
+2. 세 파일을 붙여 실행합니다. 이후 `ps` · `logs` · `down`에도 같은 `-f`를 붙입니다.
+
+```powershell
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml ps
+```
+
+3. http://localhost:8000/login/ 에서 관리자 계정으로 로그인하면 QA 대시보드로 이동합니다.
+
+| 증상 | 원인 | 확인 명령 |
+|---|---|---|
+| 관리자 로그인 실패 | `.env` 관리자 두 줄 누락 · `compose.gateway.yml` 누락 | `docker compose -f compose.yml -f compose.gateway.yml exec web printenv DEMO_ADMIN_USERNAME` · 출력 없으면 누락 |
+| 로그인 후 `/qa/` 502 | QA 대시보드 미기동 · `qa/compose.qa-db.yml` 누락 · `QA_MONGO_*` 누락 | `docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml logs --tail 50 qa-dashboard qa-mongo` |
+| `/qa/` 접속 시 로그인 화면으로 이동 | 고객 계정 또는 로그아웃 상태 · 관리자 전용이라 정상 차단 | 관리자 계정으로 다시 로그인 |
+
 ## 사용 흐름
 
 로그인 → 공연 검색/필터 → 공연 상세 → 대기열(약 12초) → 보안문자 → 지정석/자유석 선택 → 예매 확정 → 완료/내역.
@@ -112,7 +134,7 @@ docs/architecture.md    필수 후속 데이터 파이프라인 설계
 ## DB별 포트 번호
 원본데이터 보존용(raw): 27020
 대시보드 데이터보관용: 27017
-QA봇 대시보드 데이터 보관용: 15432
+QA봇 대시보드 데이터 보관용(MongoDB · QA 전용 인스턴스): 27021 · `qa/compose.qa-db.local.yml`을 붙일 때만
 
 ## 개발 환경과 운영 환경
 
