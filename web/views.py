@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from .services import repo, SHOWS, FlowError
 from .events import emit, publisher, CLIENT_EVENTS, build_event, event_request_context
 from .event_schema import EventValidationError, timestamp, validate_event, validate_details
+from .telemetry import TELEMETRY_EVENTS, sanitize
 from .qa_test_hooks import is_test_account_login
 
 ADMIN_HOME_URL = '/qa/'  # 팀 입구(nginx)가 QA 대시보드로 넘김
@@ -51,7 +52,7 @@ def page(request, screen, identifier=None):
         return redirect('/login/')
     if user and screen in {'login', 'signup'}:
         return redirect(ADMIN_HOME_URL if request.session.get('role') == 'admin' else '/')
-    context = dict(screen=screen, user=user, scenarios=settings.SHOW_SCENARIOS,
+    context = dict(screen=screen, user=user, scenarios=settings.SHOW_SCENARIOS, capture_enabled=settings.CAPTURE_ENABLED,
                    demo_user=settings.DEMO_USERNAME, genres=['전체', '콘서트', '뮤지컬', '연극', '페스티벌'])
     with repo.lock:
         try:
@@ -281,6 +282,8 @@ def events(request):
         if schedule is not None and (not show_id or schedule!=show_id+'-evening'):
             raise FlowError('공연 회차가 올바르지 않아요.')
         details=data.get('details',{})
+        if kind in TELEMETRY_EVENTS:
+            details = sanitize(details)
         validate_details(kind,details,require=True)
         if kind in ('show_select','schedule_select','seat_select','seat_cancel','quantity_change') and not show_id:
             raise FlowError('공연 정보가 필요해요.')
