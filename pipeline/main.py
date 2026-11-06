@@ -45,6 +45,7 @@ def main():
         elif not stopping:
             source = (spark.readStream.format('kafka')
                       .option('kafka.bootstrap.servers', config.kafka)
+                      .option('kafka.group.id', config.group_id)
                       .option('subscribe', config.topic)
                       .option('startingOffsets', 'earliest')
                       .option('failOnDataLoss', 'true')

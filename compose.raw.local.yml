@@ -1,0 +1,4 @@
+services:
+  mongo-raw:
+    ports:
+      - '127.0.0.1:27020:27020'

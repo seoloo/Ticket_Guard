@@ -21,6 +21,7 @@ dashboard = [
     "python-multipart==0.0.20",
     "confluent-kafka==2.16.1",
     "psycopg[binary]==3.2.3",
+    "pymongo==4.10.1",
 ]
 load = ["locust==2.32.4"]
 browser = ["playwright==1.49.1"]

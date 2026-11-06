@@ -1,0 +1,58 @@
+name: ticket-guard-raw
+services:
+  raw-consumer:
+    build: ./raw_consumer
+    environment:
+      RAW_SOURCE_ID: ${RAW_SOURCE_ID:?Set RAW_SOURCE_ID}
+      RAW_KAFKA_BOOTSTRAP_SERVERS: ${RAW_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      RAW_KAFKA_TOPIC: ${RAW_KAFKA_TOPIC:-ticketguard.events.v1}
+      RAW_KAFKA_GROUP_ID: ${RAW_KAFKA_GROUP_ID:-ticketguard-raw-db-v1}
+      RAW_BATCH_MAX_MESSAGES: ${RAW_BATCH_MAX_MESSAGES:-200}
+      RAW_BATCH_WAIT_SECONDS: ${RAW_BATCH_WAIT_SECONDS:-1}
+      RAW_BATCH_MAX_BYTES: ${RAW_BATCH_MAX_BYTES:-4194304}
+      RAW_BATCH_WRITE_SECONDS: ${RAW_BATCH_WRITE_SECONDS:-35}
+      RAW_ROUTING_FINGERPRINT: ${RAW_ROUTING_FINGERPRINT:-54e2a7c73316ed633ef5a445ff9dc0b87b44cd302b8af93f8c9cce586f6f8b1b}
+      RAW_MONGO_HOST: mongo-raw
+      RAW_MONGO_DATABASE: ${RAW_MONGO_DATABASE:-ticketguard_raw}
+      RAW_MONGO_WRITER_USERNAME: ${RAW_MONGO_WRITER_USERNAME:?Set writer}
+      RAW_MONGO_WRITER_PASSWORD: ${RAW_MONGO_WRITER_PASSWORD:?Set writer password}
+    networks: [raw-kafka, raw-backend]
+    depends_on:
+      mongo-raw:
+        condition: service_healthy
+    init: true
+    restart: "no"
+    stop_grace_period: 60s
+  mongo-raw:
+    image: mongo:8.0.34
+    command: [mongod, --auth, --bind_ip_all, --port, '27020']
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${RAW_MONGO_ROOT_USERNAME:?Set admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${RAW_MONGO_ROOT_PASSWORD:?Set admin password}
+      MONGO_INITDB_DATABASE: ${RAW_MONGO_DATABASE:-ticketguard_raw}
+      RAW_MONGO_WRITER_USERNAME: ${RAW_MONGO_WRITER_USERNAME:?Set writer}
+      RAW_MONGO_WRITER_PASSWORD: ${RAW_MONGO_WRITER_PASSWORD:?Set writer password}
+    networks: [raw-backend]
+    volumes:
+      - raw-mongo-data:/data/db
+      - raw-mongo-config:/data/configdb
+      - ./raw_consumer/mongo/init.js:/docker-entrypoint-initdb.d/10-raw.js:ro
+      - ./raw_consumer/mongo/healthcheck.js:/opt/raw/healthcheck.js:ro
+      - ./raw_consumer/mongo/verify.js:/opt/raw/verify.js:ro
+      - ./raw_consumer/mongo/setup.js:/opt/raw/setup.js:ro
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --norc, --port, '27020', /opt/raw/healthcheck.js]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 30s
+networks:
+  raw-kafka:
+    external: true
+    name: ${RAW_KAFKA_NETWORK:-ticket-guard_default}
+  raw-backend:
+volumes:
+  raw-mongo-data:
+  raw-mongo-config:
