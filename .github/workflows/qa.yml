@@ -13,15 +13,8 @@ jobs:
   qa:
     runs-on: ubuntu-latest
     container: python:3.13.15-slim-trixie
-    # CI 전용 일회용 QA DB · 팀 이미지와 같은 버전 · 작업 끝나면 삭제 · 인증 없음
-    services:
-      qa-mongo:
-        image: mongo:8.0.34
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping: 1})'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
+    # QA DB = 메모리 MongoDB(mongomock) · 실행 서버 커널 7.0에서 mongo:8.0.x가 시작을 거부함(SERVER-121912)
+    # 실제 MongoDB 접속 확인은 Live 컨테이너 검증에서 해요
     defaults:
       run:
         working-directory: qa
@@ -31,4 +24,4 @@ jobs:
       - run: python -m pytest -v
       - run: ticket-guard-qa run --suite self_check --suite event_contract --target fake
         env:
-          TICKET_GUARD_QA_QA_DATABASE_URL: mongodb://qa-mongo:27017/ticketguard_qa
+          TICKET_GUARD_QA_QA_DATABASE_URL: mongomock://ticketguard_qa
