@@ -1,37 +1,43 @@
-# QA DB · PostgreSQL · 정답표 · 봇 설정 · Run 기록 · 팀 compose에 덧붙여 실행 · AGENTS.md 6장
+# QA DB · MongoDB QA 전용 인스턴스 · 정답표 · 봇 설정 · Run 기록 · 팀 compose에 덧붙여 실행 · AGENTS.md 6장
 # docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build
-# 내 PC에서 DB 도구로 볼 때만 -f qa/compose.qa-db.local.yml 추가 (127.0.0.1:15432)
-# qa-backend 네트워크 = qa-dashboard · qa-postgres만 · web · Spark · raw consumer는 접근 못 함
+# 내 PC에서 Compass로 볼 때만 -f qa/compose.qa-db.local.yml 추가 (127.0.0.1:27021)
+# qa-backend 네트워크 = qa-dashboard · qa-mongo만 · web · Spark · raw consumer · 시스템 MongoDB는 접근 못 함
 services:
-  qa-postgres:
-    image: postgres:17.6-alpine
+  qa-mongo:
+    image: mongo:8.0.34  # 팀 MongoDB와 같은 버전
+    command: ["mongod", "--auth", "--bind_ip_all"]
     environment:
-      POSTGRES_DB: ${QA_POSTGRES_DB:-ticketguard_qa}
-      POSTGRES_USER: ${QA_POSTGRES_USER:-ticketguard_qa}
-      POSTGRES_PASSWORD: ${QA_POSTGRES_PASSWORD:?Set QA_POSTGRES_PASSWORD in .env}
+      MONGO_INITDB_ROOT_USERNAME: ${QA_MONGO_ROOT_USERNAME:?Set QA_MONGO_ROOT_USERNAME in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${QA_MONGO_ROOT_PASSWORD:?Set QA_MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: ${QA_MONGO_DATABASE:-ticketguard_qa}
+      QA_MONGO_USERNAME: ${QA_MONGO_USERNAME:?Set QA_MONGO_USERNAME in .env}
+      QA_MONGO_PASSWORD: ${QA_MONGO_PASSWORD:?Set QA_MONGO_PASSWORD in .env}
     networks: [qa-backend]
     volumes:
-      - qa-postgres-data:/var/lib/postgresql/data
+      - qa-mongo-data:/data/db
+      - qa-mongo-config:/data/configdb
+      - ./qa/compose.qa-db.init.js:/docker-entrypoint-initdb.d/10-ticketguard-qa.js:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
+      test: ["CMD", "mongosh", "--quiet", "--norc", "--eval", "quit(db.adminCommand({ping: 1}).ok === 1 ? 0 : 1)"]
+      interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 10s
+      start_period: 30s
     restart: unless-stopped
     stop_grace_period: 30s
 
   qa-dashboard:
     environment:
-      # 비밀번호는 .env에만 · 영문 · 숫자만 (주소에 그대로 들어감)
-      TICKET_GUARD_QA_QA_DATABASE_URL: postgresql+psycopg://${QA_POSTGRES_USER:-ticketguard_qa}:${QA_POSTGRES_PASSWORD:?Set QA_POSTGRES_PASSWORD in .env}@qa-postgres:5432/${QA_POSTGRES_DB:-ticketguard_qa}
+      # QA 계정 = ticketguard_qa 읽기 · 쓰기만 · 비밀번호는 .env에만 · 영문 · 숫자만 (주소에 그대로 들어감)
+      TICKET_GUARD_QA_QA_DATABASE_URL: mongodb://${QA_MONGO_USERNAME:?Set QA_MONGO_USERNAME in .env}:${QA_MONGO_PASSWORD:?Set QA_MONGO_PASSWORD in .env}@qa-mongo:27017/${QA_MONGO_DATABASE:-ticketguard_qa}?authSource=${QA_MONGO_DATABASE:-ticketguard_qa}
     networks: [default, qa-backend]
     depends_on:
-      qa-postgres:
+      qa-mongo:
         condition: service_healthy
 
 networks:
   qa-backend:
 
 volumes:
-  qa-postgres-data:
+  qa-mongo-data:
+  qa-mongo-config:

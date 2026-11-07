@@ -1,4 +1,4 @@
-"""터미널 명령 · ticket-guard-qa run | list-suites | export-archive | copy-database | dashboard · 종료 코드 0 통과 / 1 실패 / 2 오류"""
+"""터미널 명령 · ticket-guard-qa run | list-suites | export-archive | dashboard · 종료 코드 0 통과 / 1 실패 / 2 오류"""
 import argparse
 import json
 import sys
@@ -12,8 +12,7 @@ from ticket_guard_qa.qa_database.archive_export import (
     ArchiveExportError,
     export_archive,
 )
-from ticket_guard_qa.qa_database.database import create_qa_database_engine, create_session_factory
-from ticket_guard_qa.qa_database.database_copy import DatabaseCopyError, copy_qa_database
+from ticket_guard_qa.qa_database.database import connect_qa_database
 from ticket_guard_qa.settings import load_settings
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunService
@@ -54,19 +53,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help=f"여러 번 지정 가능 · 기본 {' · '.join(DEFAULT_COLLECTION_NAMES)} · 정답표 · 봇 설정은 직접 지정",
     )
 
-    copy_command = commands.add_parser(
-        "copy-database", help="QA DB 옮기기 · --source(예: SQLite) → 설정의 QA DB(PostgreSQL) · 대상이 비어 있을 때만"
-    )
-    copy_command.add_argument("--source", dest="source_url", required=True, help="예: sqlite:////qa/qa_data/qa.db")
-
     commands.add_parser("dashboard", help="QA 대시보드 띄우기 · 팀 compose 컨테이너 안에서만")
     return parser
 
 
 def run_suites(arguments: argparse.Namespace) -> int:
     settings = load_settings()
-    session_factory = create_session_factory(create_qa_database_engine(settings.qa_database_url))
-    run_service = RunService(settings, session_factory, RunProgressStream())
+    qa_database = connect_qa_database(settings.qa_database_url)
+    run_service = RunService(settings, qa_database, RunProgressStream())
     run_config = RunConfig(
         target_kind=arguments.target_kind or settings.target_kind,
         suite_names=tuple(arguments.suite_names),
@@ -84,10 +78,10 @@ def run_suites(arguments: argparse.Namespace) -> int:
 
 def export_archive_files(arguments: argparse.Namespace) -> int:
     settings = load_settings()
-    session_factory = create_session_factory(create_qa_database_engine(settings.qa_database_url))
+    qa_database = connect_qa_database(settings.qa_database_url)
     try:
         archive_folder = export_archive(
-            session_factory, arguments.run_ids, arguments.recipient, arguments.reason,
+            qa_database, arguments.run_ids, arguments.recipient, arguments.reason,
             settings.report_output_dir.parent / ARCHIVE_FOLDER_NAME,
             collection_names=tuple(arguments.collection_names or DEFAULT_COLLECTION_NAMES),
         )
@@ -102,21 +96,6 @@ def export_archive_files(arguments: argparse.Namespace) -> int:
     print("  받는 쪽 가져오기 명령:")
     for command in manifest["importCommands"]:
         print(f"    {command}")
-    return 0
-
-
-def copy_database(arguments: argparse.Namespace) -> int:
-    settings = load_settings()
-    if arguments.source_url == settings.qa_database_url:
-        print("옮기기 중단 · 원본과 대상이 같음")
-        return 2
-    target_engine = create_qa_database_engine(settings.qa_database_url)
-    try:
-        copied_counts = copy_qa_database(create_qa_database_engine(arguments.source_url), target_engine)
-    except DatabaseCopyError as error:
-        print(f"옮기기 중단 · {error}")
-        return 2
-    print(f"대상 {target_engine.dialect.name} · " + " · ".join(f"{name} {count}" for name, count in copied_counts.items()))
     return 0
 
 
@@ -144,8 +123,6 @@ def main(argv: list[str] | None = None) -> int:
         return print_suites()
     if arguments.command == "export-archive":
         return export_archive_files(arguments)
-    if arguments.command == "copy-database":
-        return copy_database(arguments)
     return start_dashboard()
 
 

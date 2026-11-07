@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     system_admin_username: str = ""
     system_admin_password: str = ""
 
-    qa_database_url: str = "sqlite:///./qa_data/qa.db"
+    qa_database_url: str = "mongodb://127.0.0.1:27021/ticketguard_qa"  # 컨테이너 안은 qa/compose.qa-db.yml이 qa-mongo로 덮어씀
     report_output_dir: Path = Path("./qa_data/reports")
     case_data_dir: Path = QA_ROOT_DIR / "case_data"
 

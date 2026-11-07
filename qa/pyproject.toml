@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "httpx==0.28.1",
     "pydantic-settings==2.6.1",
-    "SQLAlchemy==2.0.36",
+    "pymongo==4.10.1",  # QA DB · 시스템 MongoDB 읽기
 ]
 
 [project.optional-dependencies]
@@ -20,13 +20,11 @@ dashboard = [
     "jinja2==3.1.5",
     "python-multipart==0.0.20",
     "confluent-kafka==2.16.1",
-    "psycopg[binary]==3.2.3",
-    "pymongo==4.10.1",
 ]
 load = ["locust==2.32.4"]
 browser = ["playwright==1.49.1"]
-live = ["pymongo==4.10.1", "confluent-kafka==2.16.1"]
-dev = ["pytest==8.3.4"]
+live = ["confluent-kafka==2.16.1"]
+dev = ["pytest==8.3.4", "mongomock==4.3.0"]  # mongomock = 단위 테스트용 메모리 MongoDB
 
 [project.scripts]
 ticket-guard-qa = "ticket_guard_qa.command_line:main"
