@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     system_username: str = ""
     system_password: str = ""
     system_mongo_uri: str = ""  # 읽기 전용 계정만
+    system_raw_mongo_uri: str = ""  # 원본 MongoDB ticketguard_raw · 읽기 전용 계정만 · 비우면 원본 적재 검증 건너뜀
     # 이벤트 토픽 읽기 전용 · QA 대시보드는 팀 compose 안에서만 실행 · 비우면 이벤트 전달 검증 건너뜀
     kafka_bootstrap_servers: str = "kafka:9092"
     kafka_events_topic: str = "ticketguard.events.v1"

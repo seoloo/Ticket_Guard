@@ -12,6 +12,7 @@ from ticket_guard_qa.system_targets.live_django_system import (
 )
 from ticket_guard_qa.system_targets.live_kafka_reader import KafkaEventStreamReader
 from ticket_guard_qa.system_targets.live_mongo_reader import LiveMongoPipelineReader, LiveMongoVerdictReader
+from ticket_guard_qa.system_targets.live_raw_mongo_reader import LiveMongoRawEventReader
 from ticket_guard_qa.system_targets.target_interfaces import SystemTarget
 
 
@@ -34,5 +35,9 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
         event_stream_reader=(
             KafkaEventStreamReader(settings.kafka_bootstrap_servers, settings.kafka_events_topic)
             if settings.kafka_bootstrap_servers else None
+        ),
+        raw_event_reader=(
+            LiveMongoRawEventReader(settings.system_raw_mongo_uri, settings.kafka_events_topic)
+            if settings.system_raw_mongo_uri else None
         ),
     )
