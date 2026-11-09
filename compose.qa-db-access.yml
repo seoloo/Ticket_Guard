@@ -1,0 +1,22 @@
+# Optional: append LAST, after compose.gateway.yml, qa-db and qa-live.
+# Read-only DB access only; no public ports or Docker socket.
+services:
+  qa-dashboard:
+    environment:
+      TICKET_GUARD_QA_SYSTEM_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_MONGO_URI:?Set system DB reader URI}
+      TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI:?Set raw DB reader URI}
+      TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID: ${TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID:?Set the same value as raw_consumer/.env RAW_SOURCE_ID}
+    networks:
+      - default
+      - qa-backend
+      - qa-system-mongo
+      - qa-raw-mongo
+    volumes:
+      - ./mongo/verify-qa-connections.py:/opt/ticketguard/verify-qa-connections.py:ro
+networks:
+  qa-system-mongo:
+    external: true
+    name: ${TICKET_GUARD_ADMIN_MONGO_NETWORK:-ticket-guard-workspace-db_mongo-backend}
+  qa-raw-mongo:
+    external: true
+    name: ${TICKET_GUARD_QA_RAW_MONGO_NETWORK:-ticket-guard-raw_raw-backend}
