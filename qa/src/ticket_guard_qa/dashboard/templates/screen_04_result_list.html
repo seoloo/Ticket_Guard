@@ -1,0 +1,100 @@
+{% extends "layout.html" %}
+{% from "screen_parts.html" import empty_state %}
+{% block title %}테스트 결과 | TicketGuard QA{% endblock %}
+{% block head %}
+<style>
+  .result-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .status-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .status-filters a { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; border: 1.5px solid #DCE2EA;
+    background: #fff; color: var(--sub-text-color); font-size: 13.5px; font-weight: 700; white-space: nowrap; }
+  .status-filters a.is-selected { background: var(--qa-blue-light); border-color: var(--qa-blue); color: var(--qa-blue-text); }
+  .status-filters b { font-weight: 800; }
+  .active-run { display: flex; align-items: center; gap: 12px; padding: 14px 20px; margin-bottom: 16px; border-color: #C9D8FB; background: var(--qa-blue-soft); flex-wrap: wrap; }
+  .run-list-card { padding: 8px 8px 4px; }
+  .run-table td { vertical-align: middle; white-space: nowrap; }
+  .run-table tbody tr:hover { background: #FAFBFD; }
+  .run-table .run-link { font-weight: 800; color: var(--text-color); }
+  .run-table .suite-cell { white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; color: var(--sub-text-color); }
+  .run-table .actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .pill { white-space: nowrap; }
+  .delete-form { display: inline-flex; margin: 0; }
+  .button.is-danger { background: #fff; color: var(--fail-red-text); border: 1.5px solid #F6C2C4; }
+  .button.is-danger:hover { background: var(--fail-red-light); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="result-head">
+  <div>
+    <h1 class="page-heading">테스트 결과</h1>
+    <div class="sub-text">Run 기록 · 최신순 · 리포트 열기 · 동일 조건 재실행</div>
+  </div>
+  <nav class="status-filters" aria-label="최종 판정 거르기">
+    <a href="{{ base_path }}/runs" class="{{ 'is-selected' if not selected_status }}">전체 <b>{{ total_count }}</b></a>
+    {% for value, title in status_titles.items() if status_counts[value] %}
+    <a href="{{ base_path }}/runs?status={{ value }}" class="{{ 'is-selected' if selected_status == value }}">{{ title }} <b>{{ status_counts[value] }}</b></a>
+    {% endfor %}
+  </nav>
+</div>
+
+{% if notice %}<p class="notice is-qa" style="margin:0 0 14px"><i data-lucide="circle-check"></i>{{ notice }}</p>{% endif %}
+{% if error_message %}<p class="notice is-error" style="margin:0 0 14px"><i data-lucide="circle-alert"></i>{{ error_message }}</p>{% endif %}
+
+{% if active_run_id %}
+<section class="card active-run">
+  <span class="pill is-running">진행 중</span>
+  <b class="mono" style="font-size:14px">{{ active_run_id }}</b>
+  <span class="spacer"></span>
+  <a class="button is-small" href="{{ base_path }}/runs/{{ active_run_id }}/live"><i data-lucide="activity"></i>Run 모니터</a>
+</section>
+{% endif %}
+
+{% if summaries %}
+<section class="card run-list-card">
+  <table class="result-table run-table">
+    <thead><tr><th>최종 판정</th><th>Run</th><th>시작</th><th>대상</th><th>Suite</th><th>Suite 통과</th><th>합격 기준</th><th></th></tr></thead>
+    <tbody>
+    {% for summary in summaries %}
+    {% set status = summary.status.value %}
+    {% set suite_names = summary.run_config.suite_names %}
+    <tr>
+      <td><span class="pill {{ {'PASSED': 'is-passed', 'FAILED': 'is-failed', 'RUNNING': 'is-running', 'CANCELLED': 'is-cancelled'}.get(status, 'is-error') }}">{{ status_titles.get(status, status) }}</span></td>
+      <td><a class="run-link mono" href="{{ base_path }}/runs/{{ summary.run_id }}">{{ summary.run_id[-11:] }}</a></td>
+      <td>{{ summary.started_at | time_ago }}</td>
+      <td><span class="tag {{ 'is-qa' if summary.run_config.target_kind.value == 'fake' else 'is-db' }}">{{ 'Mock' if summary.run_config.target_kind.value == 'fake' else 'Live' }}</span> VU {{ summary.run_config.virtual_user_count }}</td>
+      <td class="suite-cell" title="{% for name in suite_names %}{{ suite_title_by_name.get(name, name) }}{{ ' · ' if not loop.last }}{% endfor %}">
+        {{ suite_title_by_name.get(suite_names[0], suite_names[0]) if suite_names }}{% if suite_names | length > 1 %} 외 {{ suite_names | length - 1 }}{% endif %}
+      </td>
+      <td>{% if status == 'RUNNING' %}-{% else %}{{ summary.passed_suite_count }}/{{ summary.suite_results | length }}{% endif %}</td>
+      <td>{% if status == 'RUNNING' %}-{% else %}측정 {{ summary.measured_criteria_count }}/{{ criteria_total }} · 실패 {{ summary.failed_criteria_count }}{% endif %}</td>
+      <td><div class="actions">
+        {% if status == 'RUNNING' %}
+        <a class="button is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/live"><i data-lucide="activity"></i>Run 모니터</a>
+        {% else %}
+        <a class="button is-small" href="{{ base_path }}/runs/{{ summary.run_id }}"><i data-lucide="file-text"></i>리포트</a>
+        <a class="button is-soft is-small" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="refresh-cw"></i>재실행</a>
+        <form method="post" action="{{ base_path }}/runs/{{ summary.run_id }}/delete" class="delete-form"
+              data-confirm="Run {{ summary.run_id[-11:] }} 삭제 · Run 기록 · 정답표 · 보고서 함께 삭제 · 되돌릴 수 없음">
+          <input type="hidden" name="status" value="{{ selected_status }}">
+          <button class="button is-danger is-small" type="submit"><i data-lucide="trash-2"></i>삭제</button>
+        </form>
+        {% endif %}
+      </div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+{{ empty_state("clipboard-list", "Run 기록 없음" if not selected_status else "해당 판정 Run 없음", "테스트 실행 후 결과 표시", base_path ~ "/runs/new", "새 Run 설정") }}
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  // 삭제 전 확인 · 되돌릴 수 없음
+  document.querySelectorAll(".delete-form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+  });
+</script>
+{% endblock %}

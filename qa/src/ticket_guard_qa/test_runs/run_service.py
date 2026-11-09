@@ -1,5 +1,6 @@
 """실행 시작 · 중지 · 동시 실행 잠금 · 결과 판정 · 저장 · 보고서"""
 import secrets
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -13,6 +14,7 @@ from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
 from ticket_guard_qa.domain.models import LiveMetrics, RunConfig, RunSummary, SuiteResult
 from ticket_guard_qa.domain.pass_criteria import evaluate_pass_criteria
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
+from ticket_guard_qa.macro_bots.browser_capture import CAPTURE_FOLDER_NAME
 from ticket_guard_qa.qa_database.archive_export import find_published_bot_versions, find_published_versions_in_use
 from ticket_guard_qa.reports.html_report import write_html_report
 from ticket_guard_qa.reports.json_report import write_json_report
@@ -28,7 +30,13 @@ from ticket_guard_qa.test_suites.suite_registry import get_suite
 PROGRESS_TICK_SEC = 1.0
 
 
+REPORT_SUFFIXES = ("html", "json")  # 보고서 파일 · reports/
+
 class RunAlreadyActiveError(Exception):
+    pass
+
+
+class RunDeleteError(Exception):
     pass
 
 
@@ -100,6 +108,18 @@ class RunService:
         run_id, run_config, started_at = self._reserve_run(run_config)
         threading.Thread(target=self._execute, args=(run_id, run_config, started_at), daemon=True).start()
         return run_id
+
+    def delete_run(self, run_id: str) -> None:
+        """Run 기록 · 정답표 · 보고서 · 캡처 삭제 · 진행 중 Run 거절 · 내보내기 기록(archive_exports)은 감사용 유지"""
+        if run_id == self._active_run_id:
+            raise RunDeleteError("진행 중 Run 삭제 불가 · 중지 후 삭제")
+        if not self.run_repository.delete_run(run_id):  # 없는 Run · 진행 중 Run → 파일 경로에 쓰지 않음
+            raise RunDeleteError("삭제할 Run 없음 · 진행 중 Run 삭제 불가")
+        self.answer_key_repository.delete(run_id)
+        report_output_dir = self.settings.report_output_dir
+        for report_suffix in REPORT_SUFFIXES:
+            (report_output_dir / f"{run_id}.{report_suffix}").unlink(missing_ok=True)
+        shutil.rmtree(report_output_dir / CAPTURE_FOLDER_NAME / run_id, ignore_errors=True)
 
     def cancel(self, run_id: str) -> None:
         self._cancel_requested_run_ids.add(run_id)  # 묶음 사이에서 멈춤

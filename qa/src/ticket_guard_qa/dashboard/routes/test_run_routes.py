@@ -3,6 +3,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -18,11 +19,13 @@ from ticket_guard_qa.domain.enums import AlertPolicy, Comparison, RunStatus, Tar
 from ticket_guard_qa.domain.models import CriterionResult, RunConfig, RunSummary, TrafficMix
 from ticket_guard_qa.domain.pass_criteria import PASS_CRITERIA, PassCriterion
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
-from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunService
+from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunDeleteError, RunService
 from ticket_guard_qa.test_suites.suite_registry import get_suite, list_suites
 from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
 
 PROGRESS_POLL_INTERVAL_SEC = 0.5
+RESULT_LIST_LIMIT = 50  # 테스트 결과 목록 · 최신 Run
+RUN_STATUS_FILTERS = {"PASSED": "PASS", "FAILED": "FAIL", "RUNNING": "진행 중", "ERROR": "ERROR", "CANCELLED": "중지"}
 VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)
 TRAFFIC_FIELD_NAMES = ("human_percent", "bot_a_percent", "bot_b_percent", "bot_c_percent", "bot_d_percent")
@@ -168,6 +171,47 @@ def build_criterion_comparisons(summary: RunSummary, previous_summary: RunSummar
     ]
 
 
+@router.get("/runs", response_class=HTMLResponse)
+def show_test_results(request: Request, status: str = "", deleted: str = "", run_service: RunService = Depends(get_run_service)) -> HTMLResponse:
+    """테스트 결과 · Run 기록 최신순 · 판정 거르기 · 04 리포트로 이동"""
+    return _render_result_list(request, run_service, status, f"Run {deleted[-11:]} 삭제 완료" if deleted else "")
+
+
+@router.post("/runs/{run_id}/delete")
+async def delete_test_run(request: Request, run_id: str, run_service: RunService = Depends(get_run_service)):
+    """Run 기록 · 정답표 · 보고서 삭제 · 진행 중 Run 거절 · 되돌릴 수 없음"""
+    form = await request.form()
+    status = str(form.get("status", ""))
+    try:
+        run_service.delete_run(run_id)
+    except RunDeleteError as error:
+        return _render_result_list(request, run_service, status, error_message=str(error), status_code=409)
+    return redirect_to_page(request, f"/runs?{urlencode({'status': status, 'deleted': run_id})}")
+
+
+def _render_result_list(
+    request: Request, run_service: RunService, status: str, notice: str = "", error_message: str = "", status_code: int = 200
+) -> HTMLResponse:
+    repository = run_service.run_repository
+    summaries = [summary for run_id in repository.list_recent_run_ids(RESULT_LIST_LIMIT)
+                 if (summary := repository.get_summary(run_id)) is not None]
+    selected_status = status if status in RUN_STATUS_FILTERS else ""
+    return render_screen(request, "screen_04_result_list.html", {
+        "active_tab": "qa",
+        "active_subtab": "results",
+        "summaries": [summary for summary in summaries if not selected_status or summary.status.value == selected_status],
+        "status_counts": {value: sum(summary.status.value == value for summary in summaries) for value in RUN_STATUS_FILTERS},
+        "total_count": len(summaries),
+        "selected_status": selected_status,
+        "status_titles": RUN_STATUS_FILTERS,
+        "criteria_total": len(PASS_CRITERIA),
+        "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
+        "active_run_id": run_service.active_run_id,
+        "notice": notice,
+        "error_message": error_message,
+    }, status_code)
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 def show_test_result(request: Request, run_id: str, run_service: RunService = Depends(get_run_service)):
     summary = run_service.run_repository.get_summary(run_id)
@@ -186,6 +230,7 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
     criterion_rows = build_criterion_rows(summary, suite_title_by_name)
     return render_screen(request, "screen_04_test_result.html", {
         "active_tab": "qa",
+        "active_subtab": "results",
         "summary": summary,
         "criterion_cards": criterion_cards,
         "criterion_rows": criterion_rows,

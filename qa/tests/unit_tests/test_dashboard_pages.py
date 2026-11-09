@@ -21,7 +21,7 @@ def dashboard_client(qa_settings) -> TestClient:
     return TestClient(create_dashboard_app(qa_settings), headers=ADMIN_HEADERS)
 
 
-@pytest.mark.parametrize("path", ["/", "/runs/new", "/db", "/db/sessions/attempt-1", "/bots", "/bots/bot_a/edit", "/bots/bot_new/edit", "/cases"])
+@pytest.mark.parametrize("path", ["/", "/runs/new", "/db", "/db/sessions/attempt-1", "/bots", "/bots/bot_a/edit", "/bots/bot_new/edit", "/cases", "/runs", "/runs?status=FAILED"])
 def test_screens_open_for_admin(dashboard_client, path):
     assert dashboard_client.get(path).status_code == 200
 
@@ -113,6 +113,10 @@ def test_full_fake_run_shows_result(dashboard_client):
     run_id = run_path.rsplit("/", 1)[-1]
     assert run_service.run_repository.get_summary(run_id).run_config.bot_version_numbers["BOT_B"] == 2  # 저장한 버전으로 실행
 
+    results_page = dashboard_client.get("/runs").text
+    assert f'href="/qa/runs/{run_id}"' in results_page and 'class="is-active"><i data-lucide="clipboard-list"></i>테스트 결과' in results_page
+    assert 'class="is-active"><i data-lucide="clipboard-list"></i>테스트 결과' in result_page.text  # 04 리포트도 테스트 결과 탭
+
     cases_page = dashboard_client.get(f"/cases?run_id={run_id}").text
     assert f"Run <b class=\"mono\">{run_id}</b> · 세션 100" in cases_page  # 정답표 조회
     detection_page = dashboard_client.get(f"{run_path}/bots")
@@ -180,3 +184,26 @@ def test_run_monitor_shows_suites_in_run_order_with_guides(dashboard_client):
     assert "Suite 진행 <b id=\"suite-progress-count\">0 / 2</b>" in page
     assert page.index('data-suite-name="seat_concurrency" tabindex') < page.index('data-suite-name="self_check" tabindex')
     assert page.count('role="tooltip"') == 2
+
+
+def test_delete_run_removes_record_answer_key_and_reports(dashboard_client):
+    run_service = dashboard_client.app.state.run_service
+    summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", "verdict_accuracy"), virtual_user_count=20))
+    report_dir = run_service.settings.report_output_dir
+    assert (report_dir / f"{summary.run_id}.html").exists() and run_service.answer_key_repository.load(summary.run_id)
+
+    response = dashboard_client.post(f"/runs/{summary.run_id}/delete", data={"status": "PASSED"}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/qa/runs?status=PASSED&deleted={summary.run_id}"
+    assert run_service.run_repository.get_summary(summary.run_id) is None
+    assert run_service.answer_key_repository.load(summary.run_id) == {}
+    assert not (report_dir / f"{summary.run_id}.html").exists() and not (report_dir / f"{summary.run_id}.json").exists()
+    assert "삭제 완료" in dashboard_client.get(response.headers["location"].removeprefix("/qa")).text
+
+
+def test_delete_rejects_running_or_unknown_run(dashboard_client):
+    run_service = dashboard_client.app.state.run_service
+    run_service.run_repository.create_run("run-20261109-040000-aaaa", RunConfig(TargetKind.FAKE, ("self_check",)), datetime.now(timezone.utc))
+    assert dashboard_client.post("/runs/run-20261109-040000-aaaa/delete").status_code == 409
+    assert run_service.run_repository.get_summary("run-20261109-040000-aaaa") is not None
+    assert dashboard_client.post("/runs/..%2F..%2Fsecret/delete").status_code in (404, 409)

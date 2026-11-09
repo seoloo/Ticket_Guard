@@ -36,7 +36,8 @@
   </header>
   {% if active_tab == 'qa' %}
   <nav class="sub-tabs">
-    <a href="{{ base_path }}/runs/new" class="{{ 'is-active' if active_subtab not in ('bots', 'cases') }}"><i data-lucide="play"></i>테스트 실행</a>
+    <a href="{{ base_path }}/runs/new" class="{{ 'is-active' if active_subtab not in ('bots', 'cases', 'results') }}"><i data-lucide="play"></i>테스트 실행</a>
+    <a href="{{ base_path }}/runs" class="{{ 'is-active' if active_subtab == 'results' }}"><i data-lucide="clipboard-list"></i>테스트 결과</a>
     <a href="{{ base_path }}/bots" class="{{ 'is-active' if active_subtab == 'bots' }}"><i data-lucide="bot"></i>매크로 봇 시뮬레이션</a>
     <a href="{{ base_path }}/cases" class="{{ 'is-active' if active_subtab == 'cases' }}"><i data-lucide="list-checks"></i>테스트 케이스 · Ground Truth</a>
   </nav>
