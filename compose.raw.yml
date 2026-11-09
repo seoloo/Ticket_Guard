@@ -13,6 +13,7 @@ services:
       RAW_BATCH_WRITE_SECONDS: ${RAW_BATCH_WRITE_SECONDS:-35}
       RAW_ROUTING_FINGERPRINT: ${RAW_ROUTING_FINGERPRINT:-54e2a7c73316ed633ef5a445ff9dc0b87b44cd302b8af93f8c9cce586f6f8b1b}
       RAW_MONGO_HOST: mongo-raw
+      RAW_MONGO_PORT: ${RAW_MONGO_PORT:-27017}
       RAW_MONGO_DATABASE: ${RAW_MONGO_DATABASE:-ticketguard_raw}
       RAW_MONGO_WRITER_USERNAME: ${RAW_MONGO_WRITER_USERNAME:?Set writer}
       RAW_MONGO_WRITER_PASSWORD: ${RAW_MONGO_WRITER_PASSWORD:?Set writer password}
@@ -25,7 +26,7 @@ services:
     stop_grace_period: 60s
   mongo-raw:
     image: mongo:8.0.34
-    command: [mongod, --auth, --bind_ip_all, --port, '27020']
+    command: [mongod, --auth, --bind_ip_all]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${RAW_MONGO_ROOT_USERNAME:?Set admin}
       MONGO_INITDB_ROOT_PASSWORD: ${RAW_MONGO_ROOT_PASSWORD:?Set admin password}
@@ -41,7 +42,7 @@ services:
       - ./raw_consumer/mongo/verify.js:/opt/raw/verify.js:ro
       - ./raw_consumer/mongo/setup.js:/opt/raw/setup.js:ro
     healthcheck:
-      test: [CMD, mongosh, --quiet, --norc, --port, '27020', /opt/raw/healthcheck.js]
+      test: [CMD, mongosh, --quiet, --norc, /opt/raw/healthcheck.js]
       interval: 10s
       timeout: 5s
       retries: 12

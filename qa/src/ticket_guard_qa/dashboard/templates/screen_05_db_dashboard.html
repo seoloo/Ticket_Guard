@@ -4,10 +4,18 @@
 <h1 class="page-heading">DB 대시보드 <span class="muted">읽기 전용{% if run_id %} · {{ run_id }}{% endif %}</span></h1>
 {% if not_ready_message %}<p class="notice is-db">{{ not_ready_message }}</p>{% endif %}
 {% if pipeline_summary %}
+<nav class="sub-tabs"><a class="is-active">흐름 분석</a><a>의심 활동</a><a>사용자 상세</a></nav>
 <section class="card-grid">
   <section class="card card-padding"><h2>정제 이벤트</h2><p class="metric-value">{{ pipeline_summary.clean_events }}</p></section>
   <section class="card card-padding"><h2>격리 이벤트</h2><p class="metric-value">{{ pipeline_summary.quarantine_events }}</p></section>
+  <section class="card card-padding"><h2>예매 전환율</h2><p class="metric-value">{{ '%.1f'|format(pipeline_summary.flow.conversionRate * 100) }}%</p></section>
+  <section class="card card-padding"><h2>검토 대상 사용자</h2><p class="metric-value">{{ pipeline_summary.suspicious|length }}</p></section>
 </section>
+<section class="card card-padding"><h2>예매 전환 퍼널</h2><table><thead><tr><th>단계</th><th>건수</th></tr></thead><tbody>{% for stage in pipeline_summary.funnel.stages %}<tr><td>{{ stage.stage }}</td><td>{{ stage.count }}</td></tr>{% else %}<tr><td colspan="2">집계 데이터가 없습니다.</td></tr>{% endfor %}</tbody></table></section>
+<section class="card card-padding"><h2>단계별 체류 시간</h2><table><thead><tr><th>구간</th><th>중앙값(ms)</th><th>p95(ms)</th><th>표본</th></tr></thead><tbody>{% for segment in pipeline_summary.latency.segments %}<tr><td>{{ segment.segment }}</td><td>{{ segment.medianMs }}</td><td>{{ segment.p95Ms }}</td><td>{{ segment.sampleCount }}</td></tr>{% else %}<tr><td colspan="4">집계 데이터가 없습니다.</td></tr>{% endfor %}</tbody></table></section>
+<section class="card card-padding"><h2>예매 실패·거부 원인</h2><table><thead><tr><th>이벤트</th><th>오류 코드</th><th>action</th><th>건수</th></tr></thead><tbody>{% for failure in pipeline_summary.failures %}<tr><td>{{ failure.eventType }}</td><td>{{ failure.errorCode }}</td><td>{{ failure.action }}</td><td>{{ failure.count }}</td></tr>{% else %}<tr><td colspan="4">실패·거부 데이터가 없습니다.</td></tr>{% endfor %}</tbody></table></section>
+<section class="card card-padding"><h2>의심 활동</h2><table><thead><tr><th>사용자 ID</th><th>신호</th><th>횟수</th><th>최근 활동</th><th>검토 상태</th></tr></thead><tbody>{% for user in pipeline_summary.suspicious %}<tr><td>{{ user.userId }}</td><td>{{ user.signals|join(', ') }}</td><td>{{ user.signalCount }}</td><td>{{ user.lastActivityAt }}</td><td>{{ user.reviewStatus }}</td></tr>{% else %}<tr><td colspan="5">검토 대상이 없습니다.</td></tr>{% endfor %}</tbody></table></section>
+<section class="card card-padding"><h2>사용자 상세</h2><table><thead><tr><th>사용자 ID</th><th>최근 예매 시도</th><th>접근 거부</th><th>최근 활동</th></tr></thead><tbody>{% for user in pipeline_summary.users %}<tr><td>{{ user.userId }}</td><td>{{ user.recentBookingAttempts }}</td><td>{{ user.accessDeniedCount }}</td><td>{{ user.lastActivityAt }}</td></tr>{% else %}<tr><td colspan="4">사용자 활동 데이터가 없습니다.</td></tr>{% endfor %}</tbody></table></section>
 <section class="card card-padding">
   <h2>이벤트 타입별 집계</h2>
   <table><thead><tr><th>이벤트 타입</th><th>전체</th><th>성공</th><th>실패</th><th>거부</th></tr></thead><tbody>

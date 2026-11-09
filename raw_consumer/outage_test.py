@@ -27,7 +27,7 @@ c = Consumer({'bootstrap.servers': bootstrap, 'group.id': group,
               'enable.auto.commit': False, 'enable.auto.offset.store': False,
               'auto.offset.reset': 'error'})
 c.subscribe([topic], on_assign=assign)
-client = MongoClient(host='mongo-raw', port=27020,
+client = MongoClient(host='mongo-raw', port=int(os.environ.get('RAW_MONGO_PORT', '27017')),
                      username=os.environ['RAW_MONGO_WRITER_USERNAME'],
                      password=os.environ['RAW_MONGO_WRITER_PASSWORD'],
                      authSource=os.environ['RAW_MONGO_DATABASE'], directConnection=True,

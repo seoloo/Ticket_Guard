@@ -11,7 +11,7 @@ Kafka를 작은 배치로 읽고 종류별 컬렉션에 원본을 직접 저장�
 | 프로젝트 / 서비스 | ticket-guard-raw / raw-consumer, mongo-raw |
 | Kafka / 토픽 | kafka:9092 / ticketguard.events.v1 |
 | 그룹 | ticketguard-raw-db-v1 |
-| DB | mongo-raw:27020 / ticketguard_raw |
+| DB | mongo-raw:27017 / ticketguard_raw |
 | 네트워크 | 공통 ticket-guard_default + 전용 raw-backend |
 | 호스트 DB 관리 접속 | local override 사용 시 localhost:27020 |
 | 배치 | 200건 / 첫 메시지 후 1초 / key+value+headers 4 MiB |
@@ -72,7 +72,7 @@ Kafka offset이 다르면 payload/eventId가 같아도 별도 문서다.
 docker compose --env-file raw_consumer/.env -f compose.raw.yml config --quiet
 docker compose --env-file raw_consumer/.env -f compose.raw.yml build raw-consumer
 docker compose --env-file raw_consumer/.env -f compose.raw.yml -f compose.raw.local.yml up -d --wait mongo-raw
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup.js
+docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27017 /opt/raw/setup.js
 docker compose --env-file raw_consumer/.env -f compose.raw.yml up -d --no-deps raw-consumer
 ```
 
@@ -84,10 +84,10 @@ raw_events 인덱스는 변경하지 않는다. TTL/업무 validator는 없다.
 현재 실행 중인 DB를 재생성하지 않고 setup만 적용하려면 다음도 가능하다.
 
 ```powershell
-Get-Content -Raw raw_consumer/mongo/setup.js | docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 --file /dev/stdin
+Get-Content -Raw raw_consumer/mongo/setup.js | docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27017 --file /dev/stdin
 ```
 
-공식 Mongo 초기화 임시 서버는 27017을 쓰지만 운영 실행·인증·healthcheck·조회는 27020이다.
+컨테이너 내부 서비스 통신은 27017을 사용하고, 호스트에서 Compass로 접속할 때만 27020을 사용한다.
 DB 호스트 공개가 필요 없으면 compose.raw.local.yml을 생략한다.
 
 ## 실행·조회
@@ -95,7 +95,7 @@ DB 호스트 공개가 필요 없으면 compose.raw.local.yml을 생략한다.
 ```powershell
 docker compose --env-file raw_consumer/.env -f compose.raw.yml ps -a
 docker compose --env-file raw_consumer/.env -f compose.raw.yml logs --tail 30 raw-consumer
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
+docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27017 /opt/raw/verify.js
 docker compose --env-file raw_consumer/.env -f compose.raw.yml stop raw-consumer
 ```
 

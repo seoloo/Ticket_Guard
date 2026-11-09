@@ -44,7 +44,7 @@ class Settings:
         group_id = os.environ.get('SPARK_KAFKA_GROUP_ID', 'ticketguard-spark-consumer')
         topic = os.environ.get('KAFKA_EVENTS_TOPIC', 'ticketguard.events.v1')
         host = os.environ.get('SPARK_MONGO_HOST', 'ticket-guard-workspace-db-mongo-1')
-        database = os.environ.get('MONGO_DATABASE', 'ticketguard')
+        database = os.environ.get('RESULT_MONGO_DATABASE', os.environ.get('MONGO_DATABASE', 'ticketguard_results'))
         checkpoint = os.environ.get('SPARK_CHECKPOINT_DIR', '/checkpoints/spark-consumer')
         if not kafka or not re.fullmatch(r'[A-Za-z0-9._-]+', topic) or topic in ('.', '..'):
             raise ValueError('Invalid Kafka address or topic')

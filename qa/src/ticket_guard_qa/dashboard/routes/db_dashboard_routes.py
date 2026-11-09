@@ -1,5 +1,6 @@
 """05 DB 대시보드 · 정답은 QA DB · 판정은 시스템 DB(읽기 전용) · 시스템 쪽에 쓰지 않음"""
-from fastapi import APIRouter, Request
+from datetime import datetime, timezone
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ticket_guard_qa.dashboard.dependencies import render_screen
@@ -17,7 +18,8 @@ def show_db_dashboard(request: Request, run_id: str | None = None) -> HTMLRespon
     error_message = None
     if settings.system_mongo_uri:
         try:
-            summary = LiveMongoPipelineReader(settings.system_mongo_uri).summary()
+            reader = LiveMongoPipelineReader(settings.system_mongo_uri)
+            summary = {**reader.summary(), **reader.dashboard_data()}
         except Exception:
             error_message = "시스템 MongoDB를 읽을 수 없습니다. 연결 설정과 read-only 권한을 확인하세요."
     return render_screen(request, "screen_05_db_dashboard.html", {
@@ -27,6 +29,22 @@ def show_db_dashboard(request: Request, run_id: str | None = None) -> HTMLRespon
         "not_ready_message": error_message or (None if summary else SYSTEM_DATABASE_NOT_READY_MESSAGE),
         "pipeline_summary": summary,
     })
+
+
+@router.post("/db/reviews/{user_id}", response_class=HTMLResponse)
+def save_review(request: Request, user_id: str, status: str = Form("unreviewed"), memo: str = Form("")) -> HTMLResponse:
+    session = request.app.state.qa_session_factory()
+    try:
+        from ticket_guard_qa.qa_database.tables import DashboardReviewRecord
+        record = session.get(DashboardReviewRecord, user_id) or DashboardReviewRecord(user_id=user_id)
+        record.status, record.memo = status[:30], memo[:4000]
+        record.reviewer = getattr(request.state, "admin_user", "")[:120]
+        record.reviewed_at = datetime.now(timezone.utc)
+        session.add(record)
+        session.commit()
+    finally:
+        session.close()
+    return show_db_dashboard(request)
 
 
 @router.get("/db/sessions/{session_key}", response_class=HTMLResponse)

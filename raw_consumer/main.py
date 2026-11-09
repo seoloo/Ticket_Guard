@@ -131,7 +131,7 @@ def kafka_config(group=None):
 
 def mongo_client():
     return MongoClient(
-        host=os.environ.get('RAW_MONGO_HOST', 'mongo-raw'), port=27020,
+        host=os.environ.get('RAW_MONGO_HOST', 'mongo-raw'), port=int(os.environ.get('RAW_MONGO_PORT', '27017')),
         username=required('RAW_MONGO_WRITER_USERNAME'),
         password=required('RAW_MONGO_WRITER_PASSWORD'),
         authSource=os.environ.get('RAW_MONGO_DATABASE', 'ticketguard_raw'),
