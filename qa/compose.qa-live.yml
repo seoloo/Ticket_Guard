@@ -1,0 +1,23 @@
+# QA Live 시험 설정 · qa-dashboard 설정만 추가 · 팀 compose + qa/compose.qa-db.yml에 덧붙여 실행
+# docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build --no-deps qa-dashboard
+# --no-deps = 예매 웹 · Kafka 다시 만들지 않음 · 예매 웹 메모리 데이터 유지
+# 값은 저장소 .env · 비어 있으면 해당 Live 시험만 건너뜀
+services:
+  qa-dashboard:
+    environment:
+      # Run 전 시험 데이터 초기화(/api/qa/reset/) · 시스템 관리자 계정 · 시스템 QA_RESET_ENABLED=1일 때만 동작
+      TICKET_GUARD_QA_SYSTEM_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME:-}
+      TICKET_GUARD_QA_SYSTEM_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
+      # 이벤트 전달 · 원본 적재 검증 · 읽기 전용 · QA 전용 소비자 그룹
+      TICKET_GUARD_QA_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TICKET_GUARD_QA_KAFKA_EVENTS_TOPIC: ${KAFKA_EVENTS_TOPIC:-ticketguard.events.v1}
+      # 원본 적재 검증 · 원본 DB 읽기 전용 계정 · 원본 적재기 RAW_SOURCE_ID
+      TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI:-}
+      TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID: ${RAW_SOURCE_ID:-}
+      # 토픽 계약 사례 · 시험 환경 토픽에만 · 기본 꺼짐
+      TICKET_GUARD_QA_IS_KAFKA_CONTRACT_INJECTION_ENABLED: ${TICKET_GUARD_QA_IS_KAFKA_CONTRACT_INJECTION_ENABLED:-false}
+      # 장애 복구 · 정제 · 격리 저장 컨테이너 이름 · Docker 제어 권한 결정 전 비움
+      TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME: ${TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME:-}
+      # 부하 T1 · 시스템 동시 입장 상한 · 0 = 모름 → 측정만
+      TICKET_GUARD_QA_QUEUE_ADMISSION_LIMIT: ${TICKET_GUARD_QA_QUEUE_ADMISSION_LIMIT:-0}
+      TICKET_GUARD_QA_RULE_SET_VERSION: ${TICKET_GUARD_QA_RULE_SET_VERSION:-mock-1}

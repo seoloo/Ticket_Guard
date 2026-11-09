@@ -12,9 +12,11 @@ from ticket_guard_qa.domain.models import RunConfig, SessionKey, VirtualUserSess
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
 from ticket_guard_qa.system_targets.live_booking_client import (
+    BROWSER_USER_AGENT,
     BookingFlowError,
     LiveBookingClient,
     build_test_account_username,
+    choose_user_agent,
 )
 from ticket_guard_qa.system_targets.live_django_system import (
     LiveDjangoBookingApi,
@@ -29,6 +31,7 @@ from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     ALL_SEAT_IDS,
     TIMEOUT_FAILED_STEP,
     build_session_plans,
+    calculate_pre_open_sec,
     send_virtual_user_traffic,
 )
 
@@ -36,10 +39,11 @@ BASE_URL = "http://web:8000"
 PASSWORD = "qa-password"
 CAPTCHA_ANSWER = "QA123"
 HUMAN_BEHAVIOR = DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN]
+API_ONLY_BEHAVIOR = replace(HUMAN_BEHAVIOR, browser_trace_level=0)  # 좌석 클릭 이벤트만 보는 시험
 
 
 def build_instant_plan(preferred_seat_ids: tuple[str, ...] = ALL_SEAT_IDS) -> VirtualUserSessionPlan:
-    return VirtualUserSessionPlan(HUMAN_BEHAVIOR, 0.0, (0.0, 0.0, 0.0), preferred_seat_ids)
+    return VirtualUserSessionPlan(API_ONLY_BEHAVIOR, 0.0, (0.0, 0.0, 0.0), preferred_seat_ids)
 
 
 class FakeDjango:
@@ -53,10 +57,22 @@ class FakeDjango:
         self.events: list[dict] = []
         self.reset_count = 0
         self.heartbeat_count = 0
+        self.page_paths: list[str] = []
+        self.user_agents: set[str] = set()
+        self.issued_device_count = 0
+        self.device_cookie_by_username: dict[str, str] = {}  # 로그인 요청에 실린 기기 쿠키
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        self.user_agents.add(request.headers.get("user-agent", ""))
+        if request.method == "GET" and (request.url.path == "/" or request.url.path.startswith("/detail/")):
+            self.page_paths.append(request.url.path)
+            return httpx.Response(200, html="<html></html>")
         if request.url.path == "/login/":
-            return httpx.Response(200, headers={"set-cookie": "csrftoken=token-1; Path=/"})
+            headers = [("set-cookie", "csrftoken=token-1; Path=/")]
+            if "tg_capture=" not in request.headers.get("cookie", ""):  # 시스템 middleware · 기기 쿠키 없으면 새로
+                self.issued_device_count += 1
+                headers.append(("set-cookie", f"tg_capture=device-cookie-{self.issued_device_count}; Path=/"))
+            return httpx.Response(200, headers=headers)
         if request.url.path == "/captcha.png":
             return httpx.Response(200, content=b"png")
         if request.url.path == "/api/qa/reset/":
@@ -68,6 +84,8 @@ class FakeDjango:
             return httpx.Response(202, json={"accepted": True, "state": "queued"})
         self.actions.append({**body, "csrf": request.headers.get("x-csrftoken")})
         if body["action"] == "login":
+            cookies = dict(part.strip().split("=", 1) for part in request.headers.get("cookie", "").split(";") if "=" in part)
+            self.device_cookie_by_username[body["username"]] = cookies.get("tg_capture", "")
             return httpx.Response(self.login_status, json={} if self.login_status == 200 else {"code": "LOGIN_FAILED"})
         if body["action"] == "start":
             return httpx.Response(200, json={"id": "attempt-1", "stage": "queue"})
@@ -252,3 +270,77 @@ def test_booking_flow_suite_fails_on_account_shortage():
     result = BookingFlowSuite().run(build_booking_flow_context(system_target, 3))
     assert result.outcome is SuiteOutcome.FAILED
     assert "시험 계정 부족 · VU 3명 · 계정 2개" in result.message
+
+
+def test_browser_trace_session_browses_pages_and_sends_page_events():
+    fake_django = FakeDjango()
+    client = LiveBookingClient(BASE_URL, httpx.MockTransport(fake_django.handle), choose_user_agent(HUMAN_BEHAVIOR))
+    plan = VirtualUserSessionPlan(HUMAN_BEHAVIOR, 0.0, (0.0, 0.0, 0.0), ("C3", "C4"), page_dwell_ms=(0.0, 0.0, 0.0))
+    asyncio.run(run_flow(client, plan))
+
+    assert fake_django.page_paths == ["/detail/blue-hour/", "/", "/detail/blue-hour/"]  # 상세 → 목록 → 상세
+    page_events = [(event["eventType"], event["details"]["pageName"]) for event in fake_django.events if event["eventType"] != "seat_select"]
+    assert page_events == [("page_enter", "detail"), ("page_exit", "detail"), ("page_enter", "shows"), ("page_exit", "shows"),
+                           ("page_enter", "detail"), ("page_exit", "detail"), ("page_enter", "select")]
+    assert BROWSER_USER_AGENT in fake_django.user_agents
+
+
+def test_api_only_session_skips_page_events_and_keeps_library_agent():
+    fake_django = FakeDjango()
+    bot_a_behavior = DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]
+    client = LiveBookingClient(BASE_URL, httpx.MockTransport(fake_django.handle), choose_user_agent(bot_a_behavior))
+    asyncio.run(run_flow(client, VirtualUserSessionPlan(bot_a_behavior, 0.0, (0.0, 0.0, 0.0), ("C3", "C4"))))
+
+    assert fake_django.page_paths == []
+    assert {event["eventType"] for event in fake_django.events} == {"seat_select"}
+    assert BROWSER_USER_AGENT not in fake_django.user_agents
+
+
+class AlwaysSoldDjango(FakeDjango):
+    """확정마다 고른 좌석이 먼저 팔렸다고 응답 · 재시도 횟수 확인용"""
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/action/" and json.loads(request.content).get("action") == "confirm":
+            body = json.loads(request.content)
+            self.actions.append(body)
+            return httpx.Response(409, json={"code": "SEAT_SOLD", "sold": body["seats"]})
+        return super().handle(request)
+
+
+@pytest.mark.parametrize("retry_count, expected_confirms", [(0, 1), (2, 3)])
+def test_sold_out_retry_count_follows_behavior(retry_count, expected_confirms):
+    fake_django = AlwaysSoldDjango()
+    behavior = replace(API_ONLY_BEHAVIOR, sold_out_retry_count=retry_count, sold_out_retry_delay_ms=0)
+    client = LiveBookingClient(BASE_URL, httpx.MockTransport(fake_django.handle))
+    result = asyncio.run(run_flow(client, VirtualUserSessionPlan(behavior, 0.0, (0.0, 0.0, 0.0), ALL_SEAT_IDS[:8])))
+
+    assert result.booking_outcome is BookingOutcome.SOLD_OUT
+    assert [action["action"] for action in fake_django.actions].count("confirm") == expected_confirms
+
+
+def test_session_plans_sample_one_dwell_per_browsed_page():
+    plans = build_session_plans([HUMAN_BEHAVIOR, DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]], random_seed=7)
+    assert len(plans[0].page_dwell_ms) == HUMAN_BEHAVIOR.browse_page_count and plans[1].page_dwell_ms == ()
+    assert calculate_pre_open_sec(plans) == pytest.approx(sum(plans[0].page_dwell_ms) / 1000)  # 오픈 전 대기 0 고정
+
+
+def test_plans_group_device_windows_and_share_start_moment():
+    bot_d_behavior = replace(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_D], sessions_per_device=4)
+    plans = build_session_plans([bot_d_behavior] * 6 + [HUMAN_BEHAVIOR] * 2, random_seed=3)
+
+    device_keys = [plan.device_key for plan in plans]
+    assert device_keys[:4] == [device_keys[0]] * 4 and device_keys[4] == device_keys[5] != device_keys[0]  # 4창 + 2창
+    assert len(set(device_keys[6:])) == 2 and not set(device_keys[6:]) & set(device_keys[:6])  # 사람 = 기기 1대씩
+    assert len({plan.entry_delay_ms for plan in plans[:4]}) == 1  # 같은 기기 창 = 같은 순간 예매 시작
+
+
+def test_device_windows_log_in_with_one_shared_device_cookie():
+    fake_django = FakeDjango()
+    bot_d_behavior = replace(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_D], sessions_per_device=3)
+    plans = [replace(plan, click_intervals_ms=(0.0, 0.0, 0.0)) for plan in build_session_plans([bot_d_behavior] * 4, random_seed=5)]
+    results = send_virtual_user_traffic(build_booking_api(fake_django, account_count=4), plans, 10)
+
+    cookies = [fake_django.device_cookie_by_username[build_test_account_username(number)] for number in range(1, 5)]
+    assert all(cookies) and len(set(cookies)) == 2  # 기기 2대 · 3창 + 1창
+    assert sorted(cookies.count(cookie) for cookie in set(cookies)) == [1, 3]
+    assert [result.device_key for result in results] == [plan.device_key for plan in plans]

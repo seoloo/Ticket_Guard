@@ -2,9 +2,11 @@
 from typing import Any
 from pymongo import MongoClient
 from ticket_guard_qa.domain.models import QuarantineRecord, SessionFeatureRecord, SessionVerdictRecord, SystemVerdicts
+from ticket_guard_qa.system_targets.target_interfaces import StoredOutcome
 
 SCHEMA_NOT_READY_MESSAGE = "MongoDB 스키마 확정 전 · docs/contracts.md 3장"
 QA_READ_TIMEOUT_MS = 3000
+PROCESSED_EVENT_COLLECTION_NAMES = ("clean_events", "quarantine_events")  # Spark 정제 · 격리 저장
 
 class LiveMongoVerdictReader:
     def __init__(self, mongo_uri: str) -> None:
@@ -20,8 +22,37 @@ class LiveMongoVerdictReader:
 
 
 class LiveMongoPipelineReader:
-    def __init__(self, mongo_uri: str) -> None:
+    def __init__(self, mongo_uri: str, topic: str = "") -> None:
         self.mongo_uri = mongo_uri
+        self.topic = topic
+
+    def read_stored_outcomes(self, positions: list[tuple[int, int]]) -> list[StoredOutcome]:
+        """Spark 저장 문서 _id = 토픽:파티션:오프셋 · 정제 · 격리 컬렉션 조회 · 읽기만"""
+        if not self.mongo_uri:
+            raise NotImplementedError("시스템 MongoDB 읽기 미설정 · TICKET_GUARD_QA_SYSTEM_MONGO_URI · 읽기 전용 계정")
+        document_ids = [f"{self.topic}:{partition}:{offset}" for partition, offset in positions]
+        outcomes = []
+        with MongoClient(self.mongo_uri, serverSelectionTimeoutMS=QA_READ_TIMEOUT_MS) as client:
+            database = client.get_default_database()
+            for collection_name in PROCESSED_EVENT_COLLECTION_NAMES:
+                for document in database[collection_name].find({"_id": {"$in": document_ids}}):
+                    outcomes.append(StoredOutcome(
+                        int(document["partition"]), int(document["offset"]), collection_name,
+                        document.get("reasonCode") or document.get("reason"),
+                    ))
+        return outcomes
+
+    def find_processed_event_ids(self, event_ids: list[str]) -> list[str]:
+        """정제 · 격리 컬렉션 eventId 조회 · 읽기만 · 중복 저장은 중복 그대로"""
+        if not self.mongo_uri:
+            raise NotImplementedError("시스템 MongoDB 읽기 미설정 · TICKET_GUARD_QA_SYSTEM_MONGO_URI · 읽기 전용 계정")
+        with MongoClient(self.mongo_uri, serverSelectionTimeoutMS=QA_READ_TIMEOUT_MS) as client:
+            database = client.get_default_database()
+            return [
+                document["eventId"]
+                for collection_name in PROCESSED_EVENT_COLLECTION_NAMES
+                for document in database[collection_name].find({"eventId": {"$in": event_ids}}, {"_id": 0, "eventId": 1})
+            ]
 
     def summary(self) -> dict[str, Any]:
         """Read dashboard metrics without mutating the system database."""

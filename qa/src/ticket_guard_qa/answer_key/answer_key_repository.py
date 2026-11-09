@@ -14,6 +14,9 @@ class AnswerKeyRepository:
         entries = [{"session_key": key, "actor_type": actor_type.value} for key, actor_type in answer_key.items()]
         self.answer_keys.replace_one({"_id": run_id}, {"_id": run_id, "entries": entries}, upsert=True)
 
+    def delete(self, run_id: str) -> None:
+        self.answer_keys.delete_one({"_id": run_id})
+
     def load(self, run_id: str) -> AnswerKey:
         document = self.answer_keys.find_one({"_id": run_id}) or {}
         return {SessionKey(entry["session_key"]): ActorType(entry["actor_type"]) for entry in document.get("entries", [])}

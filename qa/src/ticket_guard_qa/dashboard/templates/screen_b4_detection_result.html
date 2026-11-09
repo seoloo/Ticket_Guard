@@ -69,7 +69,7 @@
       <h2 class="section-heading">유형별 탐지 성능</h2>
       <table class="result-table rate-table" style="margin-top:12px">
         <tr><th>유형</th><th>n</th><th>Hit</th><th>Rate</th><th>기준선</th><th></th></tr>
-        {% for info in bot_type_catalog %}
+        {% for info in bot_type_catalog() %}
         {% set row = rows.get(info.actor_type) %}
         {% if row and row.session_count %}
         {% set target = row.target %}
@@ -98,7 +98,7 @@
       <div class="matrix-scroll">
       <table class="result-table matrix-table" style="margin-top:12px">
         <tr><th>Ground Truth</th>{% for stage in verdict_stages %}<th>{{ stage.value }}</th>{% endfor %}</tr>
-        {% for info in bot_type_catalog %}
+        {% for info in bot_type_catalog() %}
         {% set row = rows.get(info.actor_type) %}
         {% if row and row.session_count %}
         <tr>
@@ -128,7 +128,7 @@
         <span>FN <b style="font-size:22px">{{ verdict_details.missed_bot_count }}</b></span>
         <span>FP <b style="font-size:22px">{{ verdict_details.false_positive_count }}</b></span>
       </div>
-      {% for info in bot_type_catalog if info.actor_type in missed_keys_by_actor_type %}
+      {% for info in bot_type_catalog() if info.actor_type in missed_keys_by_actor_type %}
       {% set session_keys = missed_keys_by_actor_type[info.actor_type] %}
       <div class="session-group">
         <div class="row">{{ actor_chip(info) }}<span class="muted">FN {{ session_keys | length }}</span></div>

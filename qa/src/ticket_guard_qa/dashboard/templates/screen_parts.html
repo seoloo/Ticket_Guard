@@ -25,6 +25,14 @@
 </div>
 {% endmacro %}
 
+{% macro bot_badge(type_info, size=40) %}
+<span class="bot-badge" style="width:{{ size }}px;height:{{ size }}px;--bot-color:var(--{{ type_info.color_token }})" title="{{ type_info.display_name }}"><i data-lucide="{{ type_info.icon_name }}"></i>{% if type_info.short_name.isascii() and type_info.short_name | length <= 2 %}<span class="bot-badge-code">{{ type_info.short_name }}</span>{% endif %}</span>
+{% endmacro %}
+
+{% macro bot_status_chip(status_key, title) %}
+<span class="bot-status is-{{ status_key }}"><i></i>{{ title }}</span>
+{% endmacro %}
+
 {% macro actor_chip(type_info, version_number=none) %}
 <span class="actor-chip"><span class="actor-dot" style="background:var(--{{ type_info.color_token }})"></span>{{ type_info.short_name }}{% if version_number %}<span class="muted">v{{ version_number }}</span>{% endif %}</span>
 {% endmacro %}
@@ -36,4 +44,13 @@
   <div class="sub-text">{{ description }}</div>
   {% if link_url %}<a class="button" style="margin-top:16px" href="{{ link_url }}">{{ link_title }}</a>{% endif %}
 </section>
+{% endmacro %}
+
+{% macro suite_tooltip(suite) %}
+<span class="suite-tooltip" id="suite-guide-{{ suite.suite_name }}" role="tooltip">
+  <span class="suite-tooltip-title">{{ suite.title }}{% for code in suite.related_codes %}<span class="suite-tooltip-code">{{ code }}</span>{% endfor %}</span>
+  <span class="suite-tooltip-row"><b>검증 대상</b><span>{{ suite.guide.purpose }}</span></span>
+  <span class="suite-tooltip-row"><b>검증 방법</b><span>{{ suite.guide.method }}</span></span>
+  <span class="suite-tooltip-row"><b>통과 기준</b><span>{{ suite.guide.pass_condition }}</span></span>
+</span>
 {% endmacro %}

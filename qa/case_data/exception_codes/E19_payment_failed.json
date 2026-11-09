@@ -1,0 +1,8 @@
+{
+  "related_code": "E19",
+  "title": "결제 실패",
+  "stage": "결제",
+  "input": "결제 승인 실패",
+  "expected": "점유 유지 · 재시도 안내",
+  "system_error_code": null
+}

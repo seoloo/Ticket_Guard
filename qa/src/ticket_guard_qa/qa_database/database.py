@@ -14,6 +14,7 @@ SERVER_SELECTION_TIMEOUT_MS = 5000
 RUNS = "runs"  # Run 하나 = 문서 하나 · Suite 결과 · 합격 기준 포함
 ANSWER_KEYS = "answer_keys"  # Run 하나 = 문서 하나 · 정답표
 BOT_VERSIONS = "bot_versions"  # B2 버전 저장
+BOT_TYPES = "bot_types"  # 화면에서 추가한 봇 유형 · 이름 · 분류 · 상태 · 탐지 흔적 · v1 행동 값
 ARCHIVE_EXPORTS = "archive_exports"  # QA 데이터 넘기기 기록
 
 
@@ -47,6 +48,7 @@ def create_indexes(database: Database) -> None:
     database[RUNS].create_index([("started_at", DESCENDING)])
     database[RUNS].create_index([("suite_results.suite_name", ASCENDING)])
     database[BOT_VERSIONS].create_index([("actor_type", ASCENDING), ("version_number", ASCENDING)], unique=True)
+    database[BOT_TYPES].create_index([("short_name", ASCENDING)], unique=True)
 
 
 def as_utc(moment: datetime | None) -> datetime | None:

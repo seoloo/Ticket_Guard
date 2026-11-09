@@ -66,9 +66,12 @@ def count_rule_hits(verdict_records: list[SessionVerdictRecord]) -> dict[str, in
 
 def confusion_matrix_from_details(raw_matrix: dict[str, dict[str, int]]) -> ConfusionMatrix:
     """suite_results.details JSON → 표 · 저장 뒤 생긴 종류 · 단계는 0으로 채움"""
+    from ticket_guard_qa.macro_bots.bot_catalog import list_actor_types  # 순환 import 방지
+
+    actor_types = [*list_actor_types(), *(ActorType(key) for key in raw_matrix if key not in list_actor_types())]
     return {
         actor_type: {stage: raw_matrix.get(actor_type.value, {}).get(stage.value, 0) for stage in VerdictStage}
-        for actor_type in ActorType
+        for actor_type in actor_types
     }
 
 

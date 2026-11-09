@@ -1,16 +1,11 @@
-"""R1 ~ R6 예상 결과 · B2 오른쪽 패널 · 규칙이 정해지면 RULE_CHECKS에 조건만 추가"""
-from collections.abc import Callable
+"""룰 매칭 예측 · B2 오른쪽 패널 · 규칙 정의는 domain/rule_sets.py · 없는 룰셋 버전 = R1 ~ R6 대기"""
 from dataclasses import dataclass
 
 from ticket_guard_qa.domain.models import SessionBehavior
+from ticket_guard_qa.domain.rule_sets import RULE_SETS
 
-RULE_IDS: tuple[str, ...] = ("R1", "R2", "R3", "R4", "R5", "R6")
+PENDING_RULE_IDS: tuple[str, ...] = ("R1", "R2", "R3", "R4", "R5", "R6")
 RULE_PENDING_REASON = "룰셋 미정"
-
-RuleCheck = Callable[[SessionBehavior], tuple[bool, str]]  # (걸리나, 이유)
-
-# TODO(판정 규칙 확정 후): "R1": lambda behavior: (behavior.click_interval_mean_ms < 200, "클릭 간격 200ms 미만") 형태로 추가
-RULE_CHECKS: dict[str, RuleCheck] = {}
 
 
 @dataclass(frozen=True)
@@ -20,13 +15,8 @@ class RuleHitPreview:
     reason: str
 
 
-def predict_rule_hits(behavior: SessionBehavior) -> list[RuleHitPreview]:
-    previews = []
-    for rule_id in RULE_IDS:
-        rule_check = RULE_CHECKS.get(rule_id)
-        if rule_check is None:
-            previews.append(RuleHitPreview(rule_id, None, RULE_PENDING_REASON))
-            continue
-        is_hit, reason = rule_check(behavior)
-        previews.append(RuleHitPreview(rule_id, is_hit, reason))
-    return previews
+def predict_rule_hits(behavior: SessionBehavior, rule_set_version: str) -> list[RuleHitPreview]:
+    rules = RULE_SETS.get(rule_set_version)
+    if rules is None:
+        return [RuleHitPreview(rule_id, None, RULE_PENDING_REASON) for rule_id in PENDING_RULE_IDS]
+    return [RuleHitPreview(rule.rule_id, rule.is_matched(behavior), rule.condition) for rule in rules]

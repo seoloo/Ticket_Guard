@@ -1,0 +1,8 @@
+{
+  "related_code": "E09",
+  "title": "보안문자 불일치",
+  "stage": "보안문자",
+  "input": "틀린 보안문자 제출",
+  "expected": "제출 거부 · 남은 기회 안내",
+  "system_error_code": "CAPTCHA_WRONG"
+}

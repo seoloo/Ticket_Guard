@@ -14,9 +14,9 @@ from ticket_guard_qa.domain.models import (
 )
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, EventStreamReader, StreamRecord
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
-    build_session_plans,
+    build_planned_user_session_plans,
     reset_before_traffic,
     send_virtual_user_traffic,
 )
@@ -95,13 +95,12 @@ def send_traffic_and_read_stream(
     """초기화 → 토픽 끝 위치 기록 → VU 트래픽 → 시작 위치부터 읽기 · AccountPoolExhaustedError는 호출한 Suite가 처리"""
     run_config = context.run_config
     planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
-    behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
 
     context.report_progress(reset_before_traffic(context.system_target.booking_api))
     start_offsets = stream_reader.snapshot_end_offsets()
     context.report_progress(f"토픽 시작 위치 · {' · '.join(f'P{p}={o}' for p, o in sorted(start_offsets.items()))}")
     session_results = send_virtual_user_traffic(
-        context.system_target.booking_api, build_session_plans(behaviors, run_config.random_seed), run_config.duration_sec,
+        context.system_target.booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed), run_config.duration_sec,
         lambda results: context.report_progress(f"VU {sum(r is not None for r in results)}/{len(planned_users)} 종료"),
     )
     context.report_progress("이벤트 수신 대기 · 토픽 조회")
@@ -180,6 +179,11 @@ class EventDeliverySuite:
     suite_name = EVENT_DELIVERY_SUITE_NAME
     title = "이벤트 전달 검증"
     related_codes: tuple[str, ...] = ()
+    guide = SuiteGuide(
+        "화면 · 서버 기록이 데이터 통로까지 빠짐없이 도착",
+        "남긴 기록과 도착한 기록을 하나씩 대조",
+        "누락 0 · 중복 0",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         stream_reader = context.system_target.event_stream_reader

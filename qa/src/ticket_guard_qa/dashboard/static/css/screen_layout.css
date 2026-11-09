@@ -154,3 +154,34 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
   .top-bar { gap: 14px; padding: 0 16px; overflow-x: auto; }
   .page { padding: 16px; }
 }
+
+/* Suite 말풍선 · 02 Run 설정 · 03 Run 모니터 공통 · 검증 대상 · 검증 방법 · 통과 기준 */
+.suite-chip { position: relative; }
+.suite-tooltip { position: absolute; top: calc(100% + 10px); left: 0; z-index: 20; width: 330px; padding: 12px 14px; border-radius: 12px;
+  background: #fff; border: 1px solid var(--line-color); box-shadow: 0 10px 28px rgba(17, 24, 39, .14); color: var(--text-color);
+  font-size: 13px; font-weight: 500; line-height: 1.55; white-space: normal; text-align: left; display: grid; gap: 6px;
+  opacity: 0; visibility: hidden; transform: translateY(-4px); pointer-events: none; }  /* 닫힐 때 효과 없음 · 바로 사라짐 */
+.suite-tooltip::before { content: ""; position: absolute; top: -7px; left: 22px; width: 12px; height: 12px; background: #fff;
+  border-left: 1px solid var(--line-color); border-top: 1px solid var(--line-color); transform: rotate(45deg); }
+.suite-tooltip.is-right-aligned { left: auto; right: 0; }
+.suite-tooltip.is-right-aligned::before { left: auto; right: 22px; }
+/* 마우스 = 올린 칩만 · 키보드 = Tab 포커스만 · 클릭 후 남는 포커스로는 열지 않음 */
+.suite-chip:hover .suite-tooltip, .suite-chip:focus-visible .suite-tooltip, .suite-chip:has(input:focus-visible) .suite-tooltip { opacity: 1; visibility: visible; transform: translateY(0); transition: opacity .1s, transform .1s; }
+.suite-chips:hover .suite-chip:not(:hover) .suite-tooltip { opacity: 0; visibility: hidden; transition: none; }  /* 마우스가 다른 칩 위면 키보드 말풍선도 닫음 */
+.suite-chip:hover { z-index: 21; }
+.suite-tooltip-title { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px; color: var(--qa-blue-text); white-space: nowrap; }
+.suite-tooltip-code { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 6px; background: var(--qa-blue-light); color: var(--qa-blue-text); }
+.suite-tooltip-row { display: grid; grid-template-columns: 70px 1fr; gap: 8px; }
+.suite-tooltip-row b { color: var(--muted-text-color); font-weight: 700; white-space: nowrap; }
+
+/* 봇 배지 · 상태 칩 · 봇 수가 늘어도 아이콘 + 알파벳 코드로 구분 · 색은 보조 */
+.bot-badge { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 30%;
+  background: color-mix(in srgb, var(--bot-color) 14%, #fff); color: var(--bot-color); }
+.bot-badge svg { width: 55%; height: 55%; }
+.bot-badge-code { position: absolute; right: -5px; bottom: -5px; background: #fff; border: 1.5px solid currentColor; border-radius: 7px;
+  font-size: 10.5px; font-weight: 800; line-height: 15px; padding: 0 4px; }
+.bot-status { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.bot-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.bot-status.is-active { background: var(--pass-green-light); color: var(--pass-green); }
+.bot-status.is-review { background: var(--qa-blue-light); color: var(--qa-blue-text); }
+.bot-status.is-draft, .bot-status.is-locked { background: var(--gray-chip-background); color: var(--sub-text-color); }

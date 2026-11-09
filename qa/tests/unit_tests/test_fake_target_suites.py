@@ -38,4 +38,4 @@ def test_self_check_fails_when_fixed_responses_change(qa_database, monkeypatch):
 def test_event_contract_passes_on_fake_target(qa_database):
     result = EventContractSuite().run(build_context(qa_database))
     assert result.outcome is SuiteOutcome.PASSED, result.message
-    assert "stale_request_sequence" in result.message  # 예매 확정 사례는 건너뜀
+    assert result.message == ""  # 브라우저 · 예매 확정 · 토픽 사례 전부 실행 · 건너뜀 없음

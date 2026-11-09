@@ -174,7 +174,7 @@ def test_read_stored_records_stops_at_deadline():
 
 
 def test_position_filter_groups_offsets_by_partition():
-    assert build_position_filter(TOPIC, [(1, 9), (0, 3), (1, 2)]) == {"topic": TOPIC, "$or": [
+    assert build_position_filter("s1", TOPIC, [(1, 9), (0, 3), (1, 2)]) == {"source": "s1", "topic": TOPIC, "$or": [
         {"partition": 0, "offset": {"$in": [3]}},
         {"partition": 1, "offset": {"$in": [2, 9]}},
     ]}
@@ -191,9 +191,10 @@ def test_live_reader_finds_documents_in_every_collection():
                                              "routing": {"version": "raw-routing-v1", "reason": "parse_failed"}})
     database.booking_events.insert_one({**base_document, "offset": 5, "value": b"{}"})  # 찾지 않는 위치
     database.http_events.insert_one({**base_document, "topic": "other.topic", "value": b"{}"})  # 다른 토픽
+    database.auth_events.insert_one({**base_document, "source": "other-source", "value": b"{}"})  # 다른 원본 적재기
 
     with patch.object(live_raw_mongo_reader, "MongoClient", lambda *args, **kwargs: memory_client):
-        stored = LiveMongoRawEventReader("mongodb://reader@raw-host:27020/ticketguard_raw", TOPIC).find_by_positions([(0, 4)])
+        stored = LiveMongoRawEventReader("mongodb://reader@raw-host:27020/ticketguard_raw", TOPIC, "s1").find_by_positions([(0, 4)])
 
     assert len(RAW_COLLECTION_NAMES) == 9
     by_collection = {record.collection_name: record for record in stored}

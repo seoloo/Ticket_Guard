@@ -1,0 +1,8 @@
+{
+  "related_code": "E03",
+  "title": "판매 종료 · 미오픈",
+  "stage": "공연 상세",
+  "input": "판매 기간 밖 예매 시작",
+  "expected": "예매 시작 거부 · 판매 상태 안내",
+  "system_error_code": "NOT_OPEN"
+}

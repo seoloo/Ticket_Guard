@@ -1,8 +1,28 @@
 {
-  "description": "예매 확정(/api/action/)에 이미 받은 순번 재전송 · 거부 · 예매 확정 시험 추가 시 작성",
+  "description": "예매 확정(/api/action/)에 이미 받은 순번 재전송 · 첫 요청 좌석 오류로 순번 소모 · 같은 순번 재전송 거부",
   "endpoint": "action",
-  "requests": [],
-  "expected_status_codes": [],
+  "requests": [
+    {
+      "seat_ids": [
+        "Z9"
+      ],
+      "quantity": 1,
+      "is_same_sequence": false,
+      "expected_error_code": "SELECTION_LIMIT"
+    },
+    {
+      "seat_ids": [
+        "J10"
+      ],
+      "quantity": 1,
+      "is_same_sequence": true,
+      "expected_error_code": "STALE_REQUEST"
+    }
+  ],
+  "expected_status_codes": [
+    400,
+    409
+  ],
   "expected_storage": {
     "activity_event_count": null,
     "quarantine_reason_codes": []

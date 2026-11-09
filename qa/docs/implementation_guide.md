@@ -47,7 +47,7 @@ qa/
 │  ├─ qa_database/        database (MongoDB 연결 · 컬렉션 이름) · archive_export
 │  ├─ reports/            json_report · html_report
 │  └─ dashboard/          dashboard_app · dependencies · screen_format · routes/ · templates/(layout · screen_parts · screen_*) · static/css/(theme_tokens · screen_layout)
-├─ traffic_generators/    virtual_user_traffic (VU 동시 실행) · locust_traffic · bot_c_browser
+├─ traffic_generators/    virtual_user_traffic (VU 동시 실행 · 브라우저 유형 구분 · 캡처 저장) · locust_traffic
 ├─ case_data/             exception_codes/ · event_contracts/
 └─ tests/                 unit_tests/ · boundary_tests/
 
@@ -120,13 +120,21 @@ qa/
 5. AGENTS.md 5장 시험 대상 현황과 이 문서 5장을 고쳐요.
 
 ### 새 봇
-빠뜨리면 `tests/unit_tests/test_macro_bots.py`가 실패해요.
-1. `domain/enums.py`의 `ActorType`에 이름을 추가해요.
-2. `macro_bots/bot_catalog.py`에 소개 한 줄(이름 · 설명 · 트래픽 종류 · 색 변수)을 추가해요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
-3. `macro_bots/bot_profiles.py`의 `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 시작 행동 값을 추가해요. 이후 값은 B2 화면에서 버전으로 바꿔요.
-4. 목표가 있으면 `domain/pass_criteria.py`에 기준, `domain/detection_targets.py`에 묶음 한 줄을 추가해요. B1 · B4 · 점수 계산이 같이 따라와요.
-5. 트래픽 구성에 넣으려면 `domain/models.py`의 `TrafficMix`와 02 화면 입력 칸을 고쳐요.
-6. 브라우저가 필요하면 `traffic_generators/bot_c_browser.py` 방식으로 따로 만들어요. 대기 시간 식은 `macro_bots/behavior_sampling.py`를 써요.
+봇 추가는 두 가지예요. 기존 행동 값의 새 조합이면 화면, 새 행동 방식이면 코드예요.
+
+**화면에서 추가 (B5 · 코드 수정 없음)** · 행동 값(`SessionBehavior`) 조합으로 만들 수 있는 봇
+1. B1 "새 봇 추가" → ① 시작 봇 복사 → ② 이름 · 한 줄 정의 · 공격 수법 분류 → ③ 예매 중 행동 → ④ 탐지 흔적 · 합격 기준 묶음 → ⑤ 모의 판정 · 저장
+2. 저장 위치: QA DB `bot_types` (이름 · 분류 · 상태 · 탐지 흔적 · 합격 기준 · v1 행동 값) · 이후 행동 값은 B2 버전(`bot_versions`)
+3. 상태: 작성 중(Run 제외) → 검증 중(Run 포함) → 사용 중 · B1 상세에서 전환
+4. 유형 id `BOT_E` · `BOT_F` … 자동 · 색은 `bot_catalog.CUSTOM_BOT_COLORS` 순서 · 구분은 아이콘 + 알파벳 코드
+5. 따라오는 곳: 02 트래픽 구성 칸 · 정답표 · 합격 기준 합산(`detection_target_id`) · B1 분류 타일 · B3 · B4 · 실행 트래픽
+
+**코드로 추가** · 새 행동 방식(대기열 우회 · 보안문자 판독 등)이 필요한 봇 · 빠뜨리면 `tests/unit_tests/test_macro_bots.py`가 실패해요.
+1. `domain/enums.py`의 `ActorType` 상수 · `BUILT_IN_ACTOR_TYPES`에 추가해요.
+2. `macro_bots/bot_catalog.py`의 `BUILT_IN_BOT_TYPES`에 한 줄(이름 · 한 줄 정의 · 역할 · 아이콘 · 탐지 흔적 · 분류 · 합격 기준 묶음 · 색 변수)을 추가해요. 새 분류는 `BOT_CATEGORIES`에 한 줄이에요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
+3. `macro_bots/bot_profiles.py`의 `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 시작 행동 값을 추가해요.
+4. 새 합격 기준이 필요하면 `domain/pass_criteria.py`에 기준, `domain/detection_targets.py`에 묶음 한 줄을 추가해요. 소속은 봇마다 `detection_target_id`로 정해요.
+5. 새 행동 방식은 `SessionBehavior` 필드(아래 "새 행동 값") + `system_targets/live_booking_client.py` 실행 단계로 넣어요. 브라우저가 필요하면 `traffic_generators/bot_c_browser.py` 방식이에요.
 
 ### 새 행동 값 (예: ③ 화면 흐름)
 1. `domain/models.py`의 `SessionBehavior`에 필드를 추가해요.
@@ -149,26 +157,29 @@ qa/
 | 점수 계산 | `scoring/` | 동작 | | |
 | 정답표 계획 · 저장 | `answer_key/` | 동작 | | 트래픽 후 세션 키 연결 |
 | QA 자기 검사 | `test_suites/self_check.py` | 동작 | | |
-| 이벤트 계약 시험 | `test_suites/event_contract.py` · `live_django_system.py` | 동작 (Mock + Live 2026-11-05 PASS · 요청 22건) | 예매 확정 사례 1건 · 저장 값 확인 | `/api/action/` 사례 · MongoDB 연결 후 저장 확인 |
-| Live 예매 흐름 (1-b ~ 1-d) | `system_targets/live_booking_client.py` · `live_django_system.py` · `traffic_generators/virtual_user_traffic.py` · `test_suites/booking_flow.py` | 동작 (Run 설정 "예매 흐름 테스트" · VU 동시 실행 · 오픈 전 로그인 → 오픈 + 진입 지연 → 대기열 → 보안문자 → 좌석 클릭(봇 프로필 간격 · seat_select 이벤트) → 확정 · 먼저 팔린 좌석은 다른 좌석으로 최대 3번 · 확정 못 한 계정은 예매 취소로 반환 · 시험 시간 넘으면 TIMEOUT · 예매 완료 · 매진 · 중복 판매 · 단계별 p95) · 시스템 테스트 훅 필요 (Issue #6) | 초기화: QA 대시보드에 시스템 관리자 계정 미전달(compose.gateway.yml) → 건너뜀 · 디바이스당 세션(봇 D) · 페이지 흐름 미적용 · Run 중지는 Suite 사이에서만 | 관리자 계정 전달 (develop PR) · 부하 테스트 Locust |
+| 이벤트 계약 시험 | `test_suites/event_contract.py` · `live_django_system.py` · `live_kafka_injector.py` | 동작 (브라우저 이벤트 Mock + Live 2026-11-05 PASS · 예매 확정 오래된 순번 거부(E20) Mock + Live 연결 · 토픽 주입 → 정제 · 격리 저장 대조 Mock) | 토픽 주입 Live: 시험 환경 주입 허용(`IS_KAFKA_CONTRACT_INJECTION_ENABLED`) · 시스템 MongoDB 읽기 계정 · 격리 사유 필드 확정 | Live Run |
+| Live 예매 흐름 (1-b ~ 1-d) | `system_targets/live_booking_client.py` · `live_django_system.py` · `traffic_generators/virtual_user_traffic.py` · `test_suites/booking_flow.py` | 동작 (Run 설정 "예매 흐름 테스트" · VU 동시 실행 · 오픈 전 로그인 → 오픈 전 공연 목록 · 상세 조회(행동 값 ③ · 화면마다 체류 시간 · 브라우저 흔적이면 page_enter · page_exit + 브라우저 User-Agent) → 오픈 + 예매 시작 지연(기기 1대당 예매 창 2개 이상 = 같은 기기 VU끼리 같은 순간 · 첫 창이 받은 기기 쿠키 `tg_capture`를 나머지 창이 공유 · `traffic_generators/virtual_user_traffic.assign_devices` · 결과에 `device_key`) → 대기열 → 보안문자 → 좌석 클릭(봇 프로필 간격 · seat_select 이벤트) → 확정 · 먼저 팔린 좌석은 다른 좌석으로 행동 값 ⑤ 횟수 · 대기만큼 재시도 · 확정 못 한 계정은 예매 취소로 반환 · 시험 시간 넘으면 TIMEOUT · 예매 완료 · 매진 · 중복 판매 · 단계별 p95) · 시스템 테스트 훅 필요 (Issue #6) | 초기화: QA 대시보드에 시스템 관리자 계정 미전달(compose.gateway.yml) → 건너뜀 · 브라우저 telemetry(/api/capture/) 미재현 · 기기 쿠키는 시스템 `DJANGO_DEBUG=1`(http)에서만 공유(운영 설정은 Secure 쿠키) · 접속 IP는 모든 VU가 같은 컨테이너 주소 · Run 중지는 Suite 사이에서만 | 관리자 계정 전달 (develop PR) · 부하 테스트 Locust |
+| Live 브라우저 예매 흐름 (봇 C 등) | `system_targets/live_browser_client.py` · `live_django_system.run_browser_session` · `traffic_generators/virtual_user_traffic.build_planned_user_session_plans` · `macro_bots/browser_capture.save_browser_capture_frames` | 코드 · 시험 동작 (브라우저 트래픽 유형 VU = 실제 화면 · 로그인 → 오픈 전 공연 상세 → 예매하기 클릭 → 대기열 → 보안문자 입력 → 좌석 클릭(행동 값 간격) → 확정 · 먼저 팔린 좌석은 다른 좌석 재시도 · 단계별 PNG 캡처 → B3 · 클릭은 마우스 이동 궤적 없이 · 동시 브라우저 4개 · 화면 요소는 파일 위 상수 한 곳) | 실제 Chromium 확인 완료(로컬 Chrome · 예매 화면 흉내 사이트 · 로그인 → 확정 · 팔린 좌석 건너뜀 · 캡처 5장) · 실제 예매 웹 대상 Run 미실행 · Chromium 위치 = `TICKET_GUARD_QA_BROWSER_EXECUTABLE_PATH`(qa-dashboard 이미지 `/usr/bin/chromium` · 내 PC는 설치된 Chrome 경로 또는 `playwright install chromium`) · 없으면 세션 오류 `browser · 실행 환경 없음` | qa-dashboard 이미지 다시 빌드(Debian `chromium` · `fonts-noto-cjk` · `.[dashboard,browser]`) → 실제 예매 웹 Run |
 | 이벤트 전달 검증 (2단계) | `system_targets/live_kafka_reader.py` · `test_suites/event_delivery.py` · Mock `FakeEventStreamReader` | 동작 (Run 설정 "이벤트 전달 검증" · Run 직전 토픽 끝 위치 기록 → VU 트래픽 → QA 전용 소비자 그룹으로 읽기(commit 없음) → 좌석 클릭 · 서버 이벤트 완전성 · 중복 · 형식 · 파티션 키 · 전달 지연 p95 · 관측 이벤트 수) · `docs/contracts.md` 4-1 | 전달 지연 기준선 미정 | |
 | 원본 적재 검증 (2-b) | `system_targets/live_raw_mongo_reader.py` · `test_suites/raw_ingest.py` · `domain/raw_event_routing.py` · Mock `FakeRawEventReader` | Mock 동작 (Run 설정 "원본 적재 검증" · 이벤트 전달 검증과 같은 트래픽 · 토픽 읽기 → QA 메시지 위치(파티션 · 오프셋)로 원본 DB 9개 컬렉션 조회 · 최대 30초 적재 대기 → 적재 누락 · 중복 적재 · 오분류 · 미분류 · 원문 변형 · 적재 지연 p95) · `docs/contracts.md` 4-2 | Live 미실행: 원본 DB 읽기 전용 계정 · qa-dashboard ↔ `raw-backend` 네트워크 없음 · 적재 지연 기준선 미정 | Live 연결 (db팀 계정 · 네트워크) |
 | QA 데이터 넘기기 | `qa_database/archive_export.py` · `command_line.py` (`export-archive`) · `archive_exports` 테이블 | 동작 (요청 · QA 담당 승인 시 · 끝난 Run만 · 기본 결과 숫자 + 적발 목록 · 정답표 · 봇 설정은 `--collection` 직접 지정 · 컬렉션별 JSON + manifest → 받는 쪽 `ticketguard_qa_archive` · 시스템 DB에는 쓰지 않음 · 필드 추가 = `*_FIELDS` 한 줄 · 정답표 · 봇 설정을 넘긴 봇 버전으로 Run 시작 시 03 경고) | 대시보드 버튼 없음(의도) · 받는 쪽 가져오기는 수동(`mongoimport`) | |
-| QA DB MongoDB | `compose.qa-db.yml` · `compose.qa-db.local.yml` · `compose.qa-db.init.js` · `qa_database/database.py` | 동작 (QA 전용 인스턴스 `qa-mongo` · 팀 compose에 덧붙여 실행 · `qa-backend` 네트워크 = qa-dashboard · qa-mongo만 · QA 계정 = `ticketguard_qa` 읽기 · 쓰기만 · 컬렉션 `runs` · `answer_keys` · `bot_versions` · `archive_exports` · 컨테이너 안 27017 · 내 PC 27021은 local 파일로만 · 단위 테스트는 `mongomock://` 메모리 DB) | 백업 미구성 | 서버 배포 시 백업 (`mongodump`) |
+| QA DB MongoDB | `compose.qa-db.yml` · `compose.qa-db.local.yml` · `compose.qa-db.init.js` · `qa_database/database.py` | 동작 (QA 전용 인스턴스 `qa-mongo` · 팀 compose에 덧붙여 실행 · `qa-backend` 네트워크 = qa-dashboard · qa-mongo만 · QA 계정 = `ticketguard_qa` 읽기 · 쓰기만 · 컬렉션 `runs` · `answer_keys` · `bot_versions` · `bot_types` · `archive_exports` · 컨테이너 안 27017 · 내 PC 27021은 local 파일로만 · 단위 테스트는 `mongomock://` 메모리 DB) | 백업 미구성 | 서버 배포 시 백업 (`mongodump`) |
 | 터미널 명령 · 종료 코드 | `command_line.py` | 동작 | | |
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |
 | 화면 01 ~ 04 | `dashboard/` | 동작 (시안 기준 · 가짜 대상 숫자) | 실제 대상 실시간 수치 없음 | 결과 알림 보내기 |
 | 화면 05 | `dashboard/` | 껍데기 | 시스템 DB 없음 | |
-| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 모의 판정 · 실시간 진행) · 문구는 ui.md 3장 문구 규칙 | 규칙별 결과 · 좌석 선택 · 확정 단계 · 봇 C 캡처 없음 | 판정 규칙 · 트래픽 생성기 연결 |
+| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 모의 판정 · 실시간 진행) · 문구는 ui.md 3장 문구 규칙 | 규칙별 결과 · 좌석 선택 · 확정 단계 | 판정 규칙 · 트래픽 생성기 연결 |
 | 관리자 확인 (A안) | `dashboard/dependencies.py` | 동작 (팀 입구가 붙인 `X-Admin-User`만) | | |
 | 판정 정확도 | `test_suites/verdict_accuracy.py` | 가짜만 동작 (행동 값으로 가짜 판정 · 정답표 저장 · 탐지율 · 오탐률) | 실제 대상: 시스템 판정 없음 · 저장 위치 미정 | |
 | Gold 반영 시간 | `test_suites/pipeline_latency.py` · `live_mongo_reader.py` | 가짜만 동작 | Kafka · Spark · MongoDB 없음 | 시험 이벤트 먼저 보내기 |
 | 03 실시간 수치 | `test_runs/run_service.py` · `LiveMetricsReader` | 가짜: `fake_run_duration_sec` 동안 수치 · 실제: 경과 시간 / 시험 시간 표시 · 트래픽이 먼저 끝나면 04로 | 실제 대상: 판정 지연 · EPS · Gold 수치 없음 (MongoDB 연결 전) | |
 | 좌석 동시성 (E12 · E20) | `test_suites/seat_concurrency.py` · `BookingApi.prepare_seat_contender` · `send_confirms` · Mock 재고 · `is_seat_lock_broken` | 동작 (Run 설정 "좌석 동시성" · VU를 좌석 선택 단계까지 준비 → 확정 동시 전송 · 같은 지정석 2석 VU 20명 → 예매 1건 · 자유석 잔여 수량보다 많은 4석 요청 → 판매 합계 ≤ 잔여 · 잔여 수량 일치 · 같은 확정 동시 2회 → 예매 번호 1개 · 재고는 선택 단계 응답(sold · remaining) 기준 · 끝난 계정은 다음 시나리오에서 재사용) | 좌석 점유 5분(E16) 측정 불가 · 초기화 없으면 자유석 잔여 0 → 측정 불가 | 관리자 계정 전달 (develop PR) · Redis 결정 후 E16 |
-| 부하 | `test_suites/load_capacity.py` · `traffic_generators/` | 껍데기 | 개발 계정 2개뿐 | |
-| 장애 복구 | `test_suites/failure_recovery.py` | 껍데기 | 복구할 파이프라인 없음 | |
-| 봇 설정 저장 · 규칙 미리 보기 | `macro_bots/` | 저장 · 실행에 반영 동작 · 규칙 미리 보기는 대기 표시 | 판정 규칙 R1 ~ R6 정의 대기 | `RULE_CHECKS` 채우기 |
+| 부하 (T1 · T2 · E08) | `test_suites/load_capacity.py` · `BookingApi.hold_admitted_session` · `send_request_burst` · Mock 대기열 상한 · 요청 속도 제한 | Mock 동작 (VU 동시 진입 → 입장 구간 겹침 = 최대 동시 입장 · 연속 요청 429 · 사람 속도 요청 허용 · 서버 오류 0 · 상한 붕괴 · 속도 제한 없음 결함 Mock = FAIL) · Live 연결 코드 (시험 계정 · 대기열 입장 시각 · 공연 목록 연속 요청) | Live 미실행 · 시스템 상한 · 속도 제한 미구현 | Live Run |
+| 장애 복구 (RTO) | `test_suites/failure_recovery.py` · `ProcessControl` · `PipelineReader.find_processed_event_ids` · Mock 저장 작업 중지 · 재시작 | Mock 동작 (중지 전 이벤트 저장 확인 → 중지 → 이벤트 전송 → 재시작 → 전부 저장까지 시간 · 누락 · 중복 0 · 유실 · checkpoint 결함 Mock = FAIL) · Live 연결 코드 (Docker 소켓 컨테이너 중지 · 시작 · `clean_events` · `quarantine_events` eventId 조회) | Live: 컨테이너 이름 · Docker 소켓 · 시스템 MongoDB 읽기 계정 | Live Run |
+| 봇 설정 저장 · 규칙 미리 보기 | `macro_bots/` · `domain/rule_sets.py` | 동작 · 룰셋 `mock-1`(가짜 판정과 같은 규칙 4개) · B2 · B4 일치 | 실제 판정 규칙 R1 ~ R6 | `RULE_SETS`에 버전 추가 · `TICKET_GUARD_QA_RULE_SET_VERSION` |
+| 테스트 케이스 · Ground Truth 탭 | `dashboard/routes/test_case_routes.py` · `screen_c1_test_cases.html` · `test_suites/exception_cases.py` · `case_data/exception_codes/` | 동작 (E01 ~ E22 · T1 · T2 사례 24건 · 시스템 오류 코드 · 검증 Suite = 각 Suite `related_codes` · 이벤트 계약 사례 목록 · Run별 정답표 조회) | Suite 미연결 예외 코드 16건 | 예외 흐름 Suite |
+| 봇 C 화면 캡처 (B3) | `macro_bots/browser_capture.py` | Mock 동작 (봇 C 행동 값 → 단계별 프레임 · 클릭 위치) · Live 연결 코드 (`captures/{run_id}/frames.json` + 이미지 읽기) | 브라우저 자동화 실행 환경 | 브라우저 봇이 `save_capture_frames` 호출 |
 | db 스키마 대응 (0단계) | `docs/contracts.md` 3 · 5장 · `case_data/event_contracts/` · `domain/models.py` 레코드 · `fake_system.py` | 동작 (Mock이 SESSION_VERDICTS · SESSION_FEATURES · QUARANTINE_EVENTS 모양 반환 · B4 룰별 Hit 수) | db 스키마 확정 · QA 읽기 전용 계정 | `live_mongo_reader.py` 구현 · `expected_storage` 대조 |
 | 경계 검사 · CI | `tests/boundary_tests/` · `.github/workflows/qa.yml` | 동작 (로컬) · CI는 push 후 확인 | | |
 

@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "screen_parts.html" import test_steps %}
+{% from "screen_parts.html" import suite_tooltip, test_steps %}
 {% block title %}Run 설정 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
@@ -25,12 +25,12 @@
   .switch input:checked + span { background: var(--qa-blue); }
   .switch input:checked + span::before { transform: translateX(24px); }
   .criteria-chip { background: var(--gray-chip-background); border-radius: 8px; padding: 5px 11px; font-size: 13px; font-weight: 700; color: var(--strong-text-color); }
-  .summary-panel { padding: 26px; position: sticky; top: 96px; }
+  .summary-panel { padding: 26px; position: sticky; top: 96px; }  /* 고정 카드는 칸 맨 아래 · 아래에 다른 카드를 두면 덮음 */
   .summary-row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; font-size: 14.5px; color: var(--sub-text-color); }
   .summary-row span { white-space: nowrap; }
   .summary-row b { color: var(--text-color); text-align: right; }
   .summary-box { background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 14px; padding: 10px 18px; margin: 14px 0 20px; }
-  .busy-card { margin-top: 18px; padding: 20px 22px; border-style: dashed; }
+  .busy-card { margin-bottom: 18px; padding: 20px 22px; border-style: dashed; }
   .busy-timer { display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--db-orange-light); color: var(--db-orange-text); border: 1px solid #F8C9A6; border-radius: 12px; padding: 12px; font-weight: 800; margin: 12px 0; }
   .busy-timer b { font-size: 24px; letter-spacing: .02em; }
 </style>
@@ -53,9 +53,11 @@
 
     <div class="setup-row">
       <div><div class="row-title">Suite</div><div class="row-hint">복수 선택 가능</div></div>
-      <div class="chips">
+      <div class="chips suite-chips">
         {% for suite in suites %}
-        <label class="chip is-multi"><input type="checkbox" name="suite_names" value="{{ suite.suite_name }}" {{ 'checked' if suite.suite_name in run_config.suite_names }}>{{ suite.title }}</label>
+        <label class="chip is-multi suite-chip" data-label="{{ suite.title }}"><input type="checkbox" name="suite_names" value="{{ suite.suite_name }}" aria-describedby="suite-guide-{{ suite.suite_name }}" {{ 'checked' if suite.suite_name in run_config.suite_names }}>{{ suite.title }}
+          {{ suite_tooltip(suite) }}
+        </label>
         {% endfor %}
       </div>
     </div>
@@ -88,23 +90,17 @@
       <div><div class="row-title">트래픽 구성</div><div class="row-hint">합계 100% · 나머지 비율 자동 조정</div></div>
       <div>
         <div class="traffic-bar" id="traffic-bar">
-          <span data-share="human_percent" style="background:var(--bot-human)">정상</span>
-          <span data-share="bot_a_percent" style="background:var(--bot-a)">A</span>
-          <span data-share="bot_b_percent" style="background:var(--bot-b)">B</span>
-          <span data-share="bot_c_percent" style="background:var(--bot-c)">C</span>
-          <span data-share="bot_d_percent" style="background:var(--bot-d)">D</span>
+          {% for info in traffic_types %}<span data-share="percent_{{ info.actor_type.value }}" style="background:var(--{{ info.color_token }})">{{ info.short_name }}</span>{% endfor %}
         </div>
         <div class="traffic-inputs">
           {% set mix = run_config.traffic_mix %}
-          <label>정상 <input type="number" min="0" max="100" name="human_percent" value="{{ mix.human_percent }}"></label>
-          <label>봇 A <input type="number" min="0" max="100" name="bot_a_percent" value="{{ mix.bot_a_percent }}"></label>
-          <label>봇 B <input type="number" min="0" max="100" name="bot_b_percent" value="{{ mix.bot_b_percent }}"></label>
-          <label>봇 C <input type="number" min="0" max="100" name="bot_c_percent" value="{{ mix.bot_c_percent }}"></label>
-          <label>봇 D <input type="number" min="0" max="100" name="bot_d_percent" value="{{ mix.bot_d_percent }}"></label>
-          <span class="traffic-sum" id="traffic-sum" role="status" aria-live="polite"></span>
+          {% for info in traffic_types %}
+          <label title="{{ info.type_name }}">{{ '정상' if not info.actor_type.is_bot else '봇 ' ~ info.short_name }} <input type="number" min="0" max="100" name="percent_{{ info.actor_type.value }}" value="{{ mix.percent_of(info.actor_type) }}"></label>
+          {% endfor %}
+          <span class="traffic-sum" id="traffic-sum"></span>
         </div>
         <div class="row" style="margin-top:6px">
-          <span class="row-hint">A 고속 반복 · B 위장 · C 브라우저 매크로 · D 세션 복제 · 최신 프로필 적용</span>
+          <span class="row-hint">{% for info in traffic_types if info.actor_type.is_bot %}{{ info.short_name }} {{ info.type_name }}{{ ' · ' if not loop.last }}{% endfor %} · 최신 프로필 적용</span>
           <span class="spacer"></span>
           <a class="button is-soft is-small" href="{{ base_path }}/bots"><i data-lucide="bot"></i>봇 프로필</a>
         </div>
@@ -137,6 +133,13 @@
   </form>
 
   <aside>
+    {% if active_run_id %}
+    <section class="card busy-card">
+      <b>다른 Run 실행 중</b>
+      <div class="busy-timer"><i data-lucide="clock"></i>{{ active_run_id[-11:] }} 종료까지 <b id="busy-remaining" data-remaining-sec="{{ active_run_remaining_sec or 0 }}">--:--</b></div>
+      <a class="button is-outline" style="width:100%" href="{{ base_path }}/runs/{{ active_run_id }}/live">Run 모니터</a>
+    </section>
+    {% endif %}
     <section class="card summary-panel">
       <h2 class="section-heading" style="font-size:24px">Run 요약</h2>
       <div style="margin-top:14px">
@@ -154,13 +157,6 @@
       <div style="text-align:center;margin-top:14px"><a class="muted" href="{{ base_path }}/runs/new?from_run_id={{ latest_run_id }}">이전 Run 조건 불러오기 · {{ latest_run_id[-11:] }}</a></div>
       {% endif %}
     </section>
-    {% if active_run_id %}
-    <section class="card busy-card">
-      <b>다른 Run 실행 중</b>
-      <div class="busy-timer"><i data-lucide="clock"></i>{{ active_run_id[-11:] }} 종료까지 <b id="busy-remaining" data-remaining-sec="{{ active_run_remaining_sec or 0 }}">--:--</b></div>
-      <a class="button is-outline" style="width:100%" href="{{ base_path }}/runs/{{ active_run_id }}/live">Run 모니터</a>
-    </section>
-    {% endif %}
   </aside>
 </div>
 {% endblock %}
@@ -218,7 +214,7 @@
   }
 
   function readCheckedLabels(fieldName) {
-    return [...setupForm.querySelectorAll(`input[name=${fieldName}]:checked`)].map((input) => input.closest("label").textContent.trim());
+    return [...setupForm.querySelectorAll(`input[name=${fieldName}]:checked`)].map((input) => input.closest("label").dataset.label || input.closest("label").textContent.trim());  // 말풍선 글 제외
   }
 
   function refreshSummary() {

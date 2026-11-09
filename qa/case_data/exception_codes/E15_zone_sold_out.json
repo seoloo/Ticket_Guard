@@ -1,0 +1,8 @@
+{
+  "related_code": "E15",
+  "title": "구역 · 등급 매진",
+  "stage": "좌석 선택",
+  "input": "매진 구역 · 등급 선택",
+  "expected": "선택 불가 표시 · 다른 구역 안내",
+  "system_error_code": null
+}

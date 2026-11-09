@@ -20,18 +20,37 @@ class BehaviorFieldSpec:
     minimum: int
     maximum: int
     hint: str = ""
+    choices: tuple[tuple[int, str], ...] = ()  # 있으면 B2에서 선택 상자 · (값, 표시 문구)
 
 
-BEHAVIOR_FIELD_SPECS: tuple[BehaviorFieldSpec, ...] = (
-    BehaviorFieldSpec("entry_delay_after_open_ms", "① 진입 타이밍", "진입 지연(평균)", "ms", 0, 600_000, "0 = 오픈 시각(T0)"),
-    BehaviorFieldSpec("entry_delay_deviation_ms", "① 진입 타이밍", "진입 지연 표준편차", "ms", 0, 600_000, "편차 작음 = 기계적 진입"),
-    BehaviorFieldSpec("click_interval_mean_ms", "② 요청 간격", "평균 간격", "ms", 10, 60_000),
-    BehaviorFieldSpec("click_interval_deviation_ms", "② 요청 간격", "간격 표준편차", "ms", 0, 60_000, "변동계수(CV) 0.3 미만 = 정주기"),
-    BehaviorFieldSpec("sessions_per_device", "④ 디바이스당 세션", "병렬 세션", "개", 1, 50),
+BROWSER_TRACE_CHOICES: tuple[tuple[int, str], ...] = (
+    (0, "흔적 없음 · 예매 API 요청만"),
+    (1, "화면 조회 · 화면 이벤트 · 브라우저 정보 전송"),
+)
+
+BEHAVIOR_FIELD_SPECS: tuple[BehaviorFieldSpec, ...] = (  # SessionBehavior 필드 순서 = 화면 순서
+    BehaviorFieldSpec("entry_delay_after_open_ms", "① 예매 시작 시점", "오픈 후 예매 시작까지(평균)", "ms", 0, 600_000,
+                      "0 = 예매 오픈 순간(T0)"),
+    BehaviorFieldSpec("entry_delay_deviation_ms", "① 예매 시작 시점", "예매 시작 시각 편차", "ms", 0, 600_000,
+                      "편차 작음 = 모든 세션 동시 시작"),
+    BehaviorFieldSpec("click_interval_mean_ms", "② 좌석 클릭 간격", "클릭 간격(평균)", "ms", 10, 60_000),
+    BehaviorFieldSpec("click_interval_deviation_ms", "② 좌석 클릭 간격", "클릭 간격 편차", "ms", 0, 60_000,
+                      "변동계수(CV) 0.3 미만 = 정주기"),
+    BehaviorFieldSpec("browse_page_count", "③ 예매 전 화면 조회", "목록 · 상세 화면 조회 수", "회", 0, 10,
+                      "0 = 화면 조회 없이 바로 예매"),
+    BehaviorFieldSpec("page_dwell_mean_ms", "③ 예매 전 화면 조회", "화면 체류 시간(평균)", "ms", 0, 120_000),
+    BehaviorFieldSpec("page_dwell_deviation_ms", "③ 예매 전 화면 조회", "화면 체류 시간 편차", "ms", 0, 120_000,
+                      "편차 작음 = 화면마다 같은 시간"),
+    BehaviorFieldSpec("sessions_per_device", "④ 동시 예매 창", "기기 1대당 예매 창 수", "개", 1, 50),
+    BehaviorFieldSpec("sold_out_retry_count", "⑤ 매진 좌석 대응", "다른 좌석 재시도 횟수", "회", 0, 20,
+                      "0 = 먼저 팔린 좌석이면 바로 포기"),
+    BehaviorFieldSpec("sold_out_retry_delay_ms", "⑤ 매진 좌석 대응", "재시도 전 대기", "ms", 0, 60_000),
+    BehaviorFieldSpec("browser_trace_level", "⑥ 브라우저 흔적", "화면 이벤트 · 브라우저 정보", "", 0, 1,
+                      choices=BROWSER_TRACE_CHOICES),
 )
 
 # 아직 행동 값이 없는 항목 · 트래픽 생성기 구현 후 SessionBehavior에 추가
-PENDING_BEHAVIOR_GROUPS: tuple[str, ...] = ("③ 페이지 흐름", "⑤ 재고 없음 대응")
+PENDING_BEHAVIOR_GROUPS: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -65,6 +84,8 @@ def parse_behavior_form(form_values: Mapping[str, str]) -> SessionBehavior:
             raise BehaviorInputError(f"{spec.group_title} {spec.title} · 형식 오류(숫자)") from None
         if not spec.minimum <= value <= spec.maximum:
             raise BehaviorInputError(f"{spec.group_title} {spec.title} · 범위 오류({spec.minimum:,} ~ {spec.maximum:,}{spec.unit})")
+        if spec.choices and value not in dict(spec.choices):
+            raise BehaviorInputError(f"{spec.group_title} {spec.title} · 선택 오류")
         values[spec.field_name] = value
     return SessionBehavior(**values)
 

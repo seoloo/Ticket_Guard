@@ -19,11 +19,21 @@ class SuiteContext:
     case_data_dir: Path
     report_progress: Callable[..., None]  # (글, **ProgressMessage 필드) · 03 · B3 화면
     bot_profile_registry: BotProfileRegistry = field(default_factory=BotProfileRegistry)
+    report_output_dir: Path | None = None  # 브라우저 세션 캡처 저장 · None = 저장 안 함
+
+
+@dataclass(frozen=True)
+class SuiteGuide:
+    """02 Suite 말풍선 · 비전공자 기준 쉬운 말 · 명사형"""
+    purpose: str  # 검증 대상
+    method: str  # 검증 방법
+    pass_condition: str  # 통과 기준
 
 
 class QaSuite(Protocol):
     suite_name: str
     title: str
     related_codes: tuple[str, ...]  # E · T 코드
+    guide: SuiteGuide
 
     def run(self, context: SuiteContext) -> SuiteResult: ...
