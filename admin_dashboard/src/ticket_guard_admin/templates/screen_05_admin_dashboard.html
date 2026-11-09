@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB 대시보드 | TicketGuard QA</title>
+  <link rel="stylesheet" href="{{ base_path }}/admin-static/dashboard.css">
+  <script src="{{ base_path }}/admin-static/dashboard.js" defer></script>
+</head>
+<body data-review-owner="{{ admin_user }}" data-review-scope="{{ base_path }}">
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if name == 'database' %}<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>
+{% elif name == 'shield' %}<path d="m12 2 9 4-1 8c-1 4-5 7-8 8-3-1-7-4-8-8L3 6Z"/><path d="M12 8v5m0 4h.01"/>
+{% elif name == 'home' %}<path d="m3 10 9-8 9 8v11h-6v-7H9v7H3Z"/>
+{% elif name == 'flask' %}<path d="M9 2h6m-5 0v7L4 20a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V2M8 15h8"/>
+{% elif name == 'ticket' %}<path d="M3 4h18v5a3 3 0 0 0 0 6v5H3v-5a3 3 0 0 0 0-6ZM8 5v2m0 3v2m0 3v3"/>
+{% elif name == 'chart' %}<path d="M5 21v-7h3v7m3 0V8h3v13m3 0V3h3v18"/>
+{% elif name == 'clock' %}<circle cx="12" cy="13" r="9"/><path d="M12 8v5l3 2M9 1h6m-3 0v3"/>
+{% elif name == 'users' %}<path d="M3 22v-3a6 6 0 0 1 12 0v3m3-9a5 5 0 0 1 4 5v3"/><circle cx="9" cy="6" r="4"/><path d="M17 2a4 4 0 0 1 0 8"/>
+{% elif name == 'user' %}<circle cx="12" cy="6" r="4"/><path d="M3 22v-3a9 9 0 0 1 18 0v3"/>
+{% elif name == 'eye' %}<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/>
+{% elif name == 'search' %}<circle cx="10" cy="10" r="7"/><path d="m15 15 7 7"/>
+{% elif name == 'info' %}<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>
+{% else %}<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>{% endif %}
+</svg>
+{%- endmacro %}
+{% macro metric(label, value, name, tone='blue') -%}
+<article class="metric {{ tone }}"><div class="symbol">{{ icon(name) }}</div><div><h3>{{ label }}</h3><strong>{{ value }}</strong></div></article>
+{%- endmacro %}
+<a class="skip-link" href="#main">본문 바로가기</a>
+<header class="top-bar">
+  <a class="brand" href="{{ base_path }}/"><svg viewBox="0 0 64 48" aria-hidden="true"><g transform="rotate(-14 28 26)"><path d="M6 13h38v9a4 4 0 0 0 0 8v9H6v-9a4 4 0 0 0 0-8Z" fill="currentColor"/><path d="M14 17v18" stroke="white" stroke-width="2" stroke-dasharray="3 3"/></g><path d="m45 12 11 5v8c0 8-5 13-11 16-6-3-11-8-11-16v-8Z" fill="white" stroke="currentColor" stroke-width="3"/><path d="m40 26 4 4 6-7" stroke="currentColor" stroke-width="3" fill="none"/></svg><span>티켓가드<small>TICKET GUARD</small></span><b>QA 콘솔</b></a>
+  <nav class="main-nav" aria-label="주 메뉴"><a href="{{ base_path }}/">{{ icon('home') }}홈</a><a href="/qa/runs/new">{{ icon('flask') }}QA 대시보드</a><a href="{{ base_path }}/db" class="active" aria-current="page">{{ icon('database') }}DB 대시보드</a></nav>
+  <div class="account"><span class="sample-status"><i></i>Mock · 샘플 데이터</span><span>{{ icon('user') }}{{ admin_user }}</span></div>
+</header>
+<main id="main">
+  <div class="page-heading"><h1>DB 대시보드 <span>읽기 전용</span></h1><b class="chip blue">샘플 데이터</b><time>{{ snapshot }}</time></div>
+  <div class="sample-notice">샘플 데이터 기반 화면 시안 · 실제 DB 연결 없음</div>
+  {% if run_id %}<p class="run-context">Run ID · {{ run_id }} · 샘플 데이터</p>{% endif %}
+  <nav class="view-tabs" aria-label="DB 대시보드 화면"><button type="button" data-view="flow" class="selected" aria-current="page">흐름 분석</button><button type="button" data-view="activity">의심 활동</button><button type="button" data-view="user">사용자 상세</button></nav>
+  <form class="filters" id="scope-filters"><label>조회 기간: <select id="scope-period"><option value="today">오늘</option><option value="last5">최근 5분</option></select></label><label>공연: <select id="scope-performance"><option value="all">전체 공연</option><option>BLUE HOUR LIVE</option><option>OPEN AIR FESTIVAL</option><option>한여름 밤의 꿈</option></select></label><label>회차: <select id="scope-session"><option value="all">전체 회차</option><option value="1">1회차</option><option value="2">2회차</option></select></label><label>데이터 구분: <select id="scope-data"><option value="sample">일반 샘플</option></select></label><span id="scope-message" role="status"></span></form>
+  <section id="view-flow" class="view" aria-label="흐름 분석">
+    <h2 class="view-title">사용자 흐름 분석</h2>
+    <div class="metrics five">{{ metric('시작한 예매 시도', '1,000건', 'ticket') }}{{ metric('예매 완료', '620건', 'check') }}{{ metric('예매 전환율', '62.0%', 'chart', 'orange') }}{{ metric('대기 시간 중앙값', '24초', 'clock') }}{{ metric('검토 대상', '12개 사용자 ID', 'shield', 'orange') }}</div>
+    <div class="flow-grid"><section class="panel"><div class="panel-heading"><h2>예매 전환 퍼널</h2><span class="chip orange">잠정 집계</span></div><p class="subtitle">조회 기간에 시작한 동일한 예매 시도 기준</p><div class="funnel">{% for label, count in funnel %}<div class="funnel-row"><span>{{ label }}</span><div class="funnel-track"><div class="funnel-bar step-{{ loop.index }}" style="width:{{ count / 1000 * 100 }}%"></div></div><strong>{{ '{:,}'.format(count) }}건</strong></div>{% endfor %}</div></section>
+    <section class="panel"><div class="panel-heading"><h2>단계별 체류 시간</h2><div class="chart-legend"><span><i class="median"></i>중앙값</span><span><i class="p95"></i>p95</span></div></div><p class="subtitle">두 단계의 시각이 모두 관측된 표본 기준</p><div class="durations">{% for label, median, p95 in durations %}<div class="duration-row"><span>{{ label }}</span><div><div class="duration-bar median" style="width:{{ median / 125 * 100 }}%"><b>{{ median }}초</b></div><div class="duration-bar p95" style="width:{{ p95 / 125 * 100 }}%"><b>{{ p95 }}초</b></div></div></div>{% endfor %}</div></section></div>
+    <div class="flow-bottom"><section class="panel incomplete"><div class="incomplete-total">{{ icon('users') }}<h3>미완료</h3><strong>380건</strong></div><div class="incomplete-details"><dl><div><dt>명시적 취소·종료</dt><dd>180건</dd></div><div><dt>만료</dt><dd>70건</dd></div><div><dt>진행 중 · 관측 기준</dt><dd>80건</dd></div><div><dt>후속 관측 없음</dt><dd>50건</dd></div></dl><p class="footnote">{{ icon('info') }}후속 관측 없음은 이탈 확정을 뜻하지 않습니다.</p></div></section>
+    <section class="panel"><h2>예매 실패 · 거부 원인</h2><div class="table-scroll"><table class="failure-table"><thead><tr><th scope="col">원인</th><th scope="col">실패 요청 수</th><th scope="col">고유 예매 시도 수</th></tr></thead><tbody>{% for reason, requests, attempts in failure_reasons %}<tr><th scope="row">{{ reason }}</th><td>{{ requests }}건</td><td>{{ attempts }}건</td></tr>{% endfor %}</tbody></table></div><p class="footnote">{{ icon('info') }}실패 후 재시도하여 완료한 경우 포함</p></section></div>
+  </section>
+  <section id="view-activity" class="view" aria-label="의심 활동" hidden>
+    <div class="panel activity-panel"><div class="panel-heading"><h2 class="view-title">의심 활동 검토</h2><p class="subtitle">반복되는 행동과 관측 근거 확인</p></div><div class="metrics four">{{ metric('검토 대상', '12개 ID', 'users') }}{{ metric('우선 검토', '3개 ID', 'info', 'orange') }}{{ metric('관찰', '7개 ID', 'eye') }}{{ metric('데이터 확인', '2개 ID', 'database', 'gray') }}</div>
+    <div class="info-banner">{{ icon('info') }}<span>여러 신호와 이벤트 근거를 함께 검토하세요. <span class="separator">|</span> 임계값은 시안용 예시이며, 실제 봇 판정 결과가 아닙니다.</span></div>
+    <div class="activity-table-panel"><div class="search-filters"><label class="search">{{ icon('search') }}<input id="user-search" type="search" placeholder="사용자 ID 검색" aria-label="사용자 ID 검색"></label><label><span class="sr-only">신호 종류</span><select id="signal-filter"><option value="all">신호 종류 · 전체</option>{% for signal in ['예매 시도 반복 · 접근 거부', '보안문자 오답', '선행 단계 미관측', '동일 좌석 반복 조회', '짧은 간격의 다중 요청', '비정상적인 접근 패턴'] %}<option>{{ signal }}</option>{% endfor %}</select></label><label><span class="sr-only">검토 우선순위</span><select id="priority-filter"><option value="all">검토 우선순위 · 전체</option><option>우선 검토</option><option>관찰</option><option>데이터 확인</option></select></label><label><span class="sr-only">검토 상태</span><select id="status-filter"><option value="all">검토 상태 · 전체</option><option>검토 전</option><option>검토 중</option><option>검토 완료</option></select></label></div>
+    <div class="table-scroll"><table class="users-table"><thead><tr><th scope="col">사용자 ID</th><th scope="col">우선순위</th><th scope="col">관측 신호</th><th scope="col">횟수 · 시간 구간</th><th scope="col">관련 공연</th><th scope="col">최근 활동</th><th scope="col">검토 상태</th><th scope="col">상세</th></tr></thead><tbody id="users-body"></tbody></table></div><div class="table-footer"><span id="result-count" role="status"></span><div class="pagination" id="pagination" aria-label="목록 페이지"></div><p class="footnote">{{ icon('info') }}사용자 ID 수는 실제 사람 수와 다를 수 있습니다.</p></div></div></div>
+  </section>
+  <section id="view-user" class="view" aria-label="사용자 상세" hidden>
+    <section class="panel user-summary"><a href="#activity" class="breadcrumb">의심 활동 / 사용자 상세</a><div class="user-heading"><div><h2 id="detail-user-id">USR-2004</h2><span class="chip orange" id="detail-priority">우선 검토</span><span class="chip gray" id="detail-status">검토 전</span></div><div class="detail-filters"><label>공연: <select id="detail-performance"></select></label><label>기간: <select id="detail-period"><option value="5">최근 5분</option><option value="1">최근 1분</option></select></label></div></div><div class="metrics three"><article class="metric blue"><div class="symbol">{{ icon('ticket') }}</div><div><h3>최근 5분 예매 시도</h3><strong id="detail-attempts">6회</strong></div></article><article class="metric orange"><div class="symbol">{{ icon('shield') }}</div><div><h3>접근 거부</h3><strong id="detail-denied">18회</strong></div></article><article class="metric blue"><div class="symbol">{{ icon('clock') }}</div><div><h3>최근 활동</h3><strong id="detail-recent">14:58:32 KST</strong></div></article></div></section>
+    <div class="user-grid"><section class="panel"><h2>예매 시도별 타임라인</h2><div id="timeline"></div></section><div class="review-column"><section class="panel"><h2>검토 근거</h2><div id="evidence"></div><p class="footnote">{{ icon('info') }}오래된 탭 · 통신 재시도 등 다른 원인도 확인해야 합니다.</p></section><section class="panel"><h2>검토 기록</h2><form id="review-form"><label>검토 상태<select id="review-status"><option>검토 전</option><option>검토 중</option><option>검토 완료</option></select></label><label>메모<textarea id="review-note" rows="4" maxlength="2000" placeholder="검토 메모"></textarea></label><p class="local-note">샘플 검토 기록 · 현재 브라우저에만 저장</p><button type="submit" class="save-button">저장</button><p id="save-result" role="status" aria-live="polite"></p></form></section></div></div>
+  </section>
+  <script id="preview-users" type="application/json">{{ users | tojson }}</script>
+</main>
+</body>
+</html>

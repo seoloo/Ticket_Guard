@@ -31,6 +31,16 @@ services:
       web:
         condition: service_healthy
 
+  admin-dashboard:
+    image: ticket-guard-admin:dev
+    build: ./admin_dashboard
+    environment:
+      TICKET_GUARD_ADMIN_MONGO_URI: ${TICKET_GUARD_ADMIN_MONGO_URI:-}
+      TICKET_GUARD_ADMIN_BASE_PATH: /admin
+    networks:
+      - default
+      - admin-mongo
+
   gateway:
     image: nginx:1.27-alpine
     ports:
@@ -42,6 +52,13 @@ services:
         condition: service_healthy
       qa-dashboard:
         condition: service_started
+      admin-dashboard:
+        condition: service_started
 
 volumes:
   qa-data:
+
+networks:
+  admin-mongo:
+    external: true
+    name: ${TICKET_GUARD_ADMIN_MONGO_NETWORK:-ticket-guard-workspace-db_mongo-backend}
