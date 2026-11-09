@@ -166,3 +166,4 @@ def test_run_setup_starts_without_suites_and_shows_guides(dashboard_client):
     assert len(suite_inputs) == 10 and not any("checked" in tag for tag in suite_inputs)
     assert page.count('role="tooltip"') == 10
     assert "같은 좌석 동시 결제 시 중복 판매 여부" in page
+    assert page.count("<b>검증 대상</b>") == 10 and page.count("<b>검증 방법</b>") == 10
