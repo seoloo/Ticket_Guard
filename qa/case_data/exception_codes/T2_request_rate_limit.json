@@ -1,0 +1,8 @@
+{
+  "related_code": "T2",
+  "title": "요청 속도 제한",
+  "stage": "전 구간",
+  "input": "세션 하나 간격 없는 연속 요청",
+  "expected": "초과 요청 429 · 사람 속도 요청 허용",
+  "system_error_code": null
+}

@@ -1,5 +1,6 @@
 """지금의 Django 시스템에 HTTP로 접속 · 시스템 코드 import 금지"""
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,12 +21,18 @@ from ticket_guard_qa.system_targets.live_booking_client import (
 )
 from ticket_guard_qa.system_targets.target_interfaces import (
     AccountPoolExhaustedError,
+    AdmissionSample,
     ConfirmResponse,
     HttpResult,
     InventorySnapshot,
     SeatContender,
 )
 
+ADMISSION_POLL_INTERVAL_SEC = 0.5  # T1 입장 시각 정밀도
+BURST_REQUEST_PATH = "/"  # T2 · 로그인 사용자 공연 목록 화면
+DOCKER_API_BASE_URL = "http://docker"  # 소켓 연결 · 호스트 이름 무시
+DOCKER_ACTION_TIMEOUT_SEC = 30.0
+DOCKER_ACTION_OK_STATUS_CODES = (204, 304)  # 304 = 이미 그 상태
 HEALTH_CHECK_TIMEOUT_SEC = 1.5  # 화면 헤더용 · 오래 기다리지 않음
 BOOKING_ID_PATH_PREFIX = "/complete/"  # 확정 200 응답 redirect · /complete/TG-…/
 
@@ -203,6 +210,57 @@ class LiveDjangoBookingApi:
     async def release_seat_contender(self, contender: SeatContender) -> None:
         await self.release_client(contender.handle.client, contender.handle.account_number)
 
+    async def send_confirm_with_last_sequence(
+        self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, is_same_sequence: bool
+    ) -> ConfirmResponse:
+        client = contender.handle.client
+        if not is_same_sequence:
+            client.confirm_sequence += 1
+        try:
+            return to_confirm_response(await client.post_confirm(list(seat_ids), quantity, client.confirm_sequence))
+        except httpx.HTTPError as error:
+            return ConfirmResponse(0, f"connection · {type(error).__name__}", None, None, 0.0)
+
+    async def hold_admitted_session(self, show_id: str, hold_sec: float) -> AdmissionSample:
+        """시험 계정 하나 → 대기열 → 입장(보안문자 단계) 시각 기록 → hold_sec 유지 → 예매 취소로 이탈"""
+        account_number = self.acquire_account_number()
+        client = LiveBookingClient(self.base_url, self.transport)
+        entered_at = time.monotonic()
+        try:
+            await client.login(build_test_account_username(account_number), self.test_accounts.password)
+            await client.start_booking(show_id)
+            entered_at = time.monotonic()
+            await client.wait_for_admission(ADMISSION_POLL_INTERVAL_SEC)
+            admitted_at = time.monotonic()
+            await asyncio.sleep(hold_sec)
+            return AdmissionSample(admitted_at, time.monotonic(), (admitted_at - entered_at) * 1000)
+        except BookingFlowError as error:
+            return AdmissionSample(None, None, 0.0, f"{error.step} · {error.error_code or error.status_code}")
+        except httpx.HTTPError as error:
+            return AdmissionSample(None, None, 0.0, f"connection · {type(error).__name__}")
+        finally:
+            await self.release_client(client, account_number)
+
+    async def send_request_burst(self, request_count: int, interval_sec: float) -> list[int]:
+        """로그인한 세션 하나로 공연 목록 화면 연속 요청 · 429 = 요청 속도 제한"""
+        account_number = self.acquire_account_number()
+        client = LiveBookingClient(self.base_url, self.transport)
+        status_codes = []
+        try:
+            await client.login(build_test_account_username(account_number), self.test_accounts.password)
+            for index in range(request_count):
+                if index and interval_sec:
+                    await asyncio.sleep(interval_sec)
+                try:
+                    status_codes.append((await client.http_client.get(BURST_REQUEST_PATH)).status_code)
+                except httpx.HTTPError:
+                    status_codes.append(0)
+        except (BookingFlowError, httpx.HTTPError):
+            status_codes += [0] * (request_count - len(status_codes))
+        finally:
+            await self.release_client(client, account_number)
+        return status_codes
+
 
 class LiveDjangoVerdictReader:
     def read_session_verdicts(self, run_id: str) -> SystemVerdicts:
@@ -220,10 +278,26 @@ class LiveDjangoLiveMetricsReader:
 
 
 class LiveDockerProcessControl:
+    """Docker Engine API · 소켓으로 컨테이너 중지 · 시작 · 이름 미설정 서비스 = 건너뜀"""
+
+    def __init__(self, container_name_by_service: dict[str, str], socket_path: str,
+                 transport: httpx.BaseTransport | None = None) -> None:
+        self.container_name_by_service = {service: name for service, name in container_name_by_service.items() if name}
+        self.socket_path = socket_path
+        self.transport = transport
+
     def stop_service(self, service_name: str) -> None:
-        # TODO(파이프라인 연결 후): Docker SDK로 컨테이너 중지
-        raise NotImplementedError("복구할 파이프라인 없음 · AGENTS.md 5장")
+        self.send_container_action(service_name, "stop")
 
     def start_service(self, service_name: str) -> None:
-        # TODO(파이프라인 연결 후): Docker SDK로 컨테이너 시작
-        raise NotImplementedError("복구할 파이프라인 없음 · AGENTS.md 5장")
+        self.send_container_action(service_name, "start")
+
+    def send_container_action(self, service_name: str, action: str) -> None:
+        container_name = self.container_name_by_service.get(service_name)
+        if not container_name:
+            raise NotImplementedError(f"{service_name} 컨테이너 이름 미설정 · TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME · Docker 소켓 연결")
+        transport = self.transport or httpx.HTTPTransport(uds=self.socket_path)
+        with httpx.Client(base_url=DOCKER_API_BASE_URL, transport=transport, timeout=DOCKER_ACTION_TIMEOUT_SEC) as client:
+            response = client.post(f"/containers/{container_name}/{action}")
+        if response.status_code not in DOCKER_ACTION_OK_STATUS_CODES:
+            raise RuntimeError(f"컨테이너 {action} 실패 · {container_name} · {response.status_code}")

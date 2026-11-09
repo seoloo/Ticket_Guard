@@ -4,14 +4,25 @@ from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
 from ticket_guard_qa.domain.models import RunConfig
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunService
+from ticket_guard_qa.test_suites.suite_registry import SUITE_BY_NAME
 
 
-def test_unfinished_suite_is_skipped_not_failed(qa_settings, qa_database):
+class UnfinishedSuite:
+    suite_name = "unfinished_suite"
+    title = "미구현 Suite"
+    related_codes: tuple[str, ...] = ()
+
+    def run(self, context):
+        raise NotImplementedError("미구현")
+
+
+def test_unfinished_suite_is_skipped_not_failed(qa_settings, qa_database, monkeypatch):
+    monkeypatch.setitem(SUITE_BY_NAME, UnfinishedSuite.suite_name, UnfinishedSuite())
     run_service = RunService(qa_settings, qa_database, RunProgressStream())
-    summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", "load_capacity")))
+    summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", UnfinishedSuite.suite_name)))
 
     outcome_by_suite = {result.suite_name: result.outcome for result in summary.suite_results}
-    assert outcome_by_suite == {"self_check": SuiteOutcome.PASSED, "load_capacity": SuiteOutcome.SKIPPED}
+    assert outcome_by_suite == {"self_check": SuiteOutcome.PASSED, UnfinishedSuite.suite_name: SuiteOutcome.SKIPPED}
     assert summary.status is RunStatus.PASSED
     assert run_service.run_repository.get_summary(summary.run_id).status is RunStatus.PASSED
     assert (qa_settings.report_output_dir / f"{summary.run_id}.html").exists()

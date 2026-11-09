@@ -10,10 +10,11 @@ from ticket_guard_qa.system_targets.live_django_system import (
     SystemAdminAccount,
     VirtualUserAccountPool,
 )
+from ticket_guard_qa.system_targets.live_kafka_injector import KafkaEventInjector
 from ticket_guard_qa.system_targets.live_kafka_reader import KafkaEventStreamReader
 from ticket_guard_qa.system_targets.live_mongo_reader import LiveMongoPipelineReader, LiveMongoVerdictReader
 from ticket_guard_qa.system_targets.live_raw_mongo_reader import LiveMongoRawEventReader
-from ticket_guard_qa.system_targets.target_interfaces import SystemTarget
+from ticket_guard_qa.system_targets.target_interfaces import PIPELINE_SERVICE_NAME, SystemTarget
 
 
 def build_system_target(settings: Settings, target_kind: TargetKind | None = None) -> SystemTarget:
@@ -29,12 +30,16 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
             SystemAdminAccount(settings.system_admin_username, settings.system_admin_password),
         ),
         verdict_reader=LiveMongoVerdictReader(settings.system_mongo_uri) if has_mongo else LiveDjangoVerdictReader(),
-        pipeline_reader=LiveMongoPipelineReader(settings.system_mongo_uri),
+        pipeline_reader=LiveMongoPipelineReader(settings.system_mongo_uri, settings.kafka_events_topic),
         live_metrics_reader=LiveDjangoLiveMetricsReader(),
-        process_control=LiveDockerProcessControl(),
+        process_control=LiveDockerProcessControl({PIPELINE_SERVICE_NAME: settings.pipeline_container_name}, settings.docker_socket_path),
         event_stream_reader=(
             KafkaEventStreamReader(settings.kafka_bootstrap_servers, settings.kafka_events_topic)
             if settings.kafka_bootstrap_servers else None
+        ),
+        event_injector=(
+            KafkaEventInjector(settings.kafka_bootstrap_servers, settings.kafka_events_topic)
+            if settings.is_kafka_contract_injection_enabled and settings.kafka_bootstrap_servers else None
         ),
         raw_event_reader=(
             LiveMongoRawEventReader(settings.system_raw_mongo_uri, settings.kafka_events_topic)

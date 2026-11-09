@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # 이벤트 토픽 읽기 전용 · QA 대시보드는 팀 compose 안에서만 실행 · 비우면 이벤트 전달 검증 건너뜀
     kafka_bootstrap_servers: str = "kafka:9092"
     kafka_events_topic: str = "ticketguard.events.v1"
+    is_kafka_contract_injection_enabled: bool = False  # 토픽 계약 사례 · 시험 환경 토픽에 직접 주입 · 기본 꺼짐
+
+    # 장애 복구 · Docker 소켓으로 정제 · 격리 저장 컨테이너 중지 · 시작 · 비우면 장애 복구 건너뜀
+    pipeline_container_name: str = ""
+    docker_socket_path: str = "/var/run/docker.sock"
 
     # 시스템 테스트 훅과 같은 값 · 저장소 .env의 QA_TEST_ACCOUNT_* · QA_CAPTCHA_FIXED_ANSWER (Issue #6)
     test_account_count: int = 0
@@ -35,6 +40,8 @@ class Settings(BaseSettings):
     case_data_dir: Path = QA_ROOT_DIR / "case_data"
 
     dashboard_base_path: str = "/qa"  # 팀 입구 127.0.0.1:8000/qa/ · AGENTS.md 4장
+
+    rule_set_version: str = "mock-1"  # B2 룰 매칭 예측 · 실제 규칙 확정 시 domain/rule_sets.py 버전으로 교체
 
     random_seed: int = 20261103  # 같은 시드 = 같은 정답표
     fake_run_duration_sec: int = 10  # 가짜 대상 실행 흉내 시간 · 실제 QA 소요 시간에 맞춰 조정

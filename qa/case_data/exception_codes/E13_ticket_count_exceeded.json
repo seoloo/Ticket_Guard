@@ -1,0 +1,8 @@
+{
+  "related_code": "E13",
+  "title": "매수 초과",
+  "stage": "좌석 선택",
+  "input": "1회 최대 매수 초과 선택",
+  "expected": "확정 거부 · 매수 안내",
+  "system_error_code": "SELECTION_LIMIT"
+}

@@ -17,7 +17,7 @@ def dashboard_client(qa_settings) -> TestClient:
     return TestClient(create_dashboard_app(qa_settings), headers=ADMIN_HEADERS)
 
 
-@pytest.mark.parametrize("path", ["/", "/runs/new", "/db", "/db/sessions/attempt-1", "/bots", "/bots/bot_a/edit", "/bots/bot_new/edit"])
+@pytest.mark.parametrize("path", ["/", "/runs/new", "/db", "/db/sessions/attempt-1", "/bots", "/bots/bot_a/edit", "/bots/bot_new/edit", "/cases"])
 def test_screens_open_for_admin(dashboard_client, path):
     assert dashboard_client.get(path).status_code == 200
 
@@ -108,10 +108,14 @@ def test_full_fake_run_shows_result(dashboard_client):
 
     run_id = run_path.rsplit("/", 1)[-1]
     assert run_service.run_repository.get_summary(run_id).run_config.bot_version_numbers["BOT_B"] == 2  # 저장한 버전으로 실행
+
+    cases_page = dashboard_client.get(f"/cases?run_id={run_id}").text
+    assert f"Run <b class=\"mono\">{run_id}</b> · 세션 100" in cases_page  # 정답표 조회
     detection_page = dashboard_client.get(f"{run_path}/bots")
     assert detection_page.status_code == 200 and "Confusion Matrix" in detection_page.text
     assert "MOCK-R" in detection_page.text  # SESSION_VERDICTS.matchedRules → 룰별 Hit 수
     live_bot_page = dashboard_client.get(f"{run_path}/bots/live")
+    assert "Mock 캡처" in live_bot_page.text and "예매 확정" in live_bot_page.text  # 봇 C 5% · Mock 프레임
     assert live_bot_page.status_code == 200 and "Run 종료" in live_bot_page.text
     assert run_id in dashboard_client.get("/bots").text  # B1 카드가 최근 실행을 씀
 
@@ -148,3 +152,8 @@ def test_booking_flow_suite_button_and_result(dashboard_client):
         time.sleep(0.05)
     result_page = dashboard_client.get(run_path).text
     assert "예매 흐름 테스트" in result_page and "예매 완료 20 · 매진 0 · 오류 0 / VU 20" in result_page
+
+
+def test_capture_image_route_rejects_other_files(dashboard_client):
+    assert dashboard_client.get("/runs/run-1/captures/..%2Fsecret.png").status_code == 404
+    assert dashboard_client.get("/runs/run-1/captures/frame.txt").status_code == 404

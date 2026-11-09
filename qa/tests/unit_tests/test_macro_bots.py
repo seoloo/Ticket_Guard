@@ -6,13 +6,22 @@ import pytest
 from ticket_guard_qa.domain.detection_targets import DETECTION_TARGETS, find_detection_target
 from ticket_guard_qa.domain.enums import ActorType, VerdictStage
 from ticket_guard_qa.domain.models import SessionBehavior
+from ticket_guard_qa.domain.rule_sets import MOCK_RULE_SET_VERSION
+from ticket_guard_qa.macro_bots.browser_capture import (
+    CAPTURE_STEPS,
+    CaptureFrame,
+    build_mock_capture_frames,
+    load_capture_frames,
+    save_capture_frames,
+)
 from ticket_guard_qa.macro_bots.behavior_fields import BEHAVIOR_FIELD_SPECS, BehaviorInputError, behavior_to_dict, parse_behavior_form
 from ticket_guard_qa.macro_bots.bot_catalog import BOT_TYPE_CATALOG, find_bot_type_by_slug
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.macro_bots.bot_trial_run import run_trial_sessions
+from ticket_guard_qa.macro_bots.rule_hit_preview import RULE_PENDING_REASON, predict_rule_hits
 from ticket_guard_qa.scoring.detection_breakdown import VerdictOutcome, build_actor_detection_rows_from_details, classify_verdict
-from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
+from ticket_guard_qa.system_targets.fake_system import build_fake_system_target, find_matched_mock_rules
 
 SAVED_AT = datetime(2026, 11, 4, tzinfo=timezone.utc)
 
@@ -91,3 +100,33 @@ def test_verdict_outcome_colors():
     assert classify_verdict(ActorType.BOT_A, VerdictStage.CHALLENGE) is VerdictOutcome.CAUGHT
     assert classify_verdict(ActorType.HUMAN, VerdictStage.HOLD) is VerdictOutcome.FALSE_POSITIVE
     assert classify_verdict(ActorType.HUMAN, VerdictStage.OBSERVE) is VerdictOutcome.CORRECT_PASS
+
+
+def test_rule_preview_matches_mock_verdict_rules():
+    for behavior in DEFAULT_BEHAVIOR_BY_ACTOR_TYPE.values():
+        previews = predict_rule_hits(behavior, MOCK_RULE_SET_VERSION)
+        assert all(preview.is_expected_hit is not None for preview in previews)
+        assert tuple(preview.rule_id for preview in previews if preview.is_expected_hit) == find_matched_mock_rules(behavior)
+
+
+def test_rule_preview_pending_for_unknown_rule_set():
+    previews = predict_rule_hits(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A], "live-v1")
+    assert [preview.rule_id for preview in previews] == ["R1", "R2", "R3", "R4", "R5", "R6"]
+    assert {preview.reason for preview in previews} == {RULE_PENDING_REASON}
+    assert all(preview.is_expected_hit is None for preview in previews)
+
+
+def test_mock_capture_frames_follow_booking_steps_and_seed():
+    behavior = DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_C]
+    frames = build_mock_capture_frames(behavior, 7)
+    assert [frame.step for frame in frames] == list(CAPTURE_STEPS)
+    assert frames[0].elapsed_ms == behavior.entry_delay_after_open_ms
+    assert [frame.elapsed_ms for frame in frames] == sorted(frame.elapsed_ms for frame in frames)
+    assert frames == build_mock_capture_frames(behavior, 7)
+
+
+def test_saved_capture_frames_load_back(tmp_path):
+    frames = [CaptureFrame("대기열", 120.0, 10, 20, "frame-1.png")]
+    save_capture_frames(tmp_path, "run-1", frames)
+    assert load_capture_frames(tmp_path, "run-1") == frames
+    assert load_capture_frames(tmp_path, "run-unknown") == []

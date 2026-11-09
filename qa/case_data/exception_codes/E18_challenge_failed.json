@@ -1,0 +1,8 @@
+{
+  "related_code": "E18",
+  "title": "추가 확인 실패 · 무응답",
+  "stage": "추가 확인",
+  "input": "추가 확인 실패 또는 시간 초과",
+  "expected": "결제 진행 차단 · 점유 해제",
+  "system_error_code": null
+}

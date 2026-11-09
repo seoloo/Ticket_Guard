@@ -1,0 +1,8 @@
+{
+  "related_code": "E20",
+  "title": "중복 결제 요청",
+  "stage": "예매 확정",
+  "input": "같은 확정 요청 재전송 · 오래된 순번 재전송",
+  "expected": "예매 1건 · 같은 예매 번호 · 오래된 순번 거부",
+  "system_error_code": "STALE_REQUEST"
+}

@@ -1,0 +1,8 @@
+{
+  "related_code": "E21",
+  "title": "결제 취소",
+  "stage": "결제",
+  "input": "결제 단계 사용자 취소",
+  "expected": "점유 해제 · 예매 미생성",
+  "system_error_code": null
+}

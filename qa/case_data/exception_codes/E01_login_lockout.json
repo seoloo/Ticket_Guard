@@ -1,0 +1,8 @@
+{
+  "related_code": "E01",
+  "title": "로그인 실패 · 5회 → 10분 잠금",
+  "stage": "로그인",
+  "input": "틀린 비밀번호 연속 5회",
+  "expected": "10분 동안 로그인 거부 · 잠금 안내",
+  "system_error_code": "LOGIN_FAILED"
+}

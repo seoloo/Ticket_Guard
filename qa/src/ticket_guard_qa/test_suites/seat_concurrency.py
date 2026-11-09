@@ -231,7 +231,7 @@ def build_message(reports: list[ScenarioReport], reset_message: str) -> str:
 class SeatConcurrencySuite:
     suite_name = "seat_concurrency"
     title = "좌석 동시성"
-    related_codes: tuple[str, ...] = ("E12", "E16", "E20")
+    related_codes: tuple[str, ...] = ("E12", "E14", "E20")
 
     def run(self, context: SuiteContext) -> SuiteResult:
         booking_api = context.system_target.booking_api

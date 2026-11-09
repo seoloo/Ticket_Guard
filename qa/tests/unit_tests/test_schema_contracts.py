@@ -1,9 +1,11 @@
 """db 스키마 대응 · 계약 사례 형식 · Mock이 SESSION_VERDICTS · SESSION_FEATURES 모양을 내는지 · docs/contracts.md 3 · 5장"""
+import asyncio
 from dataclasses import fields
 
-from ticket_guard_qa.domain.enums import ActorType, VerdictStage
+from ticket_guard_qa.domain.enums import ActorType, SuiteOutcome, TargetKind, VerdictStage
 from ticket_guard_qa.domain.models import (
     FEATURE_FIELD_BY_BEHAVIOR_FIELD,
+    RunConfig,
     SessionBehavior,
     SessionFeatureRecord,
     SessionVerdictRecord,
@@ -12,14 +14,18 @@ from ticket_guard_qa.domain.models import (
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.settings import QA_ROOT_DIR
+from ticket_guard_qa.system_targets import fake_system
 from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
 from ticket_guard_qa.test_suites.event_contract import (
     ACCEPTED_STATUS_TOKEN,
     KAFKA_ENDPOINT,
+    EventContractSuite,
     QUARANTINE_REASON_CODES,
     load_contract_cases,
+    send_action_requests,
     matches_expected_statuses,
 )
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 CASE_DATA_DIR = QA_ROOT_DIR / "case_data"
 
@@ -99,3 +105,22 @@ def test_every_bot_parameter_maps_to_feature_field():
     feature_names = {field.name for field in fields(SessionFeatureRecord)}
     assert set(FEATURE_FIELD_BY_BEHAVIOR_FIELD) == {field.name for field in fields(SessionBehavior)}
     assert {name for name in FEATURE_FIELD_BY_BEHAVIOR_FIELD.values() if name} <= feature_names
+
+
+def test_kafka_cases_fail_when_pipeline_skips_quarantine(monkeypatch):
+    monkeypatch.setattr(fake_system, "normalize_fake_message", lambda value, clean_event_ids: (fake_system.CLEAN_COLLECTION_NAME, None))
+    system_target = build_fake_system_target()
+    context = SuiteContext(
+        run_id="run-test", run_config=RunConfig(TargetKind.FAKE, ("event_contract",)), system_target=system_target,
+        answer_key_repository=None, case_data_dir=CASE_DATA_DIR, report_progress=lambda text, **fields: None,
+    )
+    result = EventContractSuite(storage_wait_sec=0.0, poll_interval_sec=0.0).run(context)
+    assert result.outcome is SuiteOutcome.FAILED
+    assert "kafka_malformed_json(정제 1 · 격리 없음 · 저장 1/1)" in result.message
+    assert "kafka_valid_server_event" not in result.message
+
+
+def test_stale_request_sequence_is_rejected_on_fake_target():
+    case = next(case for case in load_contract_cases(CASE_DATA_DIR) if case.case_name == "stale_request_sequence")
+    responses = asyncio.run(send_action_requests(build_fake_system_target().booking_api, case.requests))
+    assert [(response.status_code, response.error_code) for response in responses] == [(400, "SELECTION_LIMIT"), (409, "STALE_REQUEST")]

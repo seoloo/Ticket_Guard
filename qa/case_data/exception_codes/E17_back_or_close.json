@@ -1,0 +1,8 @@
+{
+  "related_code": "E17",
+  "title": "뒤로가기 · 창 닫기",
+  "stage": "전 단계",
+  "input": "진행 중 뒤로가기 · 창 닫기",
+  "expected": "취소 확인 · 진행 중 예매 정리",
+  "system_error_code": "EXPIRED"
+}

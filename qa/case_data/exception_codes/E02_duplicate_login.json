@@ -1,0 +1,8 @@
+{
+  "related_code": "E02",
+  "title": "중복 로그인",
+  "stage": "예매 시작",
+  "input": "같은 계정 다른 페이지에서 예매 시작",
+  "expected": "기존 페이지 유지 · 새 페이지 거부",
+  "system_error_code": "DUPLICATE_PAGE"
+}

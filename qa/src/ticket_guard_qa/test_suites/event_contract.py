@@ -1,5 +1,7 @@
 """이벤트 형식 계약 시험 · docs/contracts.md 5장 · case_data/event_contracts/*.json"""
+import asyncio
 import json
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -8,12 +10,24 @@ from typing import Any
 
 from ticket_guard_qa.domain.enums import SuiteOutcome
 from ticket_guard_qa.domain.models import SuiteResult
+from ticket_guard_qa.system_targets.target_interfaces import (
+    AccountPoolExhaustedError,
+    BookingApi,
+    ConfirmResponse,
+    PipelineReader,
+    StoredOutcome,
+)
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 
 EVENT_CONTRACTS_FOLDER_NAME = "event_contracts"
 BROWSER_EVENTS_ENDPOINT = "events"
 QUARANTINE_REASON_CODES = ("PARSE_ERROR", "MISSING_FIELD", "INVALID_FORMAT", "UNSUPPORTED_SCHEMA", "DUPLICATE_EVENT_ID")  # docs/contracts.md 3-4 · QA 제안
-KAFKA_ENDPOINT = "kafka"  # Django를 거치지 않는 토픽 메시지 · db 팀 파이프라인 시험용 · QA HTTP 시험 대상 아님
+KAFKA_ENDPOINT = "kafka"  # Django를 거치지 않는 토픽 메시지 · 시스템 파이프라인 입력 형식 시험
+ACTION_ENDPOINT = "action"  # /api/action/ 예매 확정 · 좌석 선택 단계 VU 하나
+ACTION_SHOW_ID = "blue-hour"  # 지정석
+CLEAN_COLLECTION_NAME = "clean_events"
+STORAGE_WAIT_SEC = 30.0  # Spark 처리 주기 · 재시도 여유
+STORAGE_POLL_INTERVAL_SEC = 1.0
 ACCEPTED_STATUS_TOKEN = "accepted"
 ACCEPTED_STATUS_CODES = (200, 202)  # 200 전달 완료 · 202 전달 대기 · Kafka 상태에 따라 달라짐
 KST = timezone(timedelta(hours=9))
@@ -85,6 +99,34 @@ def is_expected_status(actual_status_code: int, expected: int | str) -> bool:
     return actual_status_code == expected
 
 
+def encode_message_value(value: Any) -> bytes:
+    """객체 = JSON · 문자열 = 그대로 (형식 오류 사례)"""
+    return value.encode() if isinstance(value, str) else json.dumps(value, ensure_ascii=False).encode()
+
+
+async def send_action_requests(booking_api: BookingApi, requests: list[dict[str, Any]]) -> list[ConfirmResponse]:
+    contender = await booking_api.prepare_seat_contender(ACTION_SHOW_ID)
+    try:
+        return [
+            await booking_api.send_confirm_with_last_sequence(
+                contender, tuple(request["seat_ids"]), request["quantity"], request["is_same_sequence"])
+            for request in requests
+        ]
+    finally:
+        await booking_api.release_seat_contender(contender)
+
+
+def wait_for_stored_outcomes(
+    pipeline_reader: PipelineReader, positions: list[tuple[int, int]], wait_sec: float, poll_interval_sec: float,
+) -> list[StoredOutcome]:
+    deadline = time.monotonic() + wait_sec
+    while True:
+        outcomes = pipeline_reader.read_stored_outcomes(positions)
+        if len(outcomes) >= len(positions) or time.monotonic() >= deadline:
+            return outcomes
+        time.sleep(poll_interval_sec)
+
+
 def matches_expected_statuses(actual_status_codes: list[int], expected_status_codes: list[int | str]) -> bool:
     return len(actual_status_codes) == len(expected_status_codes) and all(
         is_expected_status(actual, expected) for actual, expected in zip(actual_status_codes, expected_status_codes)
@@ -94,24 +136,56 @@ def matches_expected_statuses(actual_status_codes: list[int], expected_status_co
 class EventContractSuite:
     suite_name = "event_contract"
     title = "이벤트 계약 테스트"
-    related_codes: tuple[str, ...] = ()
+    related_codes: tuple[str, ...] = ("E20",)  # 오래된 순번 재전송
+
+    def __init__(self, storage_wait_sec: float = STORAGE_WAIT_SEC, poll_interval_sec: float = STORAGE_POLL_INTERVAL_SEC) -> None:
+        self.storage_wait_sec = storage_wait_sec
+        self.poll_interval_sec = poll_interval_sec
+
+    def check_case(self, context: SuiteContext, case: ContractCase) -> str | None:
+        """실패 이유 · None = 통과 · 대상 미설정은 NotImplementedError"""
+        booking_api = context.system_target.booking_api
+        if case.endpoint == BROWSER_EVENTS_ENDPOINT:
+            requests = fill_placeholders(case.requests, build_placeholder_values(datetime.now(timezone.utc)))
+            actual_status_codes = [booking_api.submit_browser_event(request).status_code for request in requests]
+            return None if matches_expected_statuses(actual_status_codes, case.expected_status_codes) else str(actual_status_codes)
+        if case.endpoint == ACTION_ENDPOINT:
+            responses = asyncio.run(send_action_requests(booking_api, case.requests))
+            actual = [(response.status_code, response.error_code) for response in responses]
+            expected = [(status, request["expected_error_code"]) for status, request in zip(case.expected_status_codes, case.requests)]
+            return None if actual == expected else str(actual)
+        if case.endpoint == KAFKA_ENDPOINT:
+            return self.check_kafka_case(context, case)
+        raise NotImplementedError(f"모르는 endpoint {case.endpoint}")
+
+    def check_kafka_case(self, context: SuiteContext, case: ContractCase) -> str | None:
+        """토픽 주입 → 정제 · 격리 저장 결과 대조 · docs/contracts.md 5-1"""
+        injector = context.system_target.event_injector
+        if injector is None:
+            raise NotImplementedError("토픽 주입 미설정")
+        messages = fill_placeholders(case.kafka_messages, build_placeholder_values(datetime.now(timezone.utc)))
+        positions = injector.inject_messages([(message.get("key"), encode_message_value(message["value"])) for message in messages])
+        outcomes = wait_for_stored_outcomes(context.system_target.pipeline_reader, positions, self.storage_wait_sec, self.poll_interval_sec)
+        clean_count = sum(outcome.collection_name == CLEAN_COLLECTION_NAME for outcome in outcomes)
+        reason_codes = sorted(outcome.reason_code or "" for outcome in outcomes if outcome.collection_name != CLEAN_COLLECTION_NAME)
+        expected = case.expected_storage
+        is_matched = (len(outcomes) >= len(positions) and sorted(expected.quarantine_reason_codes) == reason_codes
+                      and (expected.activity_event_count is None or expected.activity_event_count == clean_count))
+        return None if is_matched else f"정제 {clean_count} · 격리 {reason_codes or '없음'} · 저장 {len(outcomes)}/{len(positions)}"
 
     def run(self, context: SuiteContext) -> SuiteResult:
-        booking_api = context.system_target.booking_api
         failed_case_names: list[str] = []
         skipped_case_names: list[str] = []
 
         for case in load_contract_cases(context.case_data_dir):
-            if case.endpoint == KAFKA_ENDPOINT:
-                continue  # TODO(MongoDB 연결 후): expected_storage로 저장 결과 대조
-            if case.endpoint != BROWSER_EVENTS_ENDPOINT:
-                skipped_case_names.append(case.case_name)  # TODO(예매 확정 시험 추가 시): /api/action/ 사례
-                continue
-            requests = fill_placeholders(case.requests, build_placeholder_values(datetime.now(timezone.utc)))
-            actual_status_codes = [booking_api.submit_browser_event(request).status_code for request in requests]
-            if not matches_expected_statuses(actual_status_codes, case.expected_status_codes):
-                failed_case_names.append(f"{case.case_name}({actual_status_codes})")
             context.report_progress(f"계약 케이스 {case.case_name} 검증")
+            try:
+                failure = self.check_case(context, case)
+            except (NotImplementedError, AccountPoolExhaustedError) as error:
+                skipped_case_names.append(f"{case.case_name}({error})")
+                continue
+            if failure:
+                failed_case_names.append(f"{case.case_name}({failure})")
 
         message_parts = []
         if failed_case_names:

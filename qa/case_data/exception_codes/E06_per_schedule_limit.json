@@ -1,0 +1,8 @@
+{
+  "related_code": "E06",
+  "title": "회차당 한도",
+  "stage": "좌석 선택",
+  "input": "회차당 한도 초과 좌석 확정",
+  "expected": "확정 거부 · 한도 안내",
+  "system_error_code": "SELECTION_LIMIT"
+}

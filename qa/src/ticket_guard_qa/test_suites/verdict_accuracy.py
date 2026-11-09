@@ -107,7 +107,7 @@ def read_rule_hit_counts_or_none(context: SuiteContext) -> dict[str, int] | None
 class VerdictAccuracySuite:
     suite_name = VERDICT_ACCURACY_SUITE_NAME
     title = "판정 정확도"
-    related_codes: tuple[str, ...] = ()
+    related_codes: tuple[str, ...] = ("E22",)  # 보류 판정
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config

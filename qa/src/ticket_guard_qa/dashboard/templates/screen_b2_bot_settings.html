@@ -25,9 +25,10 @@
   .save-row input[type=text] { flex: 1; min-width: 220px; height: 44px; border: 1.5px solid #DCE2EA; border-radius: 10px; padding: 0 12px; font-size: 14px; }
   .side-card { padding: 22px 24px; }
   .side-card + .side-card { margin-top: 18px; }
-  .rule-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rule-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
   .rule-list li { border: 1px solid var(--soft-line-color); border-radius: 10px; padding: 9px 12px; display: flex; gap: 8px; align-items: center; font-size: 13px; }
-  .rule-list b { font-size: 14px; }
+  .rule-list b, .rule-list .pill { font-size: 14px; white-space: nowrap; }
+  .rule-list .pill { font-size: 12px; }
   .trial-score { font-size: 40px; font-weight: 800; letter-spacing: -.05em; }
   .stage-bars { display: grid; gap: 6px; margin-top: 10px; }
   .stage-bar { display: grid; grid-template-columns: 82px 1fr 34px; gap: 8px; align-items: center; font-size: 12.5px; font-weight: 700; }
@@ -117,7 +118,7 @@
 
   <aside>
     <section class="card side-card">
-      <div class="row"><h2 class="section-heading">룰 매칭 예측</h2><span class="spacer"></span><span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">R1 ~ R6</span></div>
+      <div class="row"><h2 class="section-heading">룰 매칭 예측</h2><span class="spacer"></span><span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">룰셋 {{ rule_set_version }}</span></div>
       <ul class="rule-list">
         {% for preview in rule_previews %}
         <li>

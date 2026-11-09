@@ -59,7 +59,7 @@ def build_message(session_results: list[VirtualUserSessionResult], planned_count
 class BookingFlowSuite:
     suite_name = BOOKING_FLOW_SUITE_NAME
     title = "예매 흐름 테스트"
-    related_codes: tuple[str, ...] = ("T1",)  # 대기열
+    related_codes: tuple[str, ...] = ("E05", "E12")
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config

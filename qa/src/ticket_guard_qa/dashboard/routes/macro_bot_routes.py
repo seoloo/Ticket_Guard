@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.answer_key.expected_verdicts import plan_virtual_users
@@ -18,7 +18,7 @@ from ticket_guard_qa.dashboard.dependencies import (
     render_screen,
 )
 from ticket_guard_qa.domain.detection_targets import DETECTION_TARGETS, DetectionTarget
-from ticket_guard_qa.domain.enums import ActorType, RunStatus, SessionStep, VerdictStage
+from ticket_guard_qa.domain.enums import ActorType, RunStatus, SessionStep, TargetKind, VerdictStage
 from ticket_guard_qa.domain.models import ActorProgress, CriterionResult, RunSummary, SessionBehavior, SessionKey
 from ticket_guard_qa.macro_bots.behavior_fields import (
     BEHAVIOR_PRESETS,
@@ -29,9 +29,18 @@ from ticket_guard_qa.macro_bots.behavior_fields import (
     parse_behavior_form,
 )
 from ticket_guard_qa.macro_bots.behavior_sampling import build_entry_histogram
+from ticket_guard_qa.macro_bots.browser_capture import (
+    CAPTURE_FOLDER_NAME,
+    CAPTURE_IMAGE_SUFFIXES,
+    SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+    CaptureFrame,
+    build_mock_capture_frames,
+    load_capture_frames,
+)
 from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, find_bot_type_by_slug
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
-from ticket_guard_qa.macro_bots.bot_profiles import BotProfile
+from ticket_guard_qa.macro_bots.bot_profiles import BotProfile, BotProfileRegistry
 from ticket_guard_qa.macro_bots.bot_trial_run import TRIAL_SESSION_COUNT, TrialRunResult, run_trial_sessions
 from ticket_guard_qa.macro_bots.rule_hit_preview import predict_rule_hits
 from ticket_guard_qa.scoring.detection_breakdown import (
@@ -123,7 +132,8 @@ def render_bot_settings(
         "field_groups": group_field_specs(),
         "pending_groups": PENDING_BEHAVIOR_GROUPS,
         "presets": [(preset, behavior_to_dict(preset.behavior)) for preset in BEHAVIOR_PRESETS],
-        "rule_previews": predict_rule_hits(shown_behavior),
+        "rule_previews": predict_rule_hits(shown_behavior, request.app.state.settings.rule_set_version),
+        "rule_set_version": request.app.state.settings.rule_set_version,
         "trial_result": trial_result,
         "trial_session_count": TRIAL_SESSION_COUNT,
         "version_history": store.list_version_history(type_info.actor_type),
@@ -211,8 +221,31 @@ def show_bot_live(
         "entry_histogram": {actor_type.value: counts for actor_type, counts in entry_histogram.items() if any(counts)},
         "entry_bucket_ms": ENTRY_BUCKET_MS,
         "bot_versions": registry.version_number_by_actor_type(),
+        "capture_frames": read_capture_frames(request, summary, registry),
+        "is_mock_capture": run_config.target_kind is TargetKind.FAKE,
+        "capture_screen_size": (SCREEN_WIDTH, SCREEN_HEIGHT),
     })
 
+
+def read_capture_frames(request: Request, summary: RunSummary, registry: BotProfileRegistry) -> list[CaptureFrame]:
+    """Mock = 봇 C 행동 값으로 만든 프레임 · Live = 브라우저 봇이 저장한 프레임 · 봇 C 0%면 없음"""
+    run_config = summary.run_config
+    if not run_config.traffic_mix.bot_c_percent:
+        return []
+    if run_config.target_kind is TargetKind.FAKE:
+        return build_mock_capture_frames(registry.get_profile(ActorType.BOT_C).behavior, run_config.random_seed)
+    return load_capture_frames(request.app.state.settings.report_output_dir, summary.run_id)
+
+
+
+@router.get("/runs/{run_id}/captures/{file_name}")
+def show_capture_image(request: Request, run_id: str, file_name: str) -> FileResponse:
+    """Live 브라우저 봇 스크린샷 · Run 캡처 폴더 안 파일만"""
+    capture_dir = (request.app.state.settings.report_output_dir / CAPTURE_FOLDER_NAME / run_id).resolve()
+    image_path = (capture_dir / file_name).resolve()
+    if image_path.parent != capture_dir or image_path.suffix.lower() not in CAPTURE_IMAGE_SUFFIXES or not image_path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(image_path)
 
 def group_session_keys_by_actor_type(
     session_keys: list[SessionKey], answer_key: dict[SessionKey, ActorType]

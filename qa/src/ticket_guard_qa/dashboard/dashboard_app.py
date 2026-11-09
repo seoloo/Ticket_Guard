@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from ticket_guard_qa.answer_key.answer_key_repository import AnswerKeyRepository
 from ticket_guard_qa.dashboard.dependencies import TargetStatusChecker, require_admin
-from ticket_guard_qa.dashboard.routes import db_dashboard_routes, home_routes, macro_bot_routes, test_run_routes
+from ticket_guard_qa.dashboard.routes import db_dashboard_routes, home_routes, macro_bot_routes, test_case_routes, test_run_routes
 from ticket_guard_qa.dashboard.screen_format import register_screen_filters
 from ticket_guard_qa.macro_bots.bot_catalog import BOT_TYPE_CATALOG
 from ticket_guard_qa.qa_database.database import connect_qa_database
@@ -42,6 +42,6 @@ def create_dashboard_app(settings: Settings | None = None) -> FastAPI:
     app.state.templates = templates
 
     app.mount("/static", StaticFiles(directory=DASHBOARD_DIR / "static"), name="static")
-    for routes in (home_routes, test_run_routes, db_dashboard_routes, macro_bot_routes):
+    for routes in (home_routes, test_run_routes, test_case_routes, db_dashboard_routes, macro_bot_routes):
         app.include_router(routes.router, dependencies=[Depends(require_admin)])
     return app
