@@ -20,6 +20,11 @@ from ticket_guard_qa.system_targets.live_booking_client import (
     build_test_account_username,
     choose_user_agent,
 )
+from ticket_guard_qa.system_targets.live_browser_client import (
+    BrowserUnavailableError,
+    LiveBrowserBookingClient,
+    open_browser_page,
+)
 from ticket_guard_qa.system_targets.target_interfaces import (
     AccountPoolExhaustedError,
     AdmissionSample,
@@ -34,6 +39,7 @@ BURST_REQUEST_PATH = "/"  # T2 · 로그인 사용자 공연 목록 화면
 DOCKER_API_BASE_URL = "http://docker"  # 소켓 연결 · 호스트 이름 무시
 DOCKER_ACTION_TIMEOUT_SEC = 30.0
 DOCKER_ACTION_OK_STATUS_CODES = (204, 304)  # 304 = 이미 그 상태
+MAX_CONCURRENT_BROWSERS = 4  # 브라우저 1개 = 메모리 수백 MB · 나머지 브라우저 VU는 대기
 HEALTH_CHECK_TIMEOUT_SEC = 1.5  # 화면 헤더용 · 오래 기다리지 않음
 BOOKING_ID_PATH_PREFIX = "/complete/"  # 확정 200 응답 redirect · /complete/TG-…/
 
@@ -95,6 +101,9 @@ class LiveDjangoBookingApi:
         self.device_cookie_by_key: dict[str, str] = {}  # 봇 D · 같은 기기 예매 창 쿠키 공유 · 실행마다 새로
         self.device_lock_by_key: dict[str, asyncio.Lock] = {}
         self.device_loop: asyncio.AbstractEventLoop | None = None
+        self.browser_loop: asyncio.AbstractEventLoop | None = None
+        self.browser_slots: asyncio.Semaphore | None = None
+        self.browser_page_opener = open_browser_page  # 시험에서 가짜 페이지로 교체
         self.issued_account_count = 0  # 처음 쓰는 계정 번호
         self.free_account_numbers: list[int] = []  # 정리 끝난 계정 · 다시 사용 · 계정당 진행 중 예매 1건
 
@@ -168,10 +177,55 @@ class LiveDjangoBookingApi:
             if device_cookie:
                 self.device_cookie_by_key[session_plan.device_key] = device_cookie
 
+    def find_browser_slots(self) -> asyncio.Semaphore:
+        """동시에 띄우는 브라우저 수 제한 · 실행(이벤트 루프)마다 새로"""
+        running_loop = asyncio.get_running_loop()
+        if self.browser_loop is not running_loop:
+            self.browser_loop = running_loop
+            self.browser_slots = asyncio.Semaphore(MAX_CONCURRENT_BROWSERS)
+        return self.browser_slots
+
+    async def run_browser_session(
+        self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
+    ) -> VirtualUserSessionResult:
+        """브라우저 트래픽 유형 · 실제 화면으로 예매 · 실행 환경 없으면 세션 오류(browser)로 기록"""
+        account_number = self.acquire_account_number()
+        username = build_test_account_username(account_number)
+        attempt_id = ""
+        try:
+            async with self.find_browser_slots(), self.browser_page_opener(choose_user_agent(session_plan.behavior)) as page:
+                client = LiveBrowserBookingClient(page, self.base_url)
+                try:
+                    flow_result = await client.run_booking_flow(
+                        username, self.test_accounts.password, self.test_accounts.captcha_answer, session_plan, open_at_monotonic
+                    )
+                finally:
+                    attempt_id = client.booking_attempt_id
+        except BrowserUnavailableError as error:
+            return VirtualUserSessionResult(SessionKey(f"failed-{username}"), 0.0, is_error=True,
+                                            failed_step=f"browser · 실행 환경 없음 · {error}", device_key=session_plan.device_key)
+        except BookingFlowError as error:
+            return VirtualUserSessionResult(SessionKey(attempt_id or f"failed-{username}"), 0.0, is_error=True,
+                                            failed_step=f"browser {error.step} · {error.error_code or error.status_code}",
+                                            device_key=session_plan.device_key)
+        except Exception as error:  # noqa: BLE001 · 브라우저 오류 하나가 Run 전체를 멈추지 않게
+            return VirtualUserSessionResult(SessionKey(attempt_id or f"failed-{username}"), 0.0, is_error=True,
+                                            failed_step=f"browser · {type(error).__name__}", device_key=session_plan.device_key)
+        finally:
+            self.free_account_numbers.append(account_number)  # 취소는 화면에서 · 실패 시 60초 뒤 시스템 만료
+        return VirtualUserSessionResult(
+            SessionKey(flow_result.booking_attempt_id), sum(flow_result.step_latency_ms.values()), is_error=False,
+            step_latency_ms=flow_result.step_latency_ms, booking_outcome=flow_result.booking_outcome,
+            booked_seat_ids=flow_result.booked_seat_ids, device_key=session_plan.device_key,
+            capture_frames=tuple(flow_result.capture_frames),
+        )
+
     async def run_virtual_user_session(
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
     ) -> VirtualUserSessionResult:
-        """시험 계정 하나로 예매 확정까지 → 확정 못 했으면 예매 취소로 계정 반환"""
+        """시험 계정 하나로 예매 확정까지 → 확정 못 했으면 예매 취소로 계정 반환 · 브라우저 유형은 화면으로"""
+        if session_plan.uses_browser:
+            return await self.run_browser_session(session_plan, open_at_monotonic)
         account_number = self.acquire_account_number()
         username = build_test_account_username(account_number)
         client = LiveBookingClient(self.base_url, self.transport, choose_user_agent(session_plan.behavior))

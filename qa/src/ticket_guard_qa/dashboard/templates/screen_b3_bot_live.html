@@ -106,7 +106,7 @@
     </section>
 
     <section class="card panel">
-      <div class="row"><h2 class="section-heading">봇 C 화면 캡처</h2><span class="spacer"></span>{% if capture_frames and is_mock_capture %}<span class="pill is-skipped">Mock 캡처</span>{% endif %}{{ actor_chip('BOT_C' | bot_type_info) }}</div>
+      <div class="row"><h2 class="section-heading">브라우저 봇 화면 캡처</h2><span class="spacer"></span>{% if capture_frames and is_mock_capture %}<span class="pill is-skipped">Mock 캡처</span>{% endif %}{% if captured_browser_type %}{{ actor_chip(captured_browser_type) }}{% endif %}</div>
       {% if capture_frames %}
       {% set screen_width, screen_height = capture_screen_size %}
       <div class="capture-strip">
@@ -130,7 +130,7 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">{{ '봇 C 비율 0%' if not summary.run_config.traffic_mix.percent_of('BOT_C') else '캡처 없음 · 브라우저 자동화 실행 환경 미구성' }}</div></div>
+      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">{{ '브라우저 트래픽 유형 비율 0%' if not captured_browser_type else ('Run 진행 중 · 종료 후 표시' if summary.status.value == 'RUNNING' else '캡처 없음 · 브라우저 실행 환경 미구성(browser 묶음 · Chromium)') }}</div></div>
       {% endif %}
     </section>
   </aside>

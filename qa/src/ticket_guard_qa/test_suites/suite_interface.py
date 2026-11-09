@@ -19,6 +19,7 @@ class SuiteContext:
     case_data_dir: Path
     report_progress: Callable[..., None]  # (글, **ProgressMessage 필드) · 03 · B3 화면
     bot_profile_registry: BotProfileRegistry = field(default_factory=BotProfileRegistry)
+    report_output_dir: Path | None = None  # 브라우저 세션 캡처 저장 · None = 저장 안 함
 
 
 @dataclass(frozen=True)

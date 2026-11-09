@@ -37,7 +37,7 @@
   .choice input { position: absolute; opacity: 0; pointer-events: none; }
   .choice:has(input:checked) { border-color: var(--qa-blue); background: var(--qa-blue-soft); }
   .choice .choice-sub { display: block; font-size: 12px; font-weight: 600; color: var(--sub-text-color); margin-top: 2px; }
-  .chip-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip-choices { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; align-content: flex-start; }
   .chip-choice { position: relative; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 13px; font-size: 13px; font-weight: 600;
     border: 1px solid var(--line-color); background: #fff; cursor: pointer; white-space: nowrap; }
   .chip-choice input { position: absolute; opacity: 0; pointer-events: none; }
@@ -114,8 +114,8 @@
         <label class="field-input"><span class="input-box is-wide"><input type="text" name="purpose" maxlength="80" required value="{{ info.purpose }}" placeholder="예: 매진 뒤 취소 좌석을 짧은 주기로 계속 조회하는 매크로"></span></label></div>
       <div class="field-group"><div><div class="field-group-title">공격 수법 분류</div><div class="field-group-description">B1 분류 타일 · 목록 묶음 기준</div></div>
         <div class="chip-choices">{% for category in categories %}<label class="chip-choice"><input type="radio" name="category_id" value="{{ category.category_id }}" {{ 'checked' if category.category_id == info.category_id }}><i data-lucide="{{ category.icon_name }}"></i>{{ category.title }}</label>{% endfor %}</div></div>
-      <div class="field-group"><div><div class="field-group-title">트래픽</div><div class="field-group-description">추가 봇 실행 방식</div></div>
-        <div><span class="tag is-qa"><i data-lucide="network"></i>HTTP 트래픽</span></div></div>
+      <div class="field-group"><div><div class="field-group-title">트래픽</div><div class="field-group-description">HTTP = 예매 요청 직접 전송 · 브라우저 = 실제 화면 열고 버튼 클릭 · 단계별 화면 캡처</div></div>
+        <div class="chip-choices">{% for channel in traffic_channels %}<label class="chip-choice"><input type="radio" name="traffic_channel" value="{{ channel }}" {{ 'checked' if channel == info.traffic_channel }}><i data-lucide="{{ 'globe' if '브라우저' in channel else 'network' }}"></i>{{ channel }}</label>{% endfor %}</div></div>
       <div class="form-footer"><span class="spacer"></span><button class="button is-small" type="submit">다음 · 예매 중 행동</button></div>
     </form>
 

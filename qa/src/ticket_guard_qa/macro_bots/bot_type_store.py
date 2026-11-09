@@ -11,7 +11,9 @@ from ticket_guard_qa.macro_bots.behavior_fields import behavior_to_dict
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.macro_bots.bot_catalog import (
     BOT_CATEGORY_BY_ID,
+    BROWSER_TRAFFIC,
     BUILT_IN_BOT_TYPES,
+    HTTP_TRAFFIC,
     CUSTOM_BOT_COLORS,
     BotStatus,
     BotTypeInfo,
@@ -22,6 +24,7 @@ from ticket_guard_qa.qa_database.database import BOT_TYPES, as_utc
 
 CUSTOM_ACTOR_PREFIX = "BOT_"
 MAX_DETECTION_SIGNAL_COUNT = 3
+TRAFFIC_CHANNELS = (HTTP_TRAFFIC, BROWSER_TRAFFIC)
 RESERVED_SHORT_NAMES = {info.short_name for info in BUILT_IN_BOT_TYPES}
 
 
@@ -54,6 +57,7 @@ def bot_type_from_document(document: dict[str, Any]) -> BotTypeInfo:
         detection_target_id=document.get("detection_target_id"),
         status=BotStatus(document.get("status", BotStatus.DRAFT.value)),
         initial_behavior=SessionBehavior(**default_values),
+        traffic_channel=document.get("traffic_channel", HTTP_TRAFFIC),
     )
 
 
@@ -95,6 +99,7 @@ class BotTypeStore:
             "detection_target_id": base_info.detection_target_id or "bot_abd_detection",
             "status": BotStatus.DRAFT.value,
             "base_actor_type": base_info.actor_type.value,
+            "traffic_channel": base_info.traffic_channel,  # 시작 봇 그대로 · 2단계에서 변경
             "initial_behavior": behavior_to_dict(base_behavior),
             "created_at": created_at,
             "updated_at": created_at,
@@ -109,8 +114,8 @@ class BotTypeStore:
         return bot_type_from_document(self.find_document(actor_type))
 
     def update_identity(self, actor_type: ActorType | str, display_name: str, purpose: str, category_id: str,
-                        updated_at: datetime) -> BotTypeInfo:
-        """2단계 · 이름 · 한 줄 정의 · 수법 분류"""
+                        updated_at: datetime, traffic_channel: str = HTTP_TRAFFIC) -> BotTypeInfo:
+        """2단계 · 이름 · 한 줄 정의 · 수법 분류 · 트래픽(HTTP · 브라우저)"""
         display_name, purpose = display_name.strip(), purpose.strip()
         if not display_name or len(display_name) > 30:
             raise BotTypeInputError("봇 이름 · 1 ~ 30자")
@@ -119,8 +124,10 @@ class BotTypeStore:
         category = BOT_CATEGORY_BY_ID.get(category_id)
         if category is None or not category.is_selectable:
             raise BotTypeInputError("공격 수법 분류 · 선택 오류")
-        return self.update_fields(actor_type, {"display_name": display_name, "purpose": purpose, "category_id": category_id},
-                                  updated_at)
+        if traffic_channel not in TRAFFIC_CHANNELS:
+            raise BotTypeInputError("트래픽 · 선택 오류")
+        return self.update_fields(actor_type, {"display_name": display_name, "purpose": purpose, "category_id": category_id,
+                                               "traffic_channel": traffic_channel}, updated_at)
 
     def update_initial_behavior(self, actor_type: ActorType | str, behavior: SessionBehavior, updated_at: datetime) -> BotTypeInfo:
         """3단계 · 작성 중에만 · 검증 중부터는 B2 버전 저장"""

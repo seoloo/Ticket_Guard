@@ -8,7 +8,8 @@ from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
-    build_session_plans,
+    build_planned_user_session_plans,
+    save_browser_captures,
     reset_before_traffic,
     send_virtual_user_traffic,
 )
@@ -70,7 +71,6 @@ class BookingFlowSuite:
         run_config = context.run_config
         booking_api = context.system_target.booking_api
         planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
-        behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
         planned_count = len(planned_users)
 
         reset_message = reset_before_traffic(booking_api)
@@ -87,9 +87,10 @@ class BookingFlowSuite:
 
         try:
             session_results = send_virtual_user_traffic(
-                booking_api, build_session_plans(behaviors, run_config.random_seed),
+                booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed),
                 run_config.duration_sec, report_traffic_progress,
             )
+            save_browser_captures(context.report_output_dir, context.run_id, session_results)  # B3 브라우저 화면
         except AccountPoolExhaustedError as error:
             return SuiteResult(self.suite_name, SuiteOutcome.FAILED, message=f"FAIL: {error}")
 

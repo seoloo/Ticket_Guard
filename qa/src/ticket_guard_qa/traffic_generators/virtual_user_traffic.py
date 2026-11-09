@@ -3,9 +3,19 @@ import asyncio
 import random
 import time
 from collections.abc import Callable
+from pathlib import Path
 from dataclasses import dataclass, replace
 
-from ticket_guard_qa.domain.models import SessionBehavior, SessionKey, VirtualUserSessionPlan, VirtualUserSessionResult
+from ticket_guard_qa.domain.models import (
+    PlannedUser,
+    SessionBehavior,
+    SessionKey,
+    VirtualUserSessionPlan,
+    VirtualUserSessionResult,
+)
+from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, get_bot_type_info
+from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
+from ticket_guard_qa.macro_bots.browser_capture import save_browser_capture_frames
 from ticket_guard_qa.macro_bots.behavior_sampling import pick_click_interval_ms, pick_entry_delay_ms, pick_page_dwell_ms
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, BookingApi
 
@@ -19,11 +29,14 @@ DEVICE_KEY_PREFIX = "device-"
 ProgressCallback = Callable[[list[VirtualUserSessionResult | None]], None]  # 계획 순서 · 아직 안 끝난 VU = None
 
 
-def build_session_plans(behaviors: list[SessionBehavior], random_seed: int) -> list[VirtualUserSessionPlan]:
-    """행동 값 → 실제 대기 시간 · 고를 좌석 순서 · 같은 시드 = 같은 계획"""
+def build_session_plans(
+    behaviors: list[SessionBehavior], random_seed: int, browser_flags: list[bool] | None = None
+) -> list[VirtualUserSessionPlan]:
+    """행동 값 → 실제 대기 시간 · 고를 좌석 순서 · 같은 시드 = 같은 계획 · browser_flags = 브라우저 트래픽 유형"""
     random_source = random.Random(f"traffic-{random_seed}")  # 정답표 시드와 분리
+    flags = browser_flags or [False] * len(behaviors)
     plans = []
-    for behavior in behaviors:
+    for behavior, uses_browser in zip(behaviors, flags):
         preferred_seat_ids = list(ALL_SEAT_IDS)
         random_source.shuffle(preferred_seat_ids)
         plans.append(VirtualUserSessionPlan(
@@ -32,8 +45,27 @@ def build_session_plans(behaviors: list[SessionBehavior], random_seed: int) -> l
             click_intervals_ms=tuple(pick_click_interval_ms(behavior, random_source) for _ in range(CLICK_INTERVAL_COUNT)),
             preferred_seat_ids=tuple(preferred_seat_ids),
             page_dwell_ms=tuple(pick_page_dwell_ms(behavior, random_source) for _ in range(behavior.browse_page_count)),
+            uses_browser=uses_browser,
         ))
     return assign_devices(plans)
+
+
+def build_planned_user_session_plans(
+    planned_users: list[PlannedUser], registry: BotProfileRegistry, random_seed: int
+) -> list[VirtualUserSessionPlan]:
+    """정답표 계획 순서 그대로 · 행동 값 = 실행 당시 봇 버전 · 브라우저 트래픽 유형은 화면으로 실행"""
+    behaviors = [registry.get_profile(user.actor_type).behavior for user in planned_users]
+    browser_flags = [get_bot_type_info(user.actor_type).traffic_channel == BROWSER_TRAFFIC for user in planned_users]
+    return build_session_plans(behaviors, random_seed, browser_flags)
+
+
+def save_browser_captures(report_output_dir: Path | None, run_id: str, results: list[VirtualUserSessionResult]) -> int:
+    """B3 화면 캡처 · 브라우저 세션 중 첫 번째 · 저장한 프레임 수"""
+    first_captured = next((result for result in results if result.capture_frames), None)
+    if report_output_dir is None or first_captured is None:
+        return 0
+    save_browser_capture_frames(report_output_dir, run_id, list(first_captured.capture_frames))
+    return len(first_captured.capture_frames)
 
 
 @dataclass

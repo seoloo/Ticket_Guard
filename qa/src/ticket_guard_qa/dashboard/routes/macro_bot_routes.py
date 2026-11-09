@@ -39,7 +39,7 @@ from ticket_guard_qa.macro_bots.browser_capture import (
     load_capture_frames,
 )
 from ticket_guard_qa.dashboard.bot_list_view import BotListItem, build_bot_list_view
-from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, find_bot_type_by_slug
+from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, BotTypeInfo, find_bot_type_by_slug, list_bot_types
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfile, BotProfileRegistry
 from ticket_guard_qa.macro_bots.bot_trial_run import TRIAL_SESSION_COUNT, TrialRunResult, run_trial_sessions
@@ -217,18 +217,26 @@ def show_bot_live(
         "entry_bucket_ms": ENTRY_BUCKET_MS,
         "bot_versions": registry.version_number_by_actor_type(),
         "capture_frames": read_capture_frames(request, summary, registry),
+        "captured_browser_type": find_captured_browser_type(summary),
         "is_mock_capture": run_config.target_kind is TargetKind.FAKE,
         "capture_screen_size": (SCREEN_WIDTH, SCREEN_HEIGHT),
     })
 
 
+def find_captured_browser_type(summary: RunSummary) -> BotTypeInfo | None:
+    """캡처 대상 · 이번 Run 트래픽에 들어간 브라우저 트래픽 유형 중 첫 번째"""
+    traffic_mix = summary.run_config.traffic_mix
+    return next((info for info in list_bot_types()
+                 if info.traffic_channel == BROWSER_TRAFFIC and traffic_mix.percent_of(info.actor_type)), None)
+
+
 def read_capture_frames(request: Request, summary: RunSummary, registry: BotProfileRegistry) -> list[CaptureFrame]:
-    """Mock = 봇 C 행동 값으로 만든 프레임 · Live = 브라우저 봇이 저장한 프레임 · 봇 C 0%면 없음"""
-    run_config = summary.run_config
-    if not run_config.traffic_mix.percent_of(ActorType.BOT_C):
+    """Mock = 브라우저 유형 행동 값으로 만든 프레임 · Live = 브라우저 세션이 저장한 화면 · 브라우저 유형 0%면 없음"""
+    captured_type = find_captured_browser_type(summary)
+    if captured_type is None:
         return []
-    if run_config.target_kind is TargetKind.FAKE:
-        return build_mock_capture_frames(registry.get_profile(ActorType.BOT_C).behavior, run_config.random_seed)
+    if summary.run_config.target_kind is TargetKind.FAKE:
+        return build_mock_capture_frames(registry.get_profile(captured_type.actor_type).behavior, summary.run_config.random_seed)
     return load_capture_frames(request.app.state.settings.report_output_dir, summary.run_id)
 
 

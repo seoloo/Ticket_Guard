@@ -11,10 +11,17 @@ from ticket_guard_qa.domain.detection_targets import BOT_SELECTABLE_TARGET_IDS, 
 from ticket_guard_qa.domain.models import SessionBehavior
 from ticket_guard_qa.macro_bots.behavior_description import describe_behavior
 from ticket_guard_qa.macro_bots.behavior_fields import BehaviorInputError, behavior_to_dict, group_field_specs, parse_behavior_form
-from ticket_guard_qa.macro_bots.bot_catalog import BOT_CATEGORIES, BotStatus, BotTypeInfo, find_bot_type_by_slug, list_bot_types
+from ticket_guard_qa.macro_bots.bot_catalog import (
+    BOT_CATEGORIES,
+    HTTP_TRAFFIC,
+    BotStatus,
+    BotTypeInfo,
+    find_bot_type_by_slug,
+    list_bot_types,
+)
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
 from ticket_guard_qa.macro_bots.bot_trial_run import TRIAL_SESSION_COUNT, TrialRunResult, run_trial_sessions
-from ticket_guard_qa.macro_bots.bot_type_store import MAX_DETECTION_SIGNAL_COUNT, BotTypeInputError
+from ticket_guard_qa.macro_bots.bot_type_store import MAX_DETECTION_SIGNAL_COUNT, TRAFFIC_CHANNELS, BotTypeInputError
 from ticket_guard_qa.macro_bots.rule_hit_preview import predict_rule_hits
 from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
 from ticket_guard_qa.test_runs.run_service import RunService
@@ -79,6 +86,7 @@ def render_setup(
         "step_values": summarize_step_values(info, base_name) if info else {},
         "base_candidates": list_base_candidates(),
         "categories": [category for category in BOT_CATEGORIES if category.is_selectable],
+        "traffic_channels": TRAFFIC_CHANNELS,
         "field_groups": group_field_specs(),
         "behavior_values": behavior_to_dict(shown_behavior) if shown_behavior else {},
         "behavior_lines": describe_behavior(shown_behavior) if shown_behavior else [],
@@ -135,7 +143,7 @@ async def save_setup_step(
     try:
         if step == 2:
             type_store.update_identity(info.actor_type, str(form.get("display_name", "")), str(form.get("purpose", "")),
-                                       str(form.get("category_id", "")), now)
+                                       str(form.get("category_id", "")), now, str(form.get("traffic_channel", HTTP_TRAFFIC)))
         elif step == 3:
             behavior = parse_behavior_form(form)
             if form.get("action") == "preview":  # 문장 미리보기만 · 저장 안 함

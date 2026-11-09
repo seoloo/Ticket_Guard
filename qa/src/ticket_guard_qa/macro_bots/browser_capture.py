@@ -4,7 +4,7 @@ import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ticket_guard_qa.domain.models import SessionBehavior
+from ticket_guard_qa.domain.models import BrowserCaptureFrame, SessionBehavior
 
 CAPTURE_STEPS: tuple[str, ...] = ("공연 상세", "대기열", "보안문자", "좌석 선택", "예매 확정")
 CAPTURE_FOLDER_NAME = "captures"  # 보고서 폴더 아래 · Run별 frames.json + 이미지
@@ -45,6 +45,22 @@ def save_capture_frames(report_output_dir: Path, run_id: str, frames: list[Captu
     index_path = capture_dir / CAPTURE_INDEX_FILE_NAME
     index_path.write_text(json.dumps([asdict(frame) for frame in frames], ensure_ascii=False), encoding="utf-8")
     return index_path
+
+
+def save_browser_capture_frames(report_output_dir: Path, run_id: str, frames: list[BrowserCaptureFrame]) -> Path:
+    """Live 브라우저 세션 화면 → 이미지 파일 + frames.json · 클릭 위치는 B3 축소 화면 좌표로"""
+    capture_dir = report_output_dir / CAPTURE_FOLDER_NAME / run_id
+    capture_dir.mkdir(parents=True, exist_ok=True)
+    saved_frames = []
+    for index, frame in enumerate(frames, start=1):
+        image_file_name = None
+        if frame.image_png:
+            image_file_name = f"frame-{index:02d}.png"
+            (capture_dir / image_file_name).write_bytes(frame.image_png)
+        click_x = round(frame.click_ratio_x * SCREEN_WIDTH) if frame.click_ratio_x is not None else None
+        click_y = round(frame.click_ratio_y * SCREEN_HEIGHT) if frame.click_ratio_y is not None else None
+        saved_frames.append(CaptureFrame(frame.step, frame.elapsed_ms, click_x, click_y, image_file_name))
+    return save_capture_frames(report_output_dir, run_id, saved_frames)
 
 
 def load_capture_frames(report_output_dir: Path, run_id: str) -> list[CaptureFrame]:

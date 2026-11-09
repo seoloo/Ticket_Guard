@@ -47,7 +47,7 @@ qa/
 │  ├─ qa_database/        database (MongoDB 연결 · 컬렉션 이름) · archive_export
 │  ├─ reports/            json_report · html_report
 │  └─ dashboard/          dashboard_app · dependencies · screen_format · routes/ · templates/(layout · screen_parts · screen_*) · static/css/(theme_tokens · screen_layout)
-├─ traffic_generators/    virtual_user_traffic (VU 동시 실행) · locust_traffic · bot_c_browser
+├─ traffic_generators/    virtual_user_traffic (VU 동시 실행 · 브라우저 유형 구분 · 캡처 저장) · locust_traffic
 ├─ case_data/             exception_codes/ · event_contracts/
 └─ tests/                 unit_tests/ · boundary_tests/
 
@@ -159,6 +159,7 @@ qa/
 | QA 자기 검사 | `test_suites/self_check.py` | 동작 | | |
 | 이벤트 계약 시험 | `test_suites/event_contract.py` · `live_django_system.py` · `live_kafka_injector.py` | 동작 (브라우저 이벤트 Mock + Live 2026-11-05 PASS · 예매 확정 오래된 순번 거부(E20) Mock + Live 연결 · 토픽 주입 → 정제 · 격리 저장 대조 Mock) | 토픽 주입 Live: 시험 환경 주입 허용(`IS_KAFKA_CONTRACT_INJECTION_ENABLED`) · 시스템 MongoDB 읽기 계정 · 격리 사유 필드 확정 | Live Run |
 | Live 예매 흐름 (1-b ~ 1-d) | `system_targets/live_booking_client.py` · `live_django_system.py` · `traffic_generators/virtual_user_traffic.py` · `test_suites/booking_flow.py` | 동작 (Run 설정 "예매 흐름 테스트" · VU 동시 실행 · 오픈 전 로그인 → 오픈 전 공연 목록 · 상세 조회(행동 값 ③ · 화면마다 체류 시간 · 브라우저 흔적이면 page_enter · page_exit + 브라우저 User-Agent) → 오픈 + 예매 시작 지연(기기 1대당 예매 창 2개 이상 = 같은 기기 VU끼리 같은 순간 · 첫 창이 받은 기기 쿠키 `tg_capture`를 나머지 창이 공유 · `traffic_generators/virtual_user_traffic.assign_devices` · 결과에 `device_key`) → 대기열 → 보안문자 → 좌석 클릭(봇 프로필 간격 · seat_select 이벤트) → 확정 · 먼저 팔린 좌석은 다른 좌석으로 행동 값 ⑤ 횟수 · 대기만큼 재시도 · 확정 못 한 계정은 예매 취소로 반환 · 시험 시간 넘으면 TIMEOUT · 예매 완료 · 매진 · 중복 판매 · 단계별 p95) · 시스템 테스트 훅 필요 (Issue #6) | 초기화: QA 대시보드에 시스템 관리자 계정 미전달(compose.gateway.yml) → 건너뜀 · 브라우저 telemetry(/api/capture/) 미재현 · 기기 쿠키는 시스템 `DJANGO_DEBUG=1`(http)에서만 공유(운영 설정은 Secure 쿠키) · 접속 IP는 모든 VU가 같은 컨테이너 주소 · Run 중지는 Suite 사이에서만 | 관리자 계정 전달 (develop PR) · 부하 테스트 Locust |
+| Live 브라우저 예매 흐름 (봇 C 등) | `system_targets/live_browser_client.py` · `live_django_system.run_browser_session` · `traffic_generators/virtual_user_traffic.build_planned_user_session_plans` · `macro_bots/browser_capture.save_browser_capture_frames` | 코드 · 시험 동작 (브라우저 트래픽 유형 VU = 실제 화면 · 로그인 → 오픈 전 공연 상세 → 예매하기 클릭 → 대기열 → 보안문자 입력 → 좌석 클릭(행동 값 간격) → 확정 · 먼저 팔린 좌석은 다른 좌석 재시도 · 단계별 PNG 캡처 → B3 · 클릭은 마우스 이동 궤적 없이 · 동시 브라우저 4개 · 화면 요소는 파일 위 상수 한 곳) | Live 미실행: browser 묶음(Playwright) · Chromium 미설치 → 세션 오류 `browser · 실행 환경 없음`으로 기록 · qa-dashboard 이미지에 Chromium 추가 필요 | Dockerfile에 `pip install .[browser]` · `playwright install --with-deps chromium` (이미지 크기 증가 · 팀 승인 후) |
 | 이벤트 전달 검증 (2단계) | `system_targets/live_kafka_reader.py` · `test_suites/event_delivery.py` · Mock `FakeEventStreamReader` | 동작 (Run 설정 "이벤트 전달 검증" · Run 직전 토픽 끝 위치 기록 → VU 트래픽 → QA 전용 소비자 그룹으로 읽기(commit 없음) → 좌석 클릭 · 서버 이벤트 완전성 · 중복 · 형식 · 파티션 키 · 전달 지연 p95 · 관측 이벤트 수) · `docs/contracts.md` 4-1 | 전달 지연 기준선 미정 | |
 | 원본 적재 검증 (2-b) | `system_targets/live_raw_mongo_reader.py` · `test_suites/raw_ingest.py` · `domain/raw_event_routing.py` · Mock `FakeRawEventReader` | Mock 동작 (Run 설정 "원본 적재 검증" · 이벤트 전달 검증과 같은 트래픽 · 토픽 읽기 → QA 메시지 위치(파티션 · 오프셋)로 원본 DB 9개 컬렉션 조회 · 최대 30초 적재 대기 → 적재 누락 · 중복 적재 · 오분류 · 미분류 · 원문 변형 · 적재 지연 p95) · `docs/contracts.md` 4-2 | Live 미실행: 원본 DB 읽기 전용 계정 · qa-dashboard ↔ `raw-backend` 네트워크 없음 · 적재 지연 기준선 미정 | Live 연결 (db팀 계정 · 네트워크) |
 | QA 데이터 넘기기 | `qa_database/archive_export.py` · `command_line.py` (`export-archive`) · `archive_exports` 테이블 | 동작 (요청 · QA 담당 승인 시 · 끝난 Run만 · 기본 결과 숫자 + 적발 목록 · 정답표 · 봇 설정은 `--collection` 직접 지정 · 컬렉션별 JSON + manifest → 받는 쪽 `ticketguard_qa_archive` · 시스템 DB에는 쓰지 않음 · 필드 추가 = `*_FIELDS` 한 줄 · 정답표 · 봇 설정을 넘긴 봇 버전으로 Run 시작 시 03 경고) | 대시보드 버튼 없음(의도) · 받는 쪽 가져오기는 수동(`mongoimport`) | |
@@ -168,7 +169,7 @@ qa/
 | 보고서 | `reports/` | 동작 | | |
 | 화면 01 ~ 04 | `dashboard/` | 동작 (시안 기준 · 가짜 대상 숫자) | 실제 대상 실시간 수치 없음 | 결과 알림 보내기 |
 | 화면 05 | `dashboard/` | 껍데기 | 시스템 DB 없음 | |
-| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 모의 판정 · 실시간 진행) · 문구는 ui.md 3장 문구 규칙 | 규칙별 결과 · 좌석 선택 · 확정 단계 · 봇 C 캡처 없음 | 판정 규칙 · 트래픽 생성기 연결 |
+| 화면 B1 ~ B4 · 매크로 봇 | `dashboard/` · `macro_bots/` | 동작 (가짜 대상 · 탐지율 · 버전 저장 · 모의 판정 · 실시간 진행) · 문구는 ui.md 3장 문구 규칙 | 규칙별 결과 · 좌석 선택 · 확정 단계 | 판정 규칙 · 트래픽 생성기 연결 |
 | 관리자 확인 (A안) | `dashboard/dependencies.py` | 동작 (팀 입구가 붙인 `X-Admin-User`만) | | |
 | 판정 정확도 | `test_suites/verdict_accuracy.py` | 가짜만 동작 (행동 값으로 가짜 판정 · 정답표 저장 · 탐지율 · 오탐률) | 실제 대상: 시스템 판정 없음 · 저장 위치 미정 | |
 | Gold 반영 시간 | `test_suites/pipeline_latency.py` · `live_mongo_reader.py` | 가짜만 동작 | Kafka · Spark · MongoDB 없음 | 시험 이벤트 먼저 보내기 |

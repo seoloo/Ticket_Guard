@@ -163,6 +163,7 @@ class RunService:
                 case_data_dir=self.settings.case_data_dir,
                 report_progress=lambda text, **fields: self.progress_stream.publish(run_id, text, **fields),
                 bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
+                report_output_dir=self.settings.report_output_dir,
             )
             published_in_use = find_published_versions_in_use(
                 find_published_bot_versions(self.qa_database), run_config.bot_version_numbers
