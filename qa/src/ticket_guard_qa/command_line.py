@@ -60,7 +60,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
     copy_command.add_argument("--source", dest="source_url", required=True, help="예: sqlite:////qa/qa_data/qa.db")
 
     commands.add_parser("dashboard", help="QA 대시보드 띄우기 · 팀 compose 컨테이너 안에서만")
-    commands.add_parser("admin-dashboard", help="관리자 운영 대시보드 띄우기 · 팀 compose 컨테이너 안에서만")
     return parser
 
 
@@ -137,14 +136,6 @@ def start_dashboard() -> int:
     return 0
 
 
-def start_admin_dashboard() -> int:
-    import uvicorn
-    from ticket_guard_qa.admin_dashboard.admin_dashboard_app import create_admin_dashboard_app
-
-    uvicorn.run(create_admin_dashboard_app(load_settings()), host=CONTAINER_HOST, port=CONTAINER_PORT)
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     arguments = build_argument_parser().parse_args(argv)
     if arguments.command == "run":
@@ -155,8 +146,6 @@ def main(argv: list[str] | None = None) -> int:
         return export_archive_files(arguments)
     if arguments.command == "copy-database":
         return copy_database(arguments)
-    if arguments.command == "admin-dashboard":
-        return start_admin_dashboard()
     return start_dashboard()
 
 

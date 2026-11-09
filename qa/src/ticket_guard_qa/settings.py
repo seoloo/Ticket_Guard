@@ -34,7 +34,6 @@ class Settings(BaseSettings):
     case_data_dir: Path = QA_ROOT_DIR / "case_data"
 
     dashboard_base_path: str = "/qa"  # 팀 입구 127.0.0.1:8000/qa/ · AGENTS.md 4장
-    admin_dashboard_base_path: str = "/admin-dashboard"
 
     random_seed: int = 20261103  # 같은 시드 = 같은 정답표
     fake_run_duration_sec: int = 10  # 가짜 대상 실행 흉내 시간 · 실제 QA 소요 시간에 맞춰 조정
