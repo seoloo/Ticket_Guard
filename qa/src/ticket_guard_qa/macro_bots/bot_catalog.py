@@ -140,8 +140,8 @@ BUILT_IN_BOT_TYPES: tuple[BotTypeInfo, ...] = (
         "browser_automation", "bot_c_detection",
     ),
     BotTypeInfo(
-        ActorType.BOT_D, "봇 D · 세션 복제 매크로", "D", "기기 1대에서 예매 창 여러 개를 동시에 열어 대기열에 한꺼번에 들어가는 매크로",
-        HTTP_TRAFFIC, "bot-d", BotRole.DETECTION_TARGET, "copy",
+        ActorType.BOT_D, "봇 D · 세션 복제 매크로", "D", "기기 1대의 브라우저 하나에서 계정별 예매 창 여러 개를 동시에 열어 대기열에 한꺼번에 들어가는 매크로",
+        BROWSER_TRAFFIC, "bot-d", BotRole.DETECTION_TARGET, "copy",
         ("같은 기기에서 예매 창 여러 개 동시 접속", "여러 계정이 같은 시각에 대기열 진입", "기기 · 브라우저 정보가 모두 같음"),
         "session_device", "bot_abd_detection",
     ),

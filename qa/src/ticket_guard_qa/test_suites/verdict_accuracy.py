@@ -70,7 +70,7 @@ def send_planned_user_traffic(
         booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, context.run_config.random_seed),
         context.run_config.duration_sec, report_traffic_progress,
     )
-    save_browser_captures(context.report_output_dir, context.run_id, session_results)  # B3 브라우저 화면
+    save_browser_captures(context.report_output_dir, context.run_id, planned_users, session_results)  # B3 브라우저 화면
     session_key_by_label = {
         user.virtual_user_label: result.session_key for user, result in zip(planned_users, session_results)
     }

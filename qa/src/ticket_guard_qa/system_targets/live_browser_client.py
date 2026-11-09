@@ -1,16 +1,19 @@
-"""Live 브라우저 예매 흐름 · 브라우저 트래픽 유형(봇 C 등) · 실제 예매 화면 열기 · 버튼 클릭 · 단계별 캡처
+"""Live 브라우저 예매 흐름 · 브라우저 트래픽 유형(봇 C · 봇 D 등) · 실제 예매 화면 열기 · 버튼 클릭 · 단계별 캡처
+브라우저 1개 = 기기 1대 · 창(로그인 분리) 여러 개 · 봇 D = 같은 브라우저 창들이 기기 쿠키 공유
 browser 묶음(Playwright) + Chromium 필요 · 없으면 BrowserUnavailableError → 세션 오류로 기록 (Live만 · Mock은 영향 없음)"""
 import asyncio
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 from ticket_guard_qa.domain.enums import BookingOutcome
 from ticket_guard_qa.domain.models import BrowserCaptureFrame, VirtualUserSessionPlan
 from ticket_guard_qa.system_targets.live_booking_client import (
     DEFAULT_SHOW_ID,
+    DEVICE_COOKIE_NAME,
     SEATS_PER_BOOKING,
     SHOW_DETAIL_PAGE,
     SHOW_LIST_PAGE,
@@ -42,6 +45,7 @@ COMPLETE_PATH = "/complete/"
 READ_ATTEMPT_ID = "document.body.dataset.attempt || ''"
 READ_SOLD_SEATS = "[...document.querySelectorAll('[data-seat].sold, [data-seat]:disabled')].map((seat) => seat.dataset.seat)"
 IS_SELECTION_ERROR_SHOWN = "(() => { const box = document.querySelector('#selection-error'); return !!box && !box.hidden; })()"
+PAGE_TRACE_PATHS = ("/api/events/", "/api/capture/")  # 화면 이벤트 · 브라우저 정보 전송 · 흔적 없음 봇은 차단
 
 # B3 캡처 단계 · macro_bots/browser_capture.CAPTURE_STEPS와 같은 이름
 STEP_DETAIL, STEP_QUEUE, STEP_CAPTCHA, STEP_SEAT, STEP_CONFIRM = "공연 상세", "대기열", "보안문자", "좌석 선택", "예매 확정"
@@ -69,6 +73,16 @@ class BrowserPage(Protocol):
     async def evaluate(self, expression: str) -> Any: ...
 
     async def screenshot(self) -> bytes: ...
+
+    async def read_cookie(self, name: str) -> str | None: ...
+
+    async def add_cookie(self, name: str, value: str, url: str) -> None: ...
+
+
+class BrowserInstance(Protocol):
+    """실행 중인 브라우저 1개 · 창마다 로그인 · 쿠키 분리"""
+
+    def open_window(self, blocks_page_trace: bool) -> AbstractAsyncContextManager[BrowserPage]: ...
 
 
 class PlaywrightBrowserPage:
@@ -106,13 +120,43 @@ class PlaywrightBrowserPage:
     async def screenshot(self) -> bytes:
         return await self.page.screenshot(type="png")
 
+    async def read_cookie(self, name: str) -> str | None:
+        """httponly 쿠키 포함 · 기기 쿠키는 화면 스크립트로 못 읽음"""
+        return next((cookie["value"] for cookie in await self.page.context.cookies() if cookie["name"] == name), None)
+
+    async def add_cookie(self, name: str, value: str, url: str) -> None:
+        await self.page.context.add_cookies([{"name": name, "value": value, "url": url}])
+
+
+def is_page_trace_url(url: str) -> bool:
+    return urlparse(url).path.startswith(PAGE_TRACE_PATHS)
+
+
+class PlaywrightBrowser:
+    """Chromium 1개 · 창 = 쿠키 분리 창(시크릿 창과 같음) · 탭은 로그인 쿠키를 같이 써서 계정 여러 개 불가 · 브라우저 정보는 창끼리 같음"""
+
+    def __init__(self, browser: Any, user_agent: str | None) -> None:
+        self.browser = browser
+        self.user_agent = user_agent
+
+    @asynccontextmanager
+    async def open_window(self, blocks_page_trace: bool) -> AsyncIterator[BrowserPage]:
+        context = await self.browser.new_context(viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+                                                 user_agent=self.user_agent)
+        try:
+            if blocks_page_trace:  # 흔적 없는 매크로 · 화면 스크립트의 이벤트 전송 차단
+                await context.route(is_page_trace_url, lambda route: route.abort())
+            yield PlaywrightBrowserPage(await context.new_page())
+        finally:
+            await context.close()
+
 
 CHROMIUM_LAUNCH_ARGS = ["--disable-dev-shm-usage"]  # 컨테이너 공유 메모리(/dev/shm) 작음 · 탭 비정상 종료 방지
 
 
 @asynccontextmanager
-async def open_browser_page(user_agent: str | None = None, executable_path: str = "") -> AsyncIterator[BrowserPage]:
-    """화면 없는 Chromium 탭 하나 · 세션 끝나면 브라우저 닫음 · executable_path = 설치된 Chromium(비면 Playwright 기본)"""
+async def open_browser(user_agent: str | None = None, executable_path: str = "") -> AsyncIterator[BrowserInstance]:
+    """화면 없는 Chromium 1개 · 다 쓰면 닫음 · executable_path = 설치된 Chromium(비면 Playwright 기본)"""
     try:
         from playwright.async_api import async_playwright
     except ImportError:
@@ -124,9 +168,7 @@ async def open_browser_page(user_agent: str | None = None, executable_path: str 
         except Exception as error:  # noqa: BLE001 · Chromium 미설치 · 실행 권한
             raise BrowserUnavailableError(f"Chromium 실행 불가 · {type(error).__name__} · {BROWSER_SETUP_HINT}") from None
         try:
-            context = await browser.new_context(viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
-                                                user_agent=user_agent)
-            yield PlaywrightBrowserPage(await context.new_page())
+            yield PlaywrightBrowser(browser, user_agent)
         finally:
             await browser.close()
 
@@ -163,6 +205,14 @@ class LiveBrowserBookingClient:
         elapsed_ms = (time.monotonic() - self.open_at_monotonic) * 1000
         ratio = (point[0] / VIEWPORT_WIDTH, point[1] / VIEWPORT_HEIGHT) if point else (None, None)
         self.capture_frames.append(BrowserCaptureFrame(step, round(elapsed_ms, 1), *ratio, screenshot))
+
+    async def join_device(self, device_cookie: str | None) -> str | None:
+        """같은 기기 창 · 먼저 연 창의 기기 쿠키를 그대로 사용 · 첫 창이면 새로 받은 쿠키 반환"""
+        if device_cookie:
+            await self.page.add_cookie(DEVICE_COOKIE_NAME, device_cookie, self.base_url)
+            return device_cookie
+        await self.page.goto(f"{self.base_url}/login/")
+        return await self.page.read_cookie(DEVICE_COOKIE_NAME)
 
     async def login(self, username: str, password: str) -> None:
         await self.page.goto(f"{self.base_url}/login/")
