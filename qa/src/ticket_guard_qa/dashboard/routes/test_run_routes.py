@@ -186,7 +186,8 @@ async def delete_test_run(request: Request, run_id: str, run_service: RunService
         run_service.delete_run(run_id)
     except RunDeleteError as error:
         return _render_result_list(request, run_service, status, error_message=str(error), status_code=409)
-    return redirect_to_page(request, f"/runs?{urlencode({'status': status, 'deleted': run_id})}")
+    query = {'status': status, 'deleted': run_id} if status else {'deleted': run_id}  # 거르기 유지
+    return redirect_to_page(request, f"/runs?{urlencode(query)}")
 
 
 def _render_result_list(
@@ -196,10 +197,13 @@ def _render_result_list(
     summaries = [summary for run_id in repository.list_recent_run_ids(RESULT_LIST_LIMIT)
                  if (summary := repository.get_summary(run_id)) is not None]
     selected_status = status if status in RUN_STATUS_FILTERS else ""
+    shown_summaries = [summary for summary in summaries if not selected_status or summary.status.value == selected_status]
     return render_screen(request, "screen_04_result_list.html", {
         "active_tab": "qa",
         "active_subtab": "results",
-        "summaries": [summary for summary in summaries if not selected_status or summary.status.value == selected_status],
+        "summaries": shown_summaries,
+        "delete_items_by_run_id": {summary.run_id: run_service.list_delete_items(summary)
+                                   for summary in shown_summaries if summary.status is not RunStatus.RUNNING},
         "status_counts": {value: sum(summary.status.value == value for summary in summaries) for value in RUN_STATUS_FILTERS},
         "total_count": len(summaries),
         "selected_status": selected_status,

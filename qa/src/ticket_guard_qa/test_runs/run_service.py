@@ -109,6 +109,20 @@ class RunService:
         threading.Thread(target=self._execute, args=(run_id, run_config, started_at), daemon=True).start()
         return run_id
 
+    def list_delete_items(self, summary: RunSummary) -> list[str]:
+        """삭제 확인 창 · 이 Run과 함께 지워지는 것 · 실제로 있는 것만"""
+        report_output_dir = self.settings.report_output_dir
+        items = ["Run 기록 · Suite 결과 · 합격 기준 결과"]
+        session_count = len(self.answer_key_repository.load(summary.run_id))
+        if session_count:
+            items.append(f"정답표 · 세션 {session_count:,}개")
+        report_titles = [suffix.upper() for suffix in REPORT_SUFFIXES if (report_output_dir / f"{summary.run_id}.{suffix}").exists()]
+        if report_titles:
+            items.append(f"리포트 파일 · {' · '.join(report_titles)}")
+        if (report_output_dir / CAPTURE_FOLDER_NAME / summary.run_id).exists():
+            items.append("봇 C 화면 캡처")
+        return items
+
     def delete_run(self, run_id: str) -> None:
         """Run 기록 · 정답표 · 보고서 · 캡처 삭제 · 진행 중 Run 거절 · 내보내기 기록(archive_exports)은 감사용 유지"""
         if run_id == self._active_run_id:

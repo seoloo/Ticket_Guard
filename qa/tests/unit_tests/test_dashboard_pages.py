@@ -191,6 +191,11 @@ def test_delete_run_removes_record_answer_key_and_reports(dashboard_client):
     summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("self_check", "verdict_accuracy"), virtual_user_count=20))
     report_dir = run_service.settings.report_output_dir
     assert (report_dir / f"{summary.run_id}.html").exists() and run_service.answer_key_repository.load(summary.run_id)
+    list_page = dashboard_client.get("/runs").text
+    assert 'id="delete-dialog"' in list_page and "함께 삭제되는 항목" in list_page and "삭제 후 복구 불가" in list_page
+    assert run_service.list_delete_items(summary) == [
+        "Run 기록 · Suite 결과 · 합격 기준 결과", "정답표 · 세션 20개", "리포트 파일 · HTML · JSON",
+    ]
 
     response = dashboard_client.post(f"/runs/{summary.run_id}/delete", data={"status": "PASSED"}, follow_redirects=False)
     assert response.status_code == 303

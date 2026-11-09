@@ -18,6 +18,22 @@
   .run-table .actions { display: flex; gap: 6px; justify-content: flex-end; }
   .pill { white-space: nowrap; }
   .delete-form { display: inline-flex; margin: 0; }
+  .delete-dialog { width: 440px; max-width: calc(100vw - 32px); border: 0; border-radius: 18px; padding: 0; box-shadow: 0 24px 60px rgba(17, 24, 39, .25); }
+  .delete-dialog::backdrop { background: rgba(17, 24, 39, .45); }
+  .delete-dialog-body { padding: 24px 26px 20px; }
+  .delete-dialog h2 { margin: 0; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .delete-dialog h2 svg { color: var(--fail-red); }
+  .delete-run-label { margin-top: 6px; font-size: 14px; font-weight: 700; color: var(--sub-text-color); white-space: nowrap; }
+  .delete-items-title { margin-top: 18px; font-size: 13px; font-weight: 800; color: var(--muted-text-color); }
+  .delete-items { list-style: none; margin: 8px 0 0; padding: 12px 14px; border-radius: 12px; background: #F8FAFC; border: 1px solid var(--soft-line-color); display: grid; gap: 6px; }
+  .delete-items li { font-size: 14px; color: var(--strong-text-color); display: flex; gap: 8px; }
+  .delete-items li::before { content: "·"; color: var(--muted-text-color); font-weight: 800; }
+  .delete-warning { margin-top: 14px; display: flex; align-items: center; gap: 6px; color: var(--fail-red-text); font-weight: 800; font-size: 14px; }
+  .delete-warning svg { width: 17px; height: 17px; }
+  .delete-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 26px 20px; }
+  .delete-actions .button { height: 40px; min-width: 88px; }
+  .button.is-danger-solid { background: var(--fail-red); color: #fff; }
+  .button.is-danger-solid:hover { background: var(--fail-red-text); }
   .button.is-danger { background: #fff; color: var(--fail-red-text); border: 1.5px solid #F6C2C4; }
   .button.is-danger:hover { background: var(--fail-red-light); }
 </style>
@@ -73,7 +89,8 @@
         <a class="button is-small" href="{{ base_path }}/runs/{{ summary.run_id }}"><i data-lucide="file-text"></i>리포트</a>
         <a class="button is-soft is-small" href="{{ base_path }}/runs/new?from_run_id={{ summary.run_id }}"><i data-lucide="refresh-cw"></i>재실행</a>
         <form method="post" action="{{ base_path }}/runs/{{ summary.run_id }}/delete" class="delete-form"
-              data-confirm="Run {{ summary.run_id[-11:] }} 삭제 · Run 기록 · 정답표 · 보고서 함께 삭제 · 되돌릴 수 없음">
+              data-run-label="Run {{ summary.run_id[-11:] }} · {{ status_titles.get(status, status) }} · {{ 'Mock' if summary.run_config.target_kind.value == 'fake' else 'Live' }} · {{ summary.started_at | time_ago }}"
+              data-delete-items='{{ delete_items_by_run_id.get(summary.run_id, []) | tojson }}'>
           <input type="hidden" name="status" value="{{ selected_status }}">
           <button class="button is-danger is-small" type="submit"><i data-lucide="trash-2"></i>삭제</button>
         </form>
@@ -87,14 +104,46 @@
 {% else %}
 {{ empty_state("clipboard-list", "Run 기록 없음" if not selected_status else "해당 판정 Run 없음", "테스트 실행 후 결과 표시", base_path ~ "/runs/new", "새 Run 설정") }}
 {% endif %}
+<dialog class="delete-dialog" id="delete-dialog" aria-labelledby="delete-dialog-title">
+  <div class="delete-dialog-body">
+    <h2 id="delete-dialog-title"><i data-lucide="trash-2"></i>Run 삭제</h2>
+    <div class="delete-run-label" id="delete-run-label"></div>
+    <div class="delete-items-title">함께 삭제되는 항목</div>
+    <ul class="delete-items" id="delete-items"></ul>
+    <div class="delete-warning"><i data-lucide="triangle-alert"></i>삭제 후 복구 불가</div>
+  </div>
+  <div class="delete-actions">
+    <button class="button is-outline" type="button" id="delete-cancel" autofocus>취소</button>
+    <button class="button is-danger-solid" type="button" id="delete-confirm"><i data-lucide="trash-2"></i>삭제</button>
+  </div>
+</dialog>
 {% endblock %}
 {% block scripts %}
 <script>
-  // 삭제 전 확인 · 되돌릴 수 없음
+  // 삭제 확인 창 · 기본 선택 = 취소 · Esc · 바깥 클릭 = 닫기
+  const deleteDialog = document.getElementById("delete-dialog");
+  let pendingDeleteForm = null;
   document.querySelectorAll(".delete-form").forEach((form) => {
     form.addEventListener("submit", (event) => {
-      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+      event.preventDefault();
+      pendingDeleteForm = form;
+      document.getElementById("delete-run-label").textContent = form.dataset.runLabel;
+      const itemList = document.getElementById("delete-items");
+      itemList.replaceChildren(...JSON.parse(form.dataset.deleteItems).map((text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        return item;
+      }));
+      deleteDialog.showModal();
+      document.getElementById("delete-cancel").focus();
     });
+  });
+  document.getElementById("delete-cancel").addEventListener("click", () => deleteDialog.close());
+  document.getElementById("delete-confirm").addEventListener("click", () => {
+    if (pendingDeleteForm) HTMLFormElement.prototype.submit.call(pendingDeleteForm);  // 확인 후에만 전송
+  });
+  deleteDialog.addEventListener("click", (event) => {
+    if (event.target === deleteDialog) deleteDialog.close();  // 바깥 영역
   });
 </script>
 {% endblock %}
