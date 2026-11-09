@@ -55,7 +55,7 @@ def describe_parallel_sessions(behavior: SessionBehavior) -> BehaviorLine:
     if count <= 1:
         return BehaviorLine("동시 예매 창", "기기 1대 · 예매 창 1개", "계정 1개로 예매 1건 진행")
     return BehaviorLine("동시 예매 창", f"기기 1대에서 예매 창 {count}개 동시 실행",
-                        f"계정 {count}개가 같은 기기 정보로 동시에 예매 진행")
+                        f"계정 {count}개 · 같은 기기 쿠키 · 같은 브라우저 정보 · 같은 순간 예매 시작")
 
 
 def describe_browsing(behavior: SessionBehavior) -> BehaviorLine:

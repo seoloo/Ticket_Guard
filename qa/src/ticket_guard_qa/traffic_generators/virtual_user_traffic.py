@@ -3,6 +3,7 @@ import asyncio
 import random
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 
 from ticket_guard_qa.domain.models import SessionBehavior, SessionKey, VirtualUserSessionPlan, VirtualUserSessionResult
 from ticket_guard_qa.macro_bots.behavior_sampling import pick_click_interval_ms, pick_entry_delay_ms, pick_page_dwell_ms
@@ -13,6 +14,7 @@ CLICK_INTERVAL_COUNT = 3  # 좌석 2석 클릭 + 확정 버튼
 PRE_OPEN_LOGIN_SEC = 3.0  # 오픈 전 로그인 시간 · 사람도 미리 로그인
 PROGRESS_REPORT_EVERY = 10
 TIMEOUT_FAILED_STEP = "time_limit · TIMEOUT"  # Run 설정 시험 시간 초과
+DEVICE_KEY_PREFIX = "device-"
 
 ProgressCallback = Callable[[list[VirtualUserSessionResult | None]], None]  # 계획 순서 · 아직 안 끝난 VU = None
 
@@ -31,7 +33,34 @@ def build_session_plans(behaviors: list[SessionBehavior], random_seed: int) -> l
             preferred_seat_ids=tuple(preferred_seat_ids),
             page_dwell_ms=tuple(pick_page_dwell_ms(behavior, random_source) for _ in range(behavior.browse_page_count)),
         ))
-    return plans
+    return assign_devices(plans)
+
+
+@dataclass
+class OpenDevice:
+    device_key: str
+    entry_delay_ms: float
+    window_count: int
+
+
+def assign_devices(plans: list[VirtualUserSessionPlan]) -> list[VirtualUserSessionPlan]:
+    """기기 묶기 · 기기 1대당 예매 창 수만큼 같은 행동 값 VU를 한 기기로 · 같은 기기 창은 같은 순간 예매 시작"""
+    open_device_by_behavior: dict[SessionBehavior, OpenDevice] = {}
+    assigned: list[VirtualUserSessionPlan] = []
+    device_count = 0
+    for plan in plans:
+        window_limit = plan.behavior.sessions_per_device
+        open_device = open_device_by_behavior.get(plan.behavior)
+        if window_limit > 1 and open_device and open_device.window_count < window_limit:
+            open_device.window_count += 1
+            assigned.append(replace(plan, device_key=open_device.device_key, entry_delay_ms=open_device.entry_delay_ms))
+            continue
+        device_count += 1
+        device_key = f"{DEVICE_KEY_PREFIX}{device_count:04d}"
+        if window_limit > 1:
+            open_device_by_behavior[plan.behavior] = OpenDevice(device_key, plan.entry_delay_ms, 1)
+        assigned.append(replace(plan, device_key=device_key))
+    return assigned
 
 
 def reset_before_traffic(booking_api: BookingApi) -> str:

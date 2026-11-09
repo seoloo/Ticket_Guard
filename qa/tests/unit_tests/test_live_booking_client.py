@@ -59,6 +59,8 @@ class FakeDjango:
         self.heartbeat_count = 0
         self.page_paths: list[str] = []
         self.user_agents: set[str] = set()
+        self.issued_device_count = 0
+        self.device_cookie_by_username: dict[str, str] = {}  # 로그인 요청에 실린 기기 쿠키
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.user_agents.add(request.headers.get("user-agent", ""))
@@ -66,7 +68,11 @@ class FakeDjango:
             self.page_paths.append(request.url.path)
             return httpx.Response(200, html="<html></html>")
         if request.url.path == "/login/":
-            return httpx.Response(200, headers={"set-cookie": "csrftoken=token-1; Path=/"})
+            headers = [("set-cookie", "csrftoken=token-1; Path=/")]
+            if "tg_capture=" not in request.headers.get("cookie", ""):  # 시스템 middleware · 기기 쿠키 없으면 새로
+                self.issued_device_count += 1
+                headers.append(("set-cookie", f"tg_capture=device-cookie-{self.issued_device_count}; Path=/"))
+            return httpx.Response(200, headers=headers)
         if request.url.path == "/captcha.png":
             return httpx.Response(200, content=b"png")
         if request.url.path == "/api/qa/reset/":
@@ -78,6 +84,8 @@ class FakeDjango:
             return httpx.Response(202, json={"accepted": True, "state": "queued"})
         self.actions.append({**body, "csrf": request.headers.get("x-csrftoken")})
         if body["action"] == "login":
+            cookies = dict(part.strip().split("=", 1) for part in request.headers.get("cookie", "").split(";") if "=" in part)
+            self.device_cookie_by_username[body["username"]] = cookies.get("tg_capture", "")
             return httpx.Response(self.login_status, json={} if self.login_status == 200 else {"code": "LOGIN_FAILED"})
         if body["action"] == "start":
             return httpx.Response(200, json={"id": "attempt-1", "stage": "queue"})
@@ -314,3 +322,25 @@ def test_session_plans_sample_one_dwell_per_browsed_page():
     plans = build_session_plans([HUMAN_BEHAVIOR, DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]], random_seed=7)
     assert len(plans[0].page_dwell_ms) == HUMAN_BEHAVIOR.browse_page_count and plans[1].page_dwell_ms == ()
     assert calculate_pre_open_sec(plans) == pytest.approx(sum(plans[0].page_dwell_ms) / 1000)  # 오픈 전 대기 0 고정
+
+
+def test_plans_group_device_windows_and_share_start_moment():
+    bot_d_behavior = replace(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_D], sessions_per_device=4)
+    plans = build_session_plans([bot_d_behavior] * 6 + [HUMAN_BEHAVIOR] * 2, random_seed=3)
+
+    device_keys = [plan.device_key for plan in plans]
+    assert device_keys[:4] == [device_keys[0]] * 4 and device_keys[4] == device_keys[5] != device_keys[0]  # 4창 + 2창
+    assert len(set(device_keys[6:])) == 2 and not set(device_keys[6:]) & set(device_keys[:6])  # 사람 = 기기 1대씩
+    assert len({plan.entry_delay_ms for plan in plans[:4]}) == 1  # 같은 기기 창 = 같은 순간 예매 시작
+
+
+def test_device_windows_log_in_with_one_shared_device_cookie():
+    fake_django = FakeDjango()
+    bot_d_behavior = replace(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_D], sessions_per_device=3)
+    plans = [replace(plan, click_intervals_ms=(0.0, 0.0, 0.0)) for plan in build_session_plans([bot_d_behavior] * 4, random_seed=5)]
+    results = send_virtual_user_traffic(build_booking_api(fake_django, account_count=4), plans, 10)
+
+    cookies = [fake_django.device_cookie_by_username[build_test_account_username(number)] for number in range(1, 5)]
+    assert all(cookies) and len(set(cookies)) == 2  # 기기 2대 · 3창 + 1창
+    assert sorted(cookies.count(cookie) for cookie in set(cookies)) == [1, 3]
+    assert [result.device_key for result in results] == [plan.device_key for plan in plans]

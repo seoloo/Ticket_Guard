@@ -324,9 +324,9 @@ class FakeBookingApi:
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
     ) -> VirtualUserSessionResult:
         """대기 없이 바로 판정 · 생성 순서대로 끝나서 같은 시드 = 같은 결과"""
-        return self.record_session(session_plan.behavior)
+        return self.record_session(session_plan.behavior, session_plan.device_key)
 
-    def record_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
+    def record_session(self, behavior: SessionBehavior, device_key: str = "") -> VirtualUserSessionResult:
         session_key = SessionKey(f"attempt-{len(self.state.session_verdicts) + 1:05d}")
         stage = judge_behavior(behavior, self.random_source)
         feature_record = build_mock_feature_record(session_key, behavior, self.pipeline_random_source, datetime.now(timezone.utc))
@@ -348,7 +348,7 @@ class FakeBookingApi:
         for event_type in FAKE_BOOKED_SERVER_EVENT_TYPES:
             self.state.publish_to_stream(build_fake_event(event_type, user_id, session_key), session_key)
         return VirtualUserSessionResult(session_key, latency_ms, is_error=False, booking_outcome=BookingOutcome.BOOKED,
-                                        sent_event_ids=sent_event_ids)
+                                        sent_event_ids=sent_event_ids, device_key=device_key)
 
     async def prepare_seat_contender(self, show_id: str) -> SeatContender:
         contender_id = f"contender-{uuid.uuid4().hex[:8]}"

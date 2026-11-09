@@ -13,6 +13,7 @@ from ticket_guard_qa.domain.models import SessionBehavior, VirtualUserSessionPla
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult
 
 CSRF_COOKIE_NAME = "csrftoken"
+DEVICE_COOKIE_NAME = "tg_capture"  # 시스템 익명 기기 쿠키 · web/middleware.py · 같은 값 = 같은 기기
 REQUEST_TIMEOUT_SEC = 10.0  # 동시 VU 수백 명 · 개발 서버 응답이 늦어짐
 QUEUE_POLL_INTERVAL_SEC = 1.0  # 예매 화면 heartbeat 주기와 같게
 MAX_QUEUE_WAIT_SEC = 60.0  # 기본 대기 12초 + 여유
@@ -107,6 +108,14 @@ class LiveBookingClient:
         except ValueError:
             body = {}
         return HttpResult(response.status_code, body if isinstance(body, dict) else {}, latency_ms)
+
+    async def join_device(self, device_cookie: str | None) -> str | None:
+        """같은 기기 예매 창 · 먼저 연 창의 기기 쿠키를 그대로 사용 · 첫 창이면 새로 받은 쿠키 반환"""
+        if device_cookie:
+            self.http_client.cookies.set(DEVICE_COOKIE_NAME, device_cookie)
+            return device_cookie
+        await self.http_client.get("/login/")  # 기기 쿠키 · csrftoken 받기
+        return self.http_client.cookies.get(DEVICE_COOKIE_NAME)
 
     async def login(self, username: str, password: str) -> HttpResult:
         await self.http_client.get("/login/")  # csrftoken 쿠키 받기

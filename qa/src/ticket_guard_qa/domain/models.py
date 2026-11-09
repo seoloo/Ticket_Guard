@@ -84,6 +84,7 @@ class VirtualUserSessionPlan:
     click_intervals_ms: tuple[float, ...]  # 좌석 클릭 간격 · 마지막 = 클릭 → 확정 · 재시도 때 반복 사용
     preferred_seat_ids: tuple[str, ...]  # 고를 좌석 순서 · 팔린 좌석은 건너뜀
     page_dwell_ms: tuple[float, ...] = ()  # 예매 전 화면마다 머무는 시간 · 길이 = 조회 화면 수
+    device_key: str = ""  # 같은 값 = 같은 기기(쿠키 · 브라우저 정보 공유) · 봇 D 예매 창 묶음
 
 
 @dataclass(frozen=True)
@@ -146,6 +147,7 @@ class VirtualUserSessionResult:
     booking_outcome: BookingOutcome | None = None  # 오류면 None
     booked_seat_ids: tuple[str, ...] = ()  # 중복 판매 확인
     sent_event_ids: tuple[str, ...] = ()  # VU가 직접 보낸 브라우저 이벤트 · 이벤트 전달 검증 대조
+    device_key: str = ""  # 계획의 기기 묶음 그대로 · 같은 기기 세션 대조
 
 
 @dataclass(frozen=True)

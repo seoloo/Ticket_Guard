@@ -92,6 +92,9 @@ class LiveDjangoBookingApi:
         self.transport = transport
         self.contract_runner: asyncio.Runner | None = None  # 계약 시험 · 개발 계정 한 개 · 요청 사이 로그인 유지
         self.contract_client: LiveBookingClient | None = None
+        self.device_cookie_by_key: dict[str, str] = {}  # 봇 D · 같은 기기 예매 창 쿠키 공유 · 실행마다 새로
+        self.device_lock_by_key: dict[str, asyncio.Lock] = {}
+        self.device_loop: asyncio.AbstractEventLoop | None = None
         self.issued_account_count = 0  # 처음 쓰는 계정 번호
         self.free_account_numbers: list[int] = []  # 정리 끝난 계정 · 다시 사용 · 계정당 진행 중 예매 1건
 
@@ -147,6 +150,24 @@ class LiveDjangoBookingApi:
         finally:
             await admin_client.close()
 
+    def find_device_lock(self, device_key: str) -> asyncio.Lock:
+        """실행(이벤트 루프)이 바뀌면 기기 묶음 초기화 · 다른 Run과 기기 쿠키 공유 금지"""
+        running_loop = asyncio.get_running_loop()
+        if self.device_loop is not running_loop:
+            self.device_loop = running_loop
+            self.device_cookie_by_key.clear()
+            self.device_lock_by_key.clear()
+        return self.device_lock_by_key.setdefault(device_key, asyncio.Lock())
+
+    async def attach_device(self, client: LiveBookingClient, session_plan: VirtualUserSessionPlan) -> None:
+        """기기 1대당 예매 창 2개 이상일 때만 · 첫 창이 받은 기기 쿠키를 나머지 창이 그대로 사용"""
+        if session_plan.behavior.sessions_per_device <= 1 or not session_plan.device_key:
+            return
+        async with self.find_device_lock(session_plan.device_key):
+            device_cookie = await client.join_device(self.device_cookie_by_key.get(session_plan.device_key))
+            if device_cookie:
+                self.device_cookie_by_key[session_plan.device_key] = device_cookie
+
     async def run_virtual_user_session(
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
     ) -> VirtualUserSessionResult:
@@ -155,23 +176,25 @@ class LiveDjangoBookingApi:
         username = build_test_account_username(account_number)
         client = LiveBookingClient(self.base_url, self.transport, choose_user_agent(session_plan.behavior))
         try:
+            await self.attach_device(client, session_plan)
             flow_result = await client.run_booking_flow(
                 username, self.test_accounts.password, self.test_accounts.captcha_answer, session_plan, open_at_monotonic
             )
         except BookingFlowError as error:
             return VirtualUserSessionResult(SessionKey(client.booking_attempt_id or f"failed-{username}"), 0.0, is_error=True,
                                             failed_step=f"{error.step} · {error.error_code or error.status_code}",
-                                            sent_event_ids=tuple(client.sent_event_ids))
+                                            sent_event_ids=tuple(client.sent_event_ids), device_key=session_plan.device_key)
         except httpx.HTTPError as error:
             return VirtualUserSessionResult(SessionKey(client.booking_attempt_id or f"failed-{username}"), 0.0, is_error=True,
                                             failed_step=f"connection · {type(error).__name__}",
-                                            sent_event_ids=tuple(client.sent_event_ids))
+                                            sent_event_ids=tuple(client.sent_event_ids), device_key=session_plan.device_key)
         finally:
             await self.release_client(client, account_number)
         return VirtualUserSessionResult(
             SessionKey(flow_result.booking_attempt_id), flow_result.total_latency_ms, is_error=False,
             step_latency_ms=flow_result.step_latency_ms, booking_outcome=flow_result.booking_outcome,
             booked_seat_ids=flow_result.booked_seat_ids, sent_event_ids=tuple(client.sent_event_ids),
+            device_key=session_plan.device_key,
         )
 
 
