@@ -1,6 +1,5 @@
 import time
 from datetime import datetime, timezone
-from statistics import median
 from functools import partial
 from pymongo import MongoClient, UpdateOne
 from pymongo.errors import AutoReconnect, BulkWriteError, NetworkTimeout, WTimeoutError
@@ -134,90 +133,7 @@ def refresh_metrics(config):
         collection.replace_one({'_id': 'summary'}, summary, upsert=True)
         for item in metrics.values():
             collection.replace_one({'_id': item['_id']}, item, upsert=True)
-        _refresh_dashboard_collections(db)
         print(f'pipeline metrics_refreshed event_types={len(metrics)} quarantine={quarantine_count}', flush=True)
     finally:
         if client is not None:
             client.close()
-
-
-def _refresh_dashboard_collections(db):
-    """Build dashboard read models only from clean_events; never touch raw_events."""
-    clean = list(db.clean_events.find({}, {'_id': 0}))
-    by_attempt = {}
-    for event in clean:
-        attempt = event.get('bookingAttemptId') or event.get('userId') or 'anonymous'
-        by_attempt.setdefault(attempt, []).append(event)
-    for events in by_attempt.values():
-        events.sort(key=lambda item: item.get('occurredAt') or datetime.min.replace(tzinfo=timezone.utc))
-
-    completed = sum(any(e.get('eventType') == 'booking_confirm_success' for e in events) for events in by_attempt.values())
-    flow = {'_id': 'summary', 'startedAttempts': len(by_attempt), 'completedAttempts': completed,
-            'conversionRate': completed / len(by_attempt) if by_attempt else 0,
-            'incompleteAttempts': max(len(by_attempt) - completed, 0), 'refreshedAt': datetime.now(timezone.utc)}
-    db.flow_metrics.replace_one({'_id': flow['_id']}, flow, upsert=True)
-    stages = ('queue_enter', 'queue_admitted', 'captcha_success', 'seat_select', 'booking_confirm_success')
-    db.funnel_metrics.replace_one({'_id': 'summary'}, {'_id': 'summary', 'stages': [
-        {'stage': stage, 'count': sum(any(e.get('eventType') == stage for e in events) for events in by_attempt.values())}
-        for stage in stages]}, upsert=True)
-    failures = {}
-    for event in clean:
-        if event.get('result') in ('failure', 'rejected'):
-            key = (event.get('eventType'), event.get('errorCode'), (event.get('details') or {}).get('action'), event.get('showId'), event.get('scheduleId'))
-            failures[key] = failures.get(key, 0) + 1
-    db.failure_reason_metrics.delete_many({})
-    if failures:
-        db.failure_reason_metrics.insert_many([
-            {'eventType': key[0], 'errorCode': key[1], 'action': key[2], 'showId': key[3], 'scheduleId': key[4], 'count': count}
-            for key, count in failures.items()
-        ])
-    users = {}
-    for event in clean:
-        user = event.get('userId')
-        if not user:
-            continue
-        item = users.setdefault(user, {'_id': user, 'userId': user, 'signals': [], 'signalCount': 0,
-                                      'lastActivityAt': event.get('occurredAt'), 'showId': event.get('showId'),
-                                      'scheduleId': event.get('scheduleId'), 'reviewStatus': 'unreviewed'})
-        if event.get('occurredAt') and event['occurredAt'] > item['lastActivityAt']:
-            item['lastActivityAt'] = event['occurredAt']
-        if event.get('result') == 'rejected':
-            item['signals'].append('접근 거부 반복')
-        if event.get('eventType') == 'captcha_wrong':
-            item['signals'].append('보안문자 오답 반복')
-        item['signalCount'] = len(item['signals'])
-    db.suspicious_users.delete_many({})
-    suspicious = [item for item in users.values() if item['signalCount']]
-    if suspicious:
-        db.suspicious_users.insert_many(suspicious)
-    db.user_activity_metrics.delete_many({})
-    if users:
-        db.user_activity_metrics.insert_many([
-            {'_id': user, 'userId': user, 'recentBookingAttempts': len({e.get('bookingAttemptId') for e in clean if e.get('userId') == user and e.get('bookingAttemptId')}),
-             'accessDeniedCount': sum(e.get('result') == 'rejected' for e in clean if e.get('userId') == user),
-             'lastActivityAt': item['lastActivityAt'], 'showIds': list({e.get('showId') for e in clean if e.get('userId') == user and e.get('showId')}),
-             'scheduleIds': list({e.get('scheduleId') for e in clean if e.get('userId') == user and e.get('scheduleId')}),
-             'timeline': [{'eventId': e.get('eventId'), 'eventType': e.get('eventType'), 'occurredAt': e.get('occurredAt'), 'errorCode': e.get('errorCode')} for e in clean if e.get('userId') == user]}
-            for user, item in users.items()
-        ])
-    segment_pairs = (
-        ('queue_enter', 'queue_admitted', 'queue_to_admitted'),
-        ('queue_admitted', 'captcha_success', 'admitted_to_captcha'),
-        ('captcha_success', 'seat_select', 'captcha_to_seat'),
-        ('seat_select', 'booking_confirm_success', 'seat_to_confirm'),
-    )
-    segments = []
-    for first, second, name in segment_pairs:
-        values = []
-        for events in by_attempt.values():
-            starts = [e.get('occurredAt') for e in events if e.get('eventType') == first]
-            ends = [e.get('occurredAt') for e in events if e.get('eventType') == second]
-            if starts and ends:
-                delta = (min(ends) - min(starts)).total_seconds() * 1000
-                if delta >= 0:
-                    values.append(delta)
-        values.sort()
-        p95 = values[min(len(values) - 1, max(0, int(len(values) * 0.95) - 1))] if values else None
-        segments.append({'segment': name, 'medianMs': median(values) if values else None, 'p95Ms': p95, 'sampleCount': len(values)})
-    db.stage_latency_metrics.replace_one({'_id': 'summary'}, {'_id': 'summary', 'segments': segments,
-        'refreshedAt': datetime.now(timezone.utc)}, upsert=True)

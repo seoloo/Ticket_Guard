@@ -37,21 +37,6 @@ class LiveMongoPipelineReader:
             'metrics': metrics,
         }
 
-    def dashboard_data(self) -> dict[str, Any]:
-        """Read-only result collections for the three DB dashboard views."""
-        if not self.mongo_uri:
-            raise ValueError("system_mongo_uri is not configured")
-        with MongoClient(self.mongo_uri, serverSelectionTimeoutMS=3000, readPreference='secondaryPreferred') as client:
-            database = client.get_default_database()
-            return {
-                'flow': database.flow_metrics.find_one({'_id': 'summary'}, {'_id': 0}) or {},
-                'funnel': database.funnel_metrics.find_one({'_id': 'summary'}, {'_id': 0}) or {},
-                'latency': database.stage_latency_metrics.find_one({'_id': 'summary'}, {'_id': 0}) or {},
-                'failures': list(database.failure_reason_metrics.find({}, {'_id': 0}).sort('count', -1).limit(20)),
-                'suspicious': list(database.suspicious_users.find({}, {'_id': 0}).sort('signalCount', -1).limit(100)),
-                'users': list(database.user_activity_metrics.find({}, {'_id': 0}).sort('lastActivityAt', -1).limit(100)),
-            }
-
     def read_gold_latency_sec(self, run_id: str) -> list[float]:
         # TODO(MongoDB 연결 후): events.receivedAt → aggregates 반영 시각 차이
         raise NotImplementedError("Kafka · Spark · MongoDB 없음 · AGENTS.md 5장")

@@ -2,4 +2,4 @@
 services:
   mongo:
     ports:
-      - "127.0.0.1:${RESULT_DB_HOST_PORT:-27018}:27017"
+      - "127.0.0.1:${MONGO_HOST_PORT:-27017}:27017"

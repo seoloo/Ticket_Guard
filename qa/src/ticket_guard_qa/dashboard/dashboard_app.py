@@ -32,7 +32,6 @@ def create_dashboard_app(settings: Settings | None = None) -> FastAPI:
     app.state.run_service = RunService(settings, session_factory, progress_stream)
     app.state.run_service.run_repository.mark_unfinished_runs_as_error(datetime.now(timezone.utc))
     app.state.answer_key_repository = AnswerKeyRepository(session_factory)
-    app.state.qa_session_factory = session_factory
     app.state.target_status_checker = TargetStatusChecker(settings)
 
     templates = Jinja2Templates(directory=DASHBOARD_DIR / "templates")

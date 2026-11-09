@@ -73,13 +73,3 @@ class SavedCaseRecord(BaseTable):
     related_code: Mapped[str] = mapped_column(String(10))  # E01 ~ E22 · T1 ~ T2
     note: Mapped[str] = mapped_column(Text, default="")
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
-class DashboardReviewRecord(BaseTable):
-    __tablename__ = "dashboard_reviews"
-
-    user_id: Mapped[str] = mapped_column(String(120), primary_key=True)
-    status: Mapped[str] = mapped_column(String(30), default="unreviewed")
-    memo: Mapped[str] = mapped_column(Text, default="")
-    reviewer: Mapped[str] = mapped_column(String(120), default="")
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
