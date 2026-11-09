@@ -96,6 +96,7 @@ class BookingApi(Protocol):
         self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, is_same_sequence: bool
     ) -> ConfirmResponse: ...  # is_same_sequence = 직전 순번 재사용 · 오래된 요청 거부 확인
     # 부하 · T1 동시 입장 상한 · T2 요청 속도 제한
+    def admission_limit(self) -> int | None: ...  # 시스템 동시 입장 상한 · None = 모름 · T1 판정 기준
     async def hold_admitted_session(self, show_id: str, hold_sec: float) -> AdmissionSample: ...  # 대기열 진입 → 입장 → hold_sec 유지 → 이탈
     async def send_request_burst(self, request_count: int, interval_sec: float) -> list[int]: ...  # 세션 하나 연속 요청 · 상태 코드 · 0 = 연결 오류
 

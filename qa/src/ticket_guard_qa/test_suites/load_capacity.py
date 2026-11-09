@@ -24,6 +24,7 @@ MAX_LISTED_ERROR_COUNT = 3
 @dataclass
 class LoadReport:
     virtual_user_count: int
+    admission_limit: int | None = None  # 시스템 상한 · None = 모름
     samples: list[AdmissionSample] = field(default_factory=list)
     burst_status_codes: list[int] = field(default_factory=list)
     normal_status_codes: list[int] = field(default_factory=list)
@@ -41,8 +42,12 @@ class LoadReport:
         return calculate_peak_concurrency(self.admitted_samples)
 
     @property
-    def is_admission_limited(self) -> bool:  # T1
-        return bool(self.admitted_samples) and self.peak_concurrent_admissions < self.virtual_user_count
+    def is_admission_measurable(self) -> bool:  # 상한을 알고 VU가 상한보다 많을 때만
+        return self.admission_limit is not None and self.virtual_user_count > self.admission_limit
+
+    @property
+    def is_admission_over_limit(self) -> bool:  # T1 실패
+        return self.is_admission_measurable and self.peak_concurrent_admissions > self.admission_limit
 
     @property
     def is_burst_limited(self) -> bool:  # T2 · 연속 요청 차단
@@ -82,8 +87,8 @@ async def collect_admission_samples(booking_api: BookingApi, virtual_user_count:
 def build_message(report: LoadReport) -> str:
     lines = []
     admitted_count = len(report.admitted_samples)
-    if not report.is_admission_limited:
-        lines.append(f"{FAIL_LINE_PREFIX}T1 동시 입장 상한 미적용 · 최대 동시 입장 {report.peak_concurrent_admissions}/{report.virtual_user_count}")
+    if report.is_admission_over_limit:
+        lines.append(f"{FAIL_LINE_PREFIX}T1 동시 입장 상한 초과 · 최대 동시 입장 {report.peak_concurrent_admissions} · 상한 {report.admission_limit}")
     if not report.is_burst_limited:
         lines.append(f"{FAIL_LINE_PREFIX}T2 요청 속도 제한 미적용 · 연속 요청 {BURST_REQUEST_COUNT}건 차단 0건")
     if report.is_normal_rate_blocked:
@@ -91,13 +96,16 @@ def build_message(report: LoadReport) -> str:
     if report.server_error_count:
         listed = ", ".join(report.admission_errors[:MAX_LISTED_ERROR_COUNT])
         lines.append(f"{FAIL_LINE_PREFIX}서버 오류 · 연결 실패 {report.server_error_count}건{' · ' + listed if listed else ''}")
-    lines.append(f"최대 동시 입장 {report.peak_concurrent_admissions} · 입장 {admitted_count}/{report.virtual_user_count}")
+    limit_text = f" · 상한 {report.admission_limit}" if report.admission_limit is not None else ""
+    lines.append(f"최대 동시 입장 {report.peak_concurrent_admissions}{limit_text} · 입장 {admitted_count}/{report.virtual_user_count}")
     lines.append(f"연속 요청 {BURST_REQUEST_COUNT}건 중 차단 {report.burst_status_codes.count(RATE_LIMITED_STATUS_CODE)}건"
                  f" · 정상 속도 {NORMAL_REQUEST_COUNT}건 중 차단 {report.normal_status_codes.count(RATE_LIMITED_STATUS_CODE)}건")
     if report.admitted_samples:
         lines.append(f"대기열 대기 p95 {calculate_p95([sample.wait_ms for sample in report.admitted_samples]):.0f}ms")
-    if not report.is_admission_limited and report.admitted_samples:
-        lines.append(f"{REFERENCE_LINE_PREFIX}VU 수 ≤ 시스템 상한이면 T1 측정 불가 · VU 수 상향")
+    if report.admission_limit is None:
+        lines.append(f"{REFERENCE_LINE_PREFIX}T1 측정 불가 · 시스템 동시 입장 상한 값 미설정 · TICKET_GUARD_QA_QUEUE_ADMISSION_LIMIT")
+    elif not report.is_admission_measurable:
+        lines.append(f"{REFERENCE_LINE_PREFIX}T1 측정 불가 · VU {report.virtual_user_count} ≤ 상한 {report.admission_limit} · VU 수 상향")
     return MESSAGE_LINE_SEPARATOR.join(lines)
 
 
@@ -124,14 +132,14 @@ class LoadCapacitySuite:
             return SuiteResult(self.suite_name, SuiteOutcome.FAILED, message=f"FAIL: {error}")
 
         context.report_progress(reset_before_traffic(booking_api))
-        report = LoadReport(virtual_user_count)
+        report = LoadReport(virtual_user_count, booking_api.admission_limit())
         context.report_progress(f"T1 · VU {virtual_user_count}명 오픈 동시 진입")
         report.samples = asyncio.run(collect_admission_samples(booking_api, virtual_user_count, self.admission_hold_sec))
         context.report_progress(f"T2 · 연속 요청 {BURST_REQUEST_COUNT}건 · 정상 속도 {NORMAL_REQUEST_COUNT}건")
         report.burst_status_codes = asyncio.run(booking_api.send_request_burst(BURST_REQUEST_COUNT, 0.0))
         report.normal_status_codes = asyncio.run(booking_api.send_request_burst(NORMAL_REQUEST_COUNT, NORMAL_REQUEST_INTERVAL_SEC))
 
-        is_passed = (report.is_admission_limited and report.is_burst_limited
+        is_passed = (not report.is_admission_over_limit and report.is_burst_limited
                      and not report.is_normal_rate_blocked and report.server_error_count == 0)
         wait_values = [sample.wait_ms for sample in report.admitted_samples]
         return SuiteResult(

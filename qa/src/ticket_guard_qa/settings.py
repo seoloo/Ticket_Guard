@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     system_password: str = ""
     system_mongo_uri: str = ""  # 읽기 전용 계정만
     system_raw_mongo_uri: str = ""  # 원본 MongoDB ticketguard_raw · 읽기 전용 계정만 · 비우면 원본 적재 검증 건너뜀
+    system_raw_source_id: str = ""  # 원본 적재기 RAW_SOURCE_ID · 위치 인덱스 첫 필드 · 비우면 원본 적재 검증 건너뜀
     # 이벤트 토픽 읽기 전용 · QA 대시보드는 팀 compose 안에서만 실행 · 비우면 이벤트 전달 검증 건너뜀
     kafka_bootstrap_servers: str = "kafka:9092"
     kafka_events_topic: str = "ticketguard.events.v1"
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     # 트래픽 전 시험 데이터 초기화(/api/qa/reset/) · 시스템 관리자 계정 · 비어 있으면 건너뜀
     system_admin_username: str = ""
     system_admin_password: str = ""
+    queue_admission_limit: int = 0  # T1 · 시스템 동시 입장 상한 · 0 = 모름 → 부하 Suite T1 측정만
 
     qa_database_url: str = "mongodb://127.0.0.1:27021/ticketguard_qa"  # 컨테이너 안은 qa/compose.qa-db.yml이 qa-mongo로 덮어씀
     report_output_dir: Path = Path("./qa_data/reports")

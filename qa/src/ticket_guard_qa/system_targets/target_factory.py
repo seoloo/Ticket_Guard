@@ -28,6 +28,7 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
             settings.system_base_url, settings.system_username, settings.system_password,
             VirtualUserAccountPool(settings.test_account_count, settings.test_account_password, settings.captcha_fixed_answer),
             SystemAdminAccount(settings.system_admin_username, settings.system_admin_password),
+            queue_admission_limit=settings.queue_admission_limit,
         ),
         verdict_reader=LiveMongoVerdictReader(settings.system_mongo_uri) if has_mongo else LiveDjangoVerdictReader(),
         pipeline_reader=LiveMongoPipelineReader(settings.system_mongo_uri, settings.kafka_events_topic),
@@ -42,7 +43,7 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
             if settings.is_kafka_contract_injection_enabled and settings.kafka_bootstrap_servers else None
         ),
         raw_event_reader=(
-            LiveMongoRawEventReader(settings.system_raw_mongo_uri, settings.kafka_events_topic)
-            if settings.system_raw_mongo_uri else None
+            LiveMongoRawEventReader(settings.system_raw_mongo_uri, settings.kafka_events_topic, settings.system_raw_source_id)
+            if settings.system_raw_mongo_uri and settings.system_raw_source_id else None
         ),
     )

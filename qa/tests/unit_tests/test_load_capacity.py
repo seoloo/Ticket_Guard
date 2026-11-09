@@ -47,7 +47,7 @@ def test_broken_queue_limit_fails_t1():
     system_target.booking_api.state.is_queue_limit_broken = True
     result = LoadCapacitySuite(FAST_HOLD_SEC).run(build_context(system_target))
     assert result.outcome is SuiteOutcome.FAILED
-    assert failure_lines(result.message) == [f"FAIL: T1 동시 입장 상한 미적용 · 최대 동시 입장 {VIRTUAL_USER_COUNT}/{VIRTUAL_USER_COUNT}"]
+    assert failure_lines(result.message) == [f"FAIL: T1 동시 입장 상한 초과 · 최대 동시 입장 {VIRTUAL_USER_COUNT} · 상한 {FAKE_QUEUE_ADMISSION_LIMIT}"]
 
 
 def test_missing_rate_limit_fails_t2():
@@ -93,3 +93,16 @@ def test_live_probes_record_admission_and_page_requests():
     assert django.page_request_count == 3
     assert django.cancel_count == 1  # 입장 후 예매 취소로 이탈
     assert booking_api.virtual_user_capacity() == 2  # 계정 반환
+
+
+def test_unknown_limit_is_reference_not_pass_or_fail(monkeypatch):
+    system_target = build_fake_system_target()
+    monkeypatch.setattr(system_target.booking_api, "admission_limit", lambda: None)
+    result = LoadCapacitySuite(FAST_HOLD_SEC).run(build_context(system_target))
+    assert result.outcome is SuiteOutcome.PASSED  # T2 · 서버 오류만 판정
+    assert "참고: T1 측정 불가 · 시스템 동시 입장 상한 값 미설정" in result.message
+
+
+def test_users_within_limit_cannot_measure_t1():
+    result = LoadCapacitySuite(FAST_HOLD_SEC).run(build_context(build_fake_system_target(), virtual_user_count=10))
+    assert f"참고: T1 측정 불가 · VU 10 ≤ 상한 {FAKE_QUEUE_ADMISSION_LIMIT}" in result.message

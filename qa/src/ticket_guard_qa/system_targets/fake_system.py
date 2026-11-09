@@ -380,6 +380,9 @@ class FakeBookingApi:
             self.admission_slots = (loop, asyncio.Semaphore(FAKE_QUEUE_ADMISSION_LIMIT))
         return self.admission_slots[1]
 
+    def admission_limit(self) -> int | None:
+        return FAKE_QUEUE_ADMISSION_LIMIT  # 상한 붕괴 결함 Mock도 같은 값 · 실제 입장이 넘으면 FAIL
+
     async def hold_admitted_session(self, show_id: str, hold_sec: float) -> AdmissionSample:
         """상한만큼만 동시 입장 · 나머지는 빈자리 대기"""
         entered_at = time.monotonic()

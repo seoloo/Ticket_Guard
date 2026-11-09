@@ -80,7 +80,9 @@ class LiveDjangoBookingApi:
     def __init__(self, base_url: str, username: str, password: str,
                  test_accounts: VirtualUserAccountPool | None = None,
                  admin_account: SystemAdminAccount | None = None,
-                 transport: httpx.AsyncBaseTransport | None = None) -> None:
+                 transport: httpx.AsyncBaseTransport | None = None,
+                 queue_admission_limit: int = 0) -> None:
+        self.queue_admission_limit = queue_admission_limit  # 시스템 동시 입장 상한 · 0 = 모름
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.password = password
@@ -220,6 +222,9 @@ class LiveDjangoBookingApi:
             return to_confirm_response(await client.post_confirm(list(seat_ids), quantity, client.confirm_sequence))
         except httpx.HTTPError as error:
             return ConfirmResponse(0, f"connection · {type(error).__name__}", None, None, 0.0)
+
+    def admission_limit(self) -> int | None:
+        return self.queue_admission_limit or None
 
     async def hold_admitted_session(self, show_id: str, hold_sec: float) -> AdmissionSample:
         """시험 계정 하나 → 대기열 → 입장(보안문자 단계) 시각 기록 → hold_sec 유지 → 예매 취소로 이탈"""

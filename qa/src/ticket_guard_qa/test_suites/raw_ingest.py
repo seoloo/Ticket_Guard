@@ -134,7 +134,7 @@ class RawIngestSuite:
         if stream_reader is None:
             raise NotImplementedError("이벤트 스트림 읽기 미설정 · TICKET_GUARD_QA_KAFKA_BOOTSTRAP_SERVERS")
         if raw_event_reader is None:
-            raise NotImplementedError("원본 DB 읽기 미설정 · TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI · 읽기 전용 계정")
+            raise NotImplementedError("원본 DB 읽기 미설정 · TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI · SYSTEM_RAW_SOURCE_ID · 읽기 전용 계정")
         try:
             _, session_results, records = send_traffic_and_read_stream(context, stream_reader)
         except AccountPoolExhaustedError as error:
