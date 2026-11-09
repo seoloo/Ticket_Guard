@@ -22,7 +22,7 @@ dev = ["pytest==8.3.4", "mongomock==4.3.0", "httpx==0.28.1"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-ticket_guard_admin = ["templates/*.html", "static/*.css", "static/*.js"]
+ticket_guard_admin = ["templates/*.html", "templates/*.svg", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

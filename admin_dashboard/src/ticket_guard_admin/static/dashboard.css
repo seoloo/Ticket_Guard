@@ -1,7 +1,7 @@
 /* 관리자 샘플 화면 · 1 흐름 분석 / 2 의심 활동 / 3 사용자 상세 */
-:root { color-scheme:light; --blue:#1457ff; --blue-soft:#eaf1ff; --orange:#f15b00; --orange-soft:#fff1e4; --text:#101828; --muted:#748199; --line:#dce5f1; --surface:#fff; --bg:#f2f6fc; }
+:root { color-scheme:light; --blue:var(--qa-blue); --blue-soft:var(--qa-blue-light); --orange:var(--db-orange); --orange-soft:var(--db-orange-light); --text:var(--text-color); --muted:var(--muted-text-color); --line:var(--line-color); --surface:var(--card-background); --bg:var(--page-background); }
 * { box-sizing:border-box; }
-body { margin:0; color:var(--text); background:var(--bg); font-family:Pretendard,"Malgun Gothic","Segoe UI",sans-serif; font-size:14px; line-height:1.5; }
+body { margin:0; color:var(--text); background:var(--bg); font-family:var(--font-family); font-size:14px; line-height:1.5; }
 [hidden] { display:none!important; }
 button,input,select,textarea { font:inherit; color:inherit; }
 button,select { cursor:pointer; }

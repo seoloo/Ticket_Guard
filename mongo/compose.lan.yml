@@ -1,0 +1,6 @@
+# Optional team access on the host LAN address; keep compose.local.yml for localhost.
+# docker compose -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml -f mongo/compose.lan.yml --profile mongo up -d --no-deps mongo
+services:
+  mongo:
+    ports:
+      - "${MONGO_LAN_BIND_IP:?Set the host LAN IPv4 address in .env}:${MONGO_HOST_PORT:-27017}:27017"
