@@ -1,5 +1,24 @@
 # 배치 컬렉션 라우팅 검증 — 2026-11-06
 
+## 추가 설치 재현 검사 — 2026-11-09
+
+`mongo/tests/test_bootstrap.py`로 기존 서비스와 분리한 Compose 프로젝트·빈 볼륨에서
+아래 항목을 확인했다. 이 검사는 Kafka 메시지나 기존 DB를 사용하지 않는다.
+
+- 공식 MongoDB 이미지의 빈 볼륨 최초 실행: root·writer·reader 자동 생성,
+  `raw_events` 및 라우팅 컬렉션 9개와 인덱스 생성.
+- 컨테이너 내부 `verify.js`와 PC의 로컬 공개 포트에서 writer·reader 인증·조회 성공.
+- reader 쓰기 거부, 재시작 후 조회 성공. 적재기는 기존 writer로 저장.
+- `setup.js`, `setup-writer.js`, `setup-reader.js` 반복 실행 시 기존 계정 정보와 문서 보존.
+- 잘못된 관리자/기존 계정 비밀번호·권한에서는 설정 명령이 실패하고 기존 계정 보존.
+- 재시작 후 기존 문서·계정 유지, 별도의 새 writer 추가와 재실행 성공.
+- 누락·placeholder·중복 계정명은 DB 시작 전에 거부.
+- 실제 선택적 QA Compose 구성에서 두 DB의 호스트 해석·조회 인증 성공,
+  source가 있는 테스트 원본 조회 성공. 기존 QA 네트워크 유지 및 QA DB 격리 확인.
+
+따라서 아래 2026-11-06 기록의 빈 볼륨 최초 실행 미검증 항목은 이번 검사로
+보완했다. Kafka 통합·대량 부하·실제 AWS 배포와 TLS/SASL 검증을 추가한 것은 아니다.
+
 ## 확인 완료
 
 - Docker 이미지 빌드, Compose config 검사 통과.
