@@ -1,0 +1,8 @@
+{
+  "related_code": "E08",
+  "title": "서버 과부하",
+  "stage": "대기열",
+  "input": "오픈 시각 동시 진입",
+  "expected": "서버 오류 0 · 동시 입장 상한 유지",
+  "system_error_code": null
+}

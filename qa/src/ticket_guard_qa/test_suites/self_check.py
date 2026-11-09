@@ -11,7 +11,7 @@ from ticket_guard_qa.system_targets.fake_system import (
     FakePipelineReader,
     FakeVerdictReader,
 )
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 
 # fake_system.FIXED_SESSION_VERDICTS의 정답 · 사람 6 · 봇 A · B · C · D 각 2
 FIXED_ANSWER_KEY: AnswerKey = {
@@ -41,6 +41,11 @@ class SelfCheckSuite:
     suite_name = "self_check"
     title = "QA Self-check"
     related_codes: tuple[str, ...] = ()
+    guide = SuiteGuide(
+        "QA 프로그램 자체 점검",
+        "정답이 정해진 가짜 결과로 QA 채점 확인",
+        "채점 결과가 미리 정한 값과 일치",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         problems: list[str] = []

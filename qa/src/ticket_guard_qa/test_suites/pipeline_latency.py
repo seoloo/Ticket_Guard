@@ -2,13 +2,18 @@
 from ticket_guard_qa.domain.enums import SuiteOutcome
 from ticket_guard_qa.domain.models import SuiteResult
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 
 
 class PipelineLatencySuite:
     suite_name = "pipeline_latency"
     title = "Gold 반영 지연"
     related_codes: tuple[str, ...] = ()
+    guide = SuiteGuide(
+        "클릭이 분석 결과(집계)에 반영되기까지 걸리는 시간",
+        "클릭 시각과 집계 완료 시각의 차이 측정",
+        "100건 중 95건이 10초 이내",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         # TODO(Kafka · Spark 연결 후): 시험 이벤트를 먼저 보내고 반영을 기다림

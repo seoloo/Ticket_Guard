@@ -82,10 +82,11 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | 시스템 필드 | QA 이름 | 대조하는 봇 파라미터 |
 |---|---|---|
 | `bookingAttemptId` | `booking_attempt_id` | - |
-| `entryDelayAfterOpenMs` | `entry_delay_after_open_ms` | `entry_delay_after_open_ms` (진입 지연) |
-| `clickIntervalMeanMs` | `click_interval_mean_ms` | `click_interval_mean_ms` (평균 간격) |
-| `clickIntervalStdMs` | `click_interval_std_ms` | `click_interval_deviation_ms` (간격 표준편차) |
-| `sessionsPerDevice` | `sessions_per_device` | `sessions_per_device` (병렬 세션) |
+| `entryDelayAfterOpenMs` | `entry_delay_after_open_ms` | `entry_delay_after_open_ms` (오픈 후 예매 시작까지) |
+| `clickIntervalMeanMs` | `click_interval_mean_ms` | `click_interval_mean_ms` (좌석 클릭 간격 평균) |
+| `clickIntervalStdMs` | `click_interval_std_ms` | `click_interval_deviation_ms` (좌석 클릭 간격 편차) |
+| `sessionsPerDevice` | `sessions_per_device` | `sessions_per_device` (기기 1대당 예매 창 수) |
+| - | - | 세션 하나로 대조 못 하는 값 · `browse_page_count` · `page_dwell_*` · `sold_out_retry_*` · `browser_trace_level` · 원본 이벤트(page_enter · page_exit · User-Agent)로 확인 |
 | `eventCount` | `event_count` | 집계 누락 검출 |
 | `windowStart` · `windowEnd` | `window_start` · `window_end` | 이중 집계 검출 |
 | `computedAt` | `computed_at` | Gold 반영 시각 |

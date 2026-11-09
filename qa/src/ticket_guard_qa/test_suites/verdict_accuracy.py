@@ -16,9 +16,10 @@ from ticket_guard_qa.scoring.confusion_matrix import build_confusion_matrix
 from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.scoring.detection_metrics import calculate_detection_metrics, find_false_positives, find_missed_bots
 from ticket_guard_qa.scoring.latency_metrics import calculate_error_rate_percent, calculate_p95
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
-    build_session_plans,
+    build_planned_user_session_plans,
+    save_browser_captures,
     reset_before_traffic,
     send_virtual_user_traffic,
 )
@@ -56,7 +57,6 @@ def send_planned_user_traffic(
 ) -> tuple[dict[str, SessionKey], list[VirtualUserSessionResult]]:
     """가상 사용자 라벨 → 시스템이 준 세션 키 · 시스템에는 행동 값만 보냄 · VU 동시 실행"""
     booking_api = context.system_target.booking_api
-    behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
     context.report_progress(reset_before_traffic(booking_api))
 
     def report_traffic_progress(results: list[VirtualUserSessionResult | None]) -> None:
@@ -67,9 +67,10 @@ def send_planned_user_traffic(
         )
 
     session_results = send_virtual_user_traffic(
-        booking_api, build_session_plans(behaviors, context.run_config.random_seed),
+        booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, context.run_config.random_seed),
         context.run_config.duration_sec, report_traffic_progress,
     )
+    save_browser_captures(context.report_output_dir, context.run_id, session_results)  # B3 브라우저 화면
     session_key_by_label = {
         user.virtual_user_label: result.session_key for user, result in zip(planned_users, session_results)
     }
@@ -107,7 +108,12 @@ def read_rule_hit_counts_or_none(context: SuiteContext) -> dict[str, int] | None
 class VerdictAccuracySuite:
     suite_name = VERDICT_ACCURACY_SUITE_NAME
     title = "판정 정확도"
-    related_codes: tuple[str, ...] = ()
+    related_codes: tuple[str, ...] = ("E22",)  # 보류 판정
+    guide = SuiteGuide(
+        "시스템이 매크로는 매크로로, 사람은 사람으로 판정",
+        "누가 봇인지 적은 정답표와 시스템 판정 비교",
+        "매크로 탐지 90% 이상(브라우저 자동화 70%) · 사람 오판 1% 이하",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config

@@ -3,6 +3,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
@@ -15,18 +16,37 @@ from ticket_guard_qa.dashboard.dependencies import (
     render_screen,
 )
 from ticket_guard_qa.domain.enums import AlertPolicy, Comparison, RunStatus, TargetKind
-from ticket_guard_qa.domain.models import CriterionResult, RunConfig, RunSummary, TrafficMix
+from ticket_guard_qa.domain.models import LEGACY_TRAFFIC_FIELD_TO_ACTOR, CriterionResult, RunConfig, RunSummary, TrafficMix
+from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, list_bot_types
 from ticket_guard_qa.domain.pass_criteria import PASS_CRITERIA, PassCriterion
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
-from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunService
-from ticket_guard_qa.test_suites.suite_registry import list_suites
+from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunDeleteError, RunService
+from ticket_guard_qa.test_suites.suite_registry import get_suite, list_suites
 from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
 
 PROGRESS_POLL_INTERVAL_SEC = 0.5
+RESULT_LIST_LIMIT = 50  # 테스트 결과 목록 · 최신 Run
+RUN_STATUS_FILTERS = {"PASSED": "PASS", "FAILED": "FAIL", "RUNNING": "진행 중", "ERROR": "ERROR", "CANCELLED": "중지"}
 VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)
-DEFAULT_SUITE_NAMES = ("self_check", "event_contract", "verdict_accuracy", "pipeline_latency")
-TRAFFIC_FIELD_NAMES = ("human_percent", "bot_a_percent", "bot_b_percent", "bot_c_percent", "bot_d_percent")
+TRAFFIC_FIELD_PREFIX = "percent_"  # 폼 이름 · percent_HUMAN · percent_BOT_E
+
+
+def list_traffic_types(run_service: RunService) -> list[BotTypeInfo]:
+    """02 트래픽 구성 칸 · 평가 전용 · 작성 중 제외 · QA DB 추가 유형 포함"""
+    run_service.bot_profile_store.bot_type_store.refresh_catalog()
+    return [info for info in list_bot_types() if info.is_in_traffic_mix]
+
+
+def parse_traffic_mix(form, traffic_types: list[BotTypeInfo]) -> TrafficMix:
+    """새 이름(percent_유형) · 이전 이름(human_percent 등) 둘 다"""
+    legacy_name_by_actor = {actor: name for name, actor in LEGACY_TRAFFIC_FIELD_TO_ACTOR.items()}
+    percents = {}
+    for info in traffic_types:
+        actor = info.actor_type.value
+        raw_value = form.get(f"{TRAFFIC_FIELD_PREFIX}{actor}", form.get(legacy_name_by_actor.get(actor, ""), 0))
+        percents[actor] = int(raw_value or 0)
+    return TrafficMix(percents)
 ALERT_POLICY_TITLES = {AlertPolicy.NEVER: "알림 없음", AlertPolicy.ON_FAILURE: "FAIL 시 알림", AlertPolicy.ALWAYS: "항상 알림"}
 NEXT_ACTION_BY_CRITERION_ID = {
     "api_latency": "판정 API 지연 구간 분석 → 백엔드",
@@ -67,6 +87,7 @@ def _render_test_setup(
     return render_screen(request, "screen_02_test_setup.html", {
         "active_tab": "qa",
         "run_config": run_config,
+        "traffic_types": list_traffic_types(run_service),
         "suites": list_suites(),
         "virtual_user_presets": VIRTUAL_USER_PRESETS,
         "duration_presets_sec": DURATION_PRESETS_SEC,
@@ -85,7 +106,7 @@ def show_test_setup(request: Request, from_run_id: str | None = None, run_servic
     previous_summary = run_service.run_repository.get_summary(from_run_id) if from_run_id else None
     run_config = previous_summary.run_config if previous_summary else RunConfig(
         target_kind=run_service.settings.target_kind,
-        suite_names=DEFAULT_SUITE_NAMES,
+        suite_names=(),  # 처음 화면 · 선택 없음
         random_seed=run_service.settings.random_seed,
     )
     return _render_test_setup(request, run_service, run_config)
@@ -96,7 +117,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
     form = await request.form()
     suite_names = tuple(form.getlist("suite_names"))
     try:
-        traffic_mix = TrafficMix(**{name: int(form.get(name, 0)) for name in TRAFFIC_FIELD_NAMES})
+        traffic_mix = parse_traffic_mix(form, list_traffic_types(run_service))
         run_config = RunConfig(
             target_kind=TargetKind(form.get("target_kind", TargetKind.FAKE.value)),
             suite_names=suite_names,
@@ -108,7 +129,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
             alert_policy=AlertPolicy(form.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
         )
     except ValueError as error:
-        fallback_config = RunConfig(run_service.settings.target_kind, suite_names or DEFAULT_SUITE_NAMES)
+        fallback_config = RunConfig(run_service.settings.target_kind, suite_names)
         return _render_test_setup(request, run_service, fallback_config, str(error), status_code=400)
     if not suite_names:
         return _render_test_setup(request, run_service, run_config, "Suite 미선택 · 1개 이상 선택 필요", status_code=400)
@@ -129,7 +150,7 @@ def show_test_running(request: Request, run_id: str, run_service: RunService = D
     return render_screen(request, "screen_03_test_running.html", {
         "active_tab": "qa",
         "summary": summary,
-        "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
+        "run_suites": [get_suite(suite_name) for suite_name in summary.run_config.suite_names],  # 실행 순서
         "measurement_window_sec": run_service.measurement_window_sec(summary.run_config),
         "threshold_by_metric_name": {criterion.metric_name: criterion.threshold for criterion in PASS_CRITERIA},
     })
@@ -169,6 +190,51 @@ def build_criterion_comparisons(summary: RunSummary, previous_summary: RunSummar
     ]
 
 
+@router.get("/runs", response_class=HTMLResponse)
+def show_test_results(request: Request, status: str = "", deleted: str = "", run_service: RunService = Depends(get_run_service)) -> HTMLResponse:
+    """테스트 결과 · Run 기록 최신순 · 판정 거르기 · 04 리포트로 이동"""
+    return _render_result_list(request, run_service, status, f"Run {deleted[-11:]} 삭제 완료" if deleted else "")
+
+
+@router.post("/runs/{run_id}/delete")
+async def delete_test_run(request: Request, run_id: str, run_service: RunService = Depends(get_run_service)):
+    """Run 기록 · 정답표 · 보고서 삭제 · 진행 중 Run 거절 · 되돌릴 수 없음"""
+    form = await request.form()
+    status = str(form.get("status", ""))
+    try:
+        run_service.delete_run(run_id)
+    except RunDeleteError as error:
+        return _render_result_list(request, run_service, status, error_message=str(error), status_code=409)
+    query = {'status': status, 'deleted': run_id} if status else {'deleted': run_id}  # 거르기 유지
+    return redirect_to_page(request, f"/runs?{urlencode(query)}")
+
+
+def _render_result_list(
+    request: Request, run_service: RunService, status: str, notice: str = "", error_message: str = "", status_code: int = 200
+) -> HTMLResponse:
+    repository = run_service.run_repository
+    summaries = [summary for run_id in repository.list_recent_run_ids(RESULT_LIST_LIMIT)
+                 if (summary := repository.get_summary(run_id)) is not None]
+    selected_status = status if status in RUN_STATUS_FILTERS else ""
+    shown_summaries = [summary for summary in summaries if not selected_status or summary.status.value == selected_status]
+    return render_screen(request, "screen_04_result_list.html", {
+        "active_tab": "qa",
+        "active_subtab": "results",
+        "summaries": shown_summaries,
+        "delete_items_by_run_id": {summary.run_id: run_service.list_delete_items(summary)
+                                   for summary in shown_summaries if summary.status is not RunStatus.RUNNING},
+        "status_counts": {value: sum(summary.status.value == value for summary in summaries) for value in RUN_STATUS_FILTERS},
+        "total_count": len(summaries),
+        "selected_status": selected_status,
+        "status_titles": RUN_STATUS_FILTERS,
+        "criteria_total": len(PASS_CRITERIA),
+        "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
+        "active_run_id": run_service.active_run_id,
+        "notice": notice,
+        "error_message": error_message,
+    }, status_code)
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 def show_test_result(request: Request, run_id: str, run_service: RunService = Depends(get_run_service)):
     summary = run_service.run_repository.get_summary(run_id)
@@ -187,6 +253,7 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
     criterion_rows = build_criterion_rows(summary, suite_title_by_name)
     return render_screen(request, "screen_04_test_result.html", {
         "active_tab": "qa",
+        "active_subtab": "results",
         "summary": summary,
         "criterion_cards": criterion_cards,
         "criterion_rows": criterion_rows,

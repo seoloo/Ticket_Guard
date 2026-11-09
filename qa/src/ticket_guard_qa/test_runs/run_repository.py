@@ -67,6 +67,10 @@ class RunRepository:
             "criterion_results": [asdict(result) for result in summary.criterion_results],
         }})
 
+    def delete_run(self, run_id: str) -> bool:
+        """진행 중 아닌 Run만 · 지웠으면 True"""
+        return self.runs.delete_one({"_id": run_id, "status": {"$ne": RunStatus.RUNNING.value}}).deleted_count == 1
+
     def get_summary(self, run_id: str) -> RunSummary | None:
         document = self.runs.find_one({"_id": run_id})
         return summary_from_document(document) if document else None

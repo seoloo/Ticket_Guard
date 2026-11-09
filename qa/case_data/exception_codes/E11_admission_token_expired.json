@@ -1,0 +1,8 @@
+{
+  "related_code": "E11",
+  "title": "입장 토큰 만료",
+  "stage": "대기열 → 보안문자",
+  "input": "입장 후 유효 시간 경과",
+  "expected": "입장 권한 만료 · 대기열 재입장",
+  "system_error_code": "EXPIRED"
+}

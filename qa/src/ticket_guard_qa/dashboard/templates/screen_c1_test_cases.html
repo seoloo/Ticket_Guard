@@ -1,0 +1,122 @@
+{% extends "layout.html" %}
+{% from "screen_parts.html" import actor_chip, empty_state %}
+{% block title %}테스트 케이스 · Ground Truth | TicketGuard QA{% endblock %}
+{% block head %}
+<style>
+  .case-section { padding: 22px 24px; margin-bottom: 20px; }
+  .case-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .case-section-head .section-heading { margin: 0; }
+  .case-summary { display: flex; gap: 8px; flex-wrap: wrap; }
+  .case-table td { vertical-align: top; line-height: 1.55; }
+  .case-table .code-cell { font-weight: 800; white-space: nowrap; color: var(--qa-blue-text); }
+  .case-table .title-cell { font-weight: 700; white-space: nowrap; }
+  .case-table .stage-cell { white-space: nowrap; color: var(--sub-text-color); }
+  .suite-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill, .tag { white-space: nowrap; }
+  .truth-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+  .run-select { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .run-select select { min-width: 280px; }
+  .actor-count-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .actor-count-list li { display: flex; align-items: center; gap: 8px; border: 1px solid var(--soft-line-color); border-radius: 10px; padding: 8px 12px; }
+  .actor-count-list b { margin-left: auto; }
+  .entry-table-wrap { max-height: 420px; overflow-y: auto; border: 1px solid var(--soft-line-color); border-radius: 10px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1 class="page-heading">테스트 케이스 · Ground Truth</h1>
+<div class="sub-text" style="margin-bottom:18px">예외 코드별 검증 Suite · 이벤트 계약 사례 · Run별 정답표</div>
+
+<section class="card case-section">
+  <div class="case-section-head">
+    <h2 class="section-heading">예외 코드 사례</h2>
+    <span class="spacer"></span>
+    <div class="case-summary">
+      <span class="pill is-running">전체 {{ exception_rows | length }}</span>
+      <span class="pill is-passed">Suite 연결 {{ covered_case_count }}</span>
+      <span class="pill is-skipped">Suite 미연결 {{ exception_rows | length - covered_case_count }}</span>
+      <span class="pill is-warning">시스템 미대응 {{ unsupported_case_count }}</span>
+    </div>
+  </div>
+  <table class="result-table case-table">
+    <thead><tr><th>코드</th><th>예외</th><th>단계</th><th>입력</th><th>기대 동작</th><th>시스템 오류 코드</th><th>검증 Suite</th></tr></thead>
+    <tbody>
+    {% for case, covering_suites in exception_rows %}
+    <tr>
+      <td class="code-cell">{{ case.related_code }}</td>
+      <td class="title-cell">{{ case.title }}</td>
+      <td class="stage-cell">{{ case.stage }}</td>
+      <td>{{ case.input_description }}</td>
+      <td>{{ case.expected_description }}</td>
+      <td>{% if case.system_error_code %}<span class="mono">{{ case.system_error_code }}</span>{% else %}<span class="pill is-warning">미대응</span>{% endif %}</td>
+      <td><div class="suite-tags">
+        {% for suite in covering_suites %}<span class="tag is-qa">{{ suite.title }}</span>{% else %}<span class="pill is-skipped">미연결</span>{% endfor %}
+      </div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card case-section">
+  <div class="case-section-head">
+    <h2 class="section-heading">이벤트 계약 사례</h2>
+    <span class="spacer"></span>
+    <span class="pill is-running">전체 {{ contract_cases | length }}</span>
+  </div>
+  <table class="result-table case-table">
+    <thead><tr><th>사례</th><th>경로</th><th>내용</th><th>기대 결과</th></tr></thead>
+    <tbody>
+    {% for case in contract_cases %}
+    <tr>
+      <td class="mono">{{ case.case_name }}</td>
+      <td class="stage-cell">{{ endpoint_title_by_name.get(case.endpoint, case.endpoint) }}</td>
+      <td>{{ case.description }}</td>
+      <td class="stage-cell">
+        {% if case.endpoint == 'kafka' and case.expected_storage %}정제 {{ case.expected_storage.activity_event_count }} · 격리 {{ case.expected_storage.quarantine_reason_codes | join(', ') or '없음' }}
+        {% else %}{{ case.expected_status_codes | join(' · ') }}{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card case-section">
+  <div class="case-section-head">
+    <h2 class="section-heading">Ground Truth</h2>
+    <span class="tag is-qa"><i data-lucide="lock"></i>QA DB 전용</span>
+    <span class="spacer"></span>
+    {% if run_ids %}
+    <form class="run-select" method="get" action="{{ base_path }}/cases">
+      <select name="run_id" aria-label="Run 선택">
+        {% for run_id in run_ids %}<option value="{{ run_id }}" {{ 'selected' if run_id == selected_run_id }}>{{ run_id }}</option>{% endfor %}
+      </select>
+      <button class="button is-small" type="submit"><i data-lucide="search"></i>조회</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if answer_key_total %}
+  <div class="truth-grid">
+    <div>
+      <div class="sub-text" style="margin:0 0 10px">Run <b class="mono">{{ selected_run_id }}</b> · 세션 {{ answer_key_total }}</div>
+      <ul class="actor-count-list">
+        {% for type_info, count in actor_rows %}<li>{{ actor_chip(type_info) }}<b>{{ count }}</b></li>{% endfor %}
+      </ul>
+    </div>
+    <div>
+      <div class="sub-text" style="margin:0 0 10px">세션별 정답 · 표시 {{ answer_key_entries | length }} / {{ answer_key_total }}</div>
+      <div class="entry-table-wrap">
+        <table class="result-table">
+          <thead><tr><th>세션 키</th><th>정답</th></tr></thead>
+          <tbody>
+          {% for session_key, type_info in answer_key_entries %}<tr><td class="mono">{{ session_key }}</td><td>{{ actor_chip(type_info) }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="sub-text">정답표 없음 · 판정 정확도 Run 이후 표시</div>
+  {% endif %}
+</section>
+{% endblock %}

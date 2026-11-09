@@ -1,94 +1,247 @@
 {% extends "layout.html" %}
-{% from "screen_parts.html" import bot_screen_header, actor_chip %}
+{% from "screen_parts.html" import bot_screen_header, bot_badge, bot_status_chip %}
 {% block title %}봇 프로필 목록 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
-  .latest-strip { display: flex; align-items: center; gap: 12px; padding: 14px 20px; margin-bottom: 18px; flex-wrap: wrap; }
-  .bot-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-  .bot-card { padding: 22px 24px; border-top-width: 5px; display: flex; flex-direction: column; gap: 12px; }
-  .bot-card.is-below-target { border-color: #F6C2C4; border-top-color: var(--fail-red); background: #FFFAFA; }
-  .bot-card h2 { font-size: 19px; margin: 0; letter-spacing: -.03em; }
-  .bot-meta { display: flex; gap: 8px; flex-wrap: wrap; }
-  .behavior-lines { margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--sub-text-color); display: grid; gap: 4px; }
-  .behavior-lines b { color: var(--strong-text-color); font-weight: 700; margin-right: 4px; }
-  .detection-box { background: #FAFBFD; border: 1px solid var(--soft-line-color); border-radius: var(--small-card-radius); padding: 14px 16px; }
-  .detection-rate { font-size: 30px; font-weight: 800; letter-spacing: -.04em; }
-  .is-below-target .detection-rate { color: var(--fail-red-text); }
-  .bot-actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+  .latest-strip { display: flex; align-items: center; gap: 12px; padding: 12px 18px; flex-wrap: wrap; }
+  .section-title { display: flex; align-items: center; gap: 10px; margin: 22px 0 12px; flex-wrap: wrap; }
+  .section-title .section-number { width: 26px; height: 26px; border-radius: 8px; background: var(--strong-text-color); color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
+  .section-title h2 { margin: 0; font-size: 18px; letter-spacing: -.03em; }
+
+  .category-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .category-tile { padding: 12px 13px; display: flex; flex-direction: column; gap: 6px; color: inherit; }
+  .category-tile:hover { border-color: #C9D9FB; }
+  .category-tile.is-selected { outline: 2.5px solid var(--qa-blue); outline-offset: -1px; background: var(--qa-blue-soft); }
+  .category-tile .tile-title { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13.5px; white-space: nowrap; }
+  .category-tile .tile-title svg { width: 15px; height: 15px; }
+  .category-tile .tile-metric { font-size: 12px; font-weight: 700; color: var(--muted-text-color); white-space: nowrap; }
+  .category-tile .tile-value { font-size: 22px; font-weight: 800; letter-spacing: -.04em; }
+  .category-tile .tile-members { display: flex; gap: 4px; flex-wrap: wrap; }
+  .category-tile .tile-footer { display: flex; gap: 6px; align-items: center; font-size: 12px; white-space: nowrap; }
+
+  .list-toolbar { padding: 12px 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .search-box { display: flex; align-items: center; gap: 8px; border: 1.5px solid #DCE2EA; border-radius: 10px; padding: 0 12px; height: 38px; width: 300px; background: #fff; }
+  .search-box input { border: 0; outline: 0; font-size: 13.5px; width: 100%; font-family: inherit; background: transparent; }
+  .search-box svg { width: 16px; height: 16px; color: var(--muted-text-color); }
+  .toolbar-label { font-size: 12px; font-weight: 700; color: var(--muted-text-color); white-space: nowrap; }
+  .toolbar-divider { width: 1px; height: 22px; background: var(--line-color); margin: 0 4px; }
+  .filter-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600;
+    background: #fff; border: 1px solid var(--line-color); white-space: nowrap; color: var(--strong-text-color); }
+  .filter-chip.is-selected { background: var(--qa-blue-light); color: var(--qa-blue-text); border-color: var(--qa-blue-light); }
+  .filter-chip.is-empty { color: var(--muted-text-color); }
+
+  .list-layout { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 16px; align-items: start; }
+  .bot-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+  .bot-table th { font-size: 12px; color: var(--muted-text-color); text-align: left; padding: 11px 12px; background: #FAFBFD; border-bottom: 1px solid var(--line-color); white-space: nowrap; }
+  .bot-table td { padding: 9px 12px; border-bottom: 1px solid var(--soft-line-color); vertical-align: middle; }
+  .bot-table tr.group-row td { background: #F6F8FB; font-weight: 800; font-size: 12.5px; padding: 7px 12px; }
+  .bot-table tr.bot-row { cursor: pointer; }
+  .bot-table tr.bot-row:hover td { background: #FAFCFF; }
+  .bot-table tr.is-selected td { background: var(--qa-blue-soft); }
+  .bot-table tr.is-failed td:first-child { box-shadow: inset 3px 0 0 var(--fail-red); }
+  .bot-table .bot-name { font-weight: 800; white-space: nowrap; }
+  .bot-table .bot-code { font-size: 12px; font-weight: 700; color: var(--muted-text-color); white-space: nowrap; }
+  .bot-table .bot-purpose { color: var(--sub-text-color); font-size: 13px; }
+  .bot-table a.row-link { color: inherit; display: flex; align-items: center; gap: 10px; }
+  .result-cell { width: 170px; }
+  .result-bar { position: relative; height: 7px; border-radius: 99px; background: #E9EEF5; margin-top: 5px; }
+  .result-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
+  .result-bar b { position: absolute; top: -4px; width: 2px; height: 15px; background: var(--strong-text-color); border-radius: 1px; }
+  @media (max-width: 1280px) {  /* 좁은 화면 · 한 줄 정의는 오른쪽 상세에 */
+    .bot-table .purpose-column { display: none; }
+    .list-layout { grid-template-columns: minmax(0, 1fr) 400px; }
+  }
+  .empty-list { padding: 40px; text-align: center; color: var(--sub-text-color); }
+
+  .detail-panel { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 12px; }
+  .detail-panel h3 { margin: 0; font-size: 21px; letter-spacing: -.03em; }
+  .detail-part { border: 1px solid var(--soft-line-color); border-radius: var(--small-card-radius); padding: 13px 15px; }
+  .detail-part-title { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; margin-bottom: 9px; white-space: nowrap; }
+  .behavior-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+  .behavior-list li { display: grid; grid-template-columns: 100px 1fr; gap: 9px; }
+  .behavior-step { font-size: 12px; font-weight: 700; border-radius: 7px; padding: 3px 7px; text-align: center; white-space: nowrap; height: fit-content;
+    background: color-mix(in srgb, var(--bot-color) 12%, #fff); color: var(--bot-color-text, var(--bot-color)); }
+  .behavior-headline { font-size: 13.5px; font-weight: 700; }
+  .behavior-detail { font-size: 12.5px; color: var(--sub-text-color); margin-top: 1px; }
+  .signal-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+  .signal-list li { display: flex; align-items: flex-start; gap: 7px; font-size: 13px; line-height: 1.45; }
+  .signal-list svg { width: 15px; height: 15px; color: var(--bot-color); flex: none; margin-top: 2px; }
+  .result-rate { font-size: 28px; font-weight: 800; letter-spacing: -.04em; }
+  .is-failed-result .result-rate { color: var(--fail-red-text); }
+  .result-sentence { font-size: 13px; margin: 4px 0 9px; }
+  .result-target { font-size: 12.5px; color: var(--sub-text-color); margin-top: 7px; }
+  .detail-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .detail-actions form { margin: 0; }
 </style>
 {% endblock %}
+
+{% macro result_bar(info, row) %}
+{% set target = row.target if row else none %}
+<div class="result-bar"><i style="width:{{ [row.detection_rate_percent or 0, 100] | min }}%;background:var(--{{ info.color_token }})"></i>{% if target %}<b style="left:{{ target.criterion.threshold }}%"></b>{% endif %}</div>
+{% endmacro %}
+
+{% macro verdict_pill(item) %}
+{% if item.verdict_key == 'pass' %}<span class="pill is-passed">PASS</span>
+{% elif item.verdict_key == 'fail' %}<span class="pill is-failed">FAIL</span>
+{% elif item.has_result %}<span class="pill is-not-measured">기준 없음</span>
+{% else %}<span class="pill is-not-measured">결과 없음</span>{% endif %}
+{% endmacro %}
+
 {% block content %}
-{{ bot_screen_header("봇 프로필 목록", "봇 프로필별 행동 파라미터 · 최근 탐지 성능 · 다음 실행부터 버전 반영") }}
+{{ bot_screen_header("봇 프로필 목록", "QA가 시스템에 보내는 가상 사용자 · 매크로 봇 종류별 정의 · 예매 행동 · 탐지 결과") }}
 
 <section class="card latest-strip">
   <i data-lucide="history" style="color:var(--qa-blue)"></i>
   {% if latest_summary %}
-  <span>기준 Run <b class="mono">{{ latest_summary.run_id }}</b> · {{ latest_summary.finished_at | time_ago }}</span>
-  <span class="spacer"></span>
+  <span>탐지 결과 출처 · 최근 판정 정확도 시험 Run <b class="mono">{{ latest_summary.run_id }}</b> · {{ latest_summary.finished_at | time_ago }} 종료</span>
   <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ latest_summary.run_id }}/bots"><i data-lucide="grid-3x3"></i>탐지 리포트</a>
   {% else %}
-  <span class="muted">탐지 결과 없음 · 판정 정확도 시험 후 표시</span>
-  <span class="spacer"></span>
-  <a class="button is-small" href="{{ base_path }}/runs/new"><i data-lucide="play"></i>새 Run 설정</a>
+  <span class="muted">탐지 결과 없음 · 판정 정확도 시험 Run 종료 후 표시</span>
+  <a class="button is-soft is-small" href="{{ base_path }}/runs/new"><i data-lucide="play"></i>새 Run 설정</a>
   {% endif %}
+  <span class="spacer"></span>
+  {% for key, title in [('active', '사용 중'), ('review', '검증 중'), ('draft', '작성 중'), ('locked', '평가 전용')] %}{{ bot_status_chip(key, title) }}{% endfor %}
+  <a class="button is-small" href="{{ base_path }}/bots/new"><i data-lucide="plus"></i>새 봇 추가</a>
 </section>
 
-<div class="bot-card-grid">
-  {% for card in cards %}
-  {% set profile = card.profile %}
-  {% set info = profile.type_info %}
-  {% set row = card.detection_row %}
-  <section class="card bot-card {{ 'is-below-target' if row and row.is_meeting_target is false }}" style="border-top-color:var(--{{ info.color_token }})">
-    <div class="row">
-      <h2>{{ info.display_name }}</h2>
-      <span class="spacer"></span>
-      {% if info.is_locked %}<span class="pill is-not-measured"><i data-lucide="lock" style="width:13px;height:13px"></i>평가 전용 · 수정 불가</span>{% endif %}
-    </div>
-    <div class="sub-text" style="margin:0">{{ info.purpose }}</div>
-    <div class="bot-meta">
-      <span class="tag is-qa"><i data-lucide="{{ 'globe' if info.traffic_channel == '브라우저 트래픽' else 'network' }}"></i>{{ info.traffic_channel }}</span>
-      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">v{{ profile.version_number }} · {{ profile.saved_at | time_ago if profile.saved_at else '초기값' }}</span>
-    </div>
-    <ul class="behavior-lines">
-      {% for group_title, specs in field_groups.items() %}
-      <li><b>{{ group_title }}</b>{% for spec in specs %}{{ spec.title }} {{ '{:,}'.format(profile.behavior | attr(spec.field_name)) }}{{ spec.unit }}{{ ' · ' if not loop.last }}{% endfor %}</li>
-      {% endfor %}
-    </ul>
-
-    <div class="detection-box">
-      {% if row and row.session_count %}
-      {% set target = row.target %}
-      <div class="row">
-        <span class="muted">{{ '오탐률' if not info.actor_type.is_bot else '탐지율' }} · n={{ row.session_count }}</span>
-        <span class="spacer"></span>
-        {% if row.is_meeting_target is true %}<span class="pill is-passed">PASS</span>
-        {% elif row.is_meeting_target is false %}<span class="pill is-failed">FAIL</span>
-        {% else %}<span class="pill is-not-measured">N/A</span>{% endif %}
-      </div>
-      <div class="detection-rate">{{ row.detection_rate_percent | metric('rate_percent') }}</div>
-      {% if target %}
-      {% set criterion = target.criterion %}
-      <div class="target-bar" title="기준선 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}">
-        <i style="width:{{ [row.detection_rate_percent, 100] | min }}%;background:var(--{{ info.color_token }})"></i>
-        <b style="left:{{ criterion.threshold }}%"></b>
-      </div>
-      <div class="muted" style="margin-top:6px;font-size:12.5px">기준선 {{ criterion.comparison.value | threshold(criterion.threshold, criterion.metric_name) }}{% if target.actor_types | length > 1 %} ({% for actor_type in target.actor_types %}{{ (actor_type | bot_type_info).short_name }}{{ ' · ' if not loop.last }}{% endfor %} 합산){% endif %}</div>
-      {% else %}
-      <div class="muted" style="font-size:12.5px">기준선 없음 · 참고 지표</div>
-      {% endif %}
-      {% else %}
-      <span class="muted">데이터 없음</span>
-      {% endif %}
-    </div>
-
-    <div class="bot-actions">
-      {% if row and row.is_meeting_target is false %}
-      <a class="button is-db is-small" href="{{ base_path }}/db?run_id={{ latest_summary.run_id }}"><i data-lucide="database"></i>{{ '미탐 세션 분석' if info.actor_type.is_bot else '오탐 세션 분석' }}</a>
-      {% endif %}
-      <a class="button {{ 'is-outline' if info.is_locked else 'is-soft' }} is-small" href="{{ base_path }}/bots/{{ info.slug }}/edit">
-        <i data-lucide="{{ 'eye' if info.is_locked else 'sliders-horizontal' }}"></i>{{ '프로필 조회' if info.is_locked else '프로필 편집' }}</a>
-    </div>
-  </section>
+<div class="section-title"><span class="section-number">1</span><h2>수법 분류별 탐지 현황</h2></div>
+<div class="category-tiles">
+  {% for tile in view.tiles %}
+  {% set is_selected = view.filters.category == tile.category.category_id %}
+  <a class="card category-tile {{ 'is-selected' if is_selected }}" href="{{ base_path }}{{ view.build_url(category='' if is_selected else tile.category.category_id, bot='') }}">
+    <span class="tile-title"><i data-lucide="{{ tile.category.icon_name }}"></i>{{ tile.category.title }}</span>
+    <span><span class="tile-metric">{{ '오탐률' if tile.is_baseline else '합산 탐지율' }}</span>
+      <span class="tile-value" style="display:block">{{ tile.rate_percent | metric('rate_percent') }}</span></span>
+    <span class="tile-members">{% for item in tile.items %}{{ bot_badge(item.info, 22) }}{% endfor %}</span>
+    <span class="tile-footer">
+      {% if tile.fail_count %}<span class="pill is-failed">FAIL {{ tile.fail_count }}</span>{% else %}<span class="pill is-passed">FAIL 0</span>{% endif %}
+      <span class="muted">{{ tile.items | length }}종{% if tile.unmeasured_count %} · 결과 없음 {{ tile.unmeasured_count }}{% endif %}</span>
+    </span>
+  </a>
   {% endfor %}
 </div>
+
+<div class="section-title"><span class="section-number">2</span><h2>봇 목록</h2></div>
+<section class="card list-toolbar">
+  <form class="search-box" method="get" action="{{ base_path }}/bots">
+    <i data-lucide="search"></i>
+    {% for name, value in view.filters.items() if name != 'q' and value %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+    <input type="search" name="q" value="{{ view.filters.q }}" placeholder="봇 이름 · 수법 · 탐지 흔적 검색" aria-label="봇 검색">
+  </form>
+  <span class="toolbar-divider"></span>
+  <span class="toolbar-label">상태</span>
+  {% for option in view.status_options %}<a class="filter-chip {{ 'is-selected' if option.is_selected }} {{ 'is-empty' if not option.count }}" href="{{ base_path }}{{ option.url }}">{{ option.title }} {{ option.count }}</a>{% endfor %}
+  <span class="toolbar-divider"></span>
+  <span class="toolbar-label">판정</span>
+  {% for option in view.verdict_options %}<a class="filter-chip {{ 'is-selected' if option.is_selected }} {{ 'is-empty' if not option.count }}" href="{{ base_path }}{{ option.url }}">{{ option.title }} {{ option.count }}</a>{% endfor %}
+  <span class="toolbar-divider"></span>
+  <span class="toolbar-label">트래픽</span>
+  {% for option in view.channel_options %}<a class="filter-chip {{ 'is-selected' if option.is_selected }} {{ 'is-empty' if not option.count }}" href="{{ base_path }}{{ option.url }}"><i data-lucide="{{ 'globe' if option.value == 'browser' else 'network' }}" style="width:14px;height:14px"></i>{{ option.title }} {{ option.count }}</a>{% endfor %}
+  <span class="spacer"></span>
+  <span class="toolbar-label">{{ view.total_count }}종 중 {{ view.shown_count }}종</span>
+  {% if view.filters.values() | select | list %}<a class="filter-chip" href="{{ base_path }}/bots"><i data-lucide="x" style="width:14px;height:14px"></i>필터 해제</a>{% endif %}
+</section>
+
+<div class="list-layout">
+  <section class="card" style="padding:4px 6px">
+    {% if view.groups %}
+    <table class="bot-table">
+      <thead><tr><th>봇</th><th class="purpose-column">한 줄 정의</th><th>상태</th><th>트래픽</th><th>최근 탐지 결과</th></tr></thead>
+      <tbody>
+        {% for group in view.groups %}
+        <tr class="group-row"><td colspan="5">{{ group.category.title }} · {{ group.items | length }}종</td></tr>
+        {% for item in group.items %}
+        {% set info = item.info %}
+        {% set row_url = base_path ~ view.build_url(bot=info.slug) %}
+        <tr class="bot-row {{ 'is-selected' if view.selected and view.selected.info.slug == info.slug }} {{ 'is-failed' if item.verdict_key == 'fail' }}" data-href="{{ row_url }}">
+          <td><a class="row-link" href="{{ row_url }}">{{ bot_badge(info, 32) }}<span><span class="bot-code">{{ info.role_label }}</span><br><span class="bot-name">{{ info.type_name }}</span></span></a></td>
+          <td class="bot-purpose purpose-column">{{ info.purpose or '한 줄 정의 미입력' }}</td>
+          <td>{{ bot_status_chip(info.status_key, info.status_title) }}</td>
+          <td><span class="tag is-qa"><i data-lucide="{{ 'globe' if item.channel_key == 'browser' else 'network' }}"></i>{{ info.traffic_channel }}</span></td>
+          <td class="result-cell">
+            {% if item.has_result %}
+            <div class="row" style="gap:6px"><b>{{ item.detection_row.detection_rate_percent | metric('rate_percent') }}</b><span class="spacer"></span>{{ verdict_pill(item) }}</div>
+            {{ result_bar(info, item.detection_row) }}
+            {% else %}{{ verdict_pill(item) }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-list">조건에 맞는 봇 없음 · <a href="{{ base_path }}/bots" style="color:var(--qa-blue-text);font-weight:700">필터 해제</a></div>
+    {% endif %}
+  </section>
+
+  {% if view.selected %}
+  {% set item = view.selected %}
+  {% set info = item.info %}
+  {% set row = item.detection_row %}
+  <section class="card detail-panel {{ 'is-failed-result' if item.verdict_key == 'fail' }}"
+           style="--bot-color:var(--{{ info.color_token }}){% if info.color_token == 'bot-b' %};--bot-color-text:#6D4AE0{% endif %}">
+    <div class="row">{{ bot_badge(info, 50) }}<div><div class="bot-code" style="font-size:12px;font-weight:700;color:var(--muted-text-color)">{{ info.role_label }} · {{ info.category.title }}</div><h3>{{ info.type_name }}</h3></div></div>
+    <div class="row" style="flex-wrap:wrap">
+      {{ bot_status_chip(info.status_key, info.status_title) }}
+      <span class="tag is-qa"><i data-lucide="{{ 'globe' if item.channel_key == 'browser' else 'network' }}"></i>{{ info.traffic_channel }}</span>
+      <span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">설정 v{{ item.profile.version_number }} · {{ (item.profile.saved_at | time_ago) ~ ' 저장' if item.profile.saved_at else '초기값' }}</span>
+    </div>
+    <div class="detail-part"><div class="detail-part-title">한 줄 정의</div><div style="font-size:14px;font-weight:600;line-height:1.5">{{ info.purpose or '미입력' }}</div></div>
+    <div class="detail-part"><div class="detail-part-title">예매 중 행동</div>
+      <ul class="behavior-list">
+        {% for line in item.behavior_lines %}<li><span class="behavior-step">{{ line.step_title }}</span><div><div class="behavior-headline">{{ line.headline }}</div><div class="behavior-detail">{{ line.detail }}</div></div></li>{% endfor %}
+      </ul></div>
+    <div class="detail-part"><div class="detail-part-title">탐지 시스템이 잡아야 할 흔적</div>
+      {% if info.detection_signals %}<ul class="signal-list">{% for signal in info.detection_signals %}<li><i data-lucide="scan-search"></i>{{ signal }}</li>{% endfor %}</ul>
+      {% else %}<span class="muted" style="font-size:13px">탐지 흔적 미입력</span>{% endif %}</div>
+    <div class="detail-part"><div class="detail-part-title">최근 탐지 결과<span class="spacer"></span>{{ verdict_pill(item) }}</div>
+      {% if item.has_result %}
+      <div class="row" style="align-items:baseline;gap:8px"><span class="result-rate">{{ row.detection_rate_percent | metric('rate_percent') }}</span><span class="muted" style="font-size:13px;font-weight:700">{{ '탐지율' if info.actor_type.is_bot else '오탐률' }}</span></div>
+      <div class="result-sentence">{% if info.actor_type.is_bot %}봇 세션 {{ row.session_count }}개 중 {{ row.detected_count }}개 봇 의심 판정{% else %}정상 세션 {{ row.session_count }}개 중 {{ row.detected_count }}개 봇으로 잘못 판정{% endif %}</div>
+      {{ result_bar(info, row) }}
+      <div class="result-target">{% if row.target %}합격 기준 {{ row.target.criterion | target_words }}{% if row.target.actor_types | length > 1 %} · {% for actor_type in row.target.actor_types %}{{ (actor_type | bot_type_info).short_name }}{{ ' · ' if not loop.last }}{% endfor %} 합산 판정{% endif %}{% else %}합격 기준 없음 · 결과 공개만{% endif %}</div>
+      {% else %}
+      <div class="muted" style="font-size:13px;line-height:1.6">{% if info.status.value == 'draft' %}작성 중 · Run 제외 · 추가 단계 완료 후 검증 중{% else %}판정 정확도 시험 Run 종료 후 표시{% endif %}</div>
+      {% endif %}
+    </div>
+    <div class="detail-actions">
+      {% if item.verdict_key == 'fail' and latest_summary %}
+      <a class="button is-db is-small" href="{{ base_path }}/db?run_id={{ latest_summary.run_id }}"><i data-lucide="database"></i>{{ '놓친 봇 세션 분석' if info.actor_type.is_bot else '오탐 세션 분석' }}</a>
+      {% endif %}
+      {% if info.is_custom and info.status.value == 'review' %}
+      <form method="post" action="{{ base_path }}/bots/{{ info.slug }}/status"><input type="hidden" name="status" value="active">
+        <button class="button is-outline is-small" type="submit"><i data-lucide="circle-check"></i>사용 중으로 전환</button></form>
+      {% endif %}
+      <span class="spacer"></span>
+      {% if info.is_custom and info.status.value == 'draft' %}
+      <a class="button is-small" href="{{ base_path }}/bots/{{ info.slug }}/setup/2"><i data-lucide="pencil-line"></i>추가 단계 이어서</a>
+      {% else %}
+      <a class="button {{ 'is-outline' if info.is_locked else 'is-soft' }} is-small" href="{{ base_path }}/bots/{{ info.slug }}/edit">
+        <i data-lucide="{{ 'eye' if info.is_locked else 'sliders-horizontal' }}"></i>{{ '설정 조회' if info.is_locked else '행동 설정 편집' }}</a>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+<script>
+  // 행 · 분류 타일 · 필터 클릭 = 같은 화면 다시 그림 · 보던 위치 유지 (맨 위로 올라가지 않게)
+  const BOT_LIST_SCROLL_KEY = "b1-scroll-y";
+  const rememberScroll = () => {
+    try { sessionStorage.setItem(BOT_LIST_SCROLL_KEY, String(window.scrollY)); } catch (error) { /* 저장 불가 = 기본 동작 */ }
+  };
+  document.querySelectorAll(".category-tile, .list-toolbar a, .bot-table a, .empty-list a")
+    .forEach((element) => element.addEventListener("click", rememberScroll));
+  document.querySelectorAll(".bot-table tr.bot-row").forEach((row) => row.addEventListener("click", (event) => {
+    if (event.target.closest("a")) return;  // 이름 링크는 링크 그대로
+    rememberScroll();
+    location.href = row.dataset.href;
+  }));
+  document.querySelector(".list-toolbar form")?.addEventListener("submit", rememberScroll);
+  document.addEventListener("DOMContentLoaded", () => {  // 아이콘까지 그린 뒤 · 높이 확정 후 복원
+    let savedY = null;
+    try { savedY = sessionStorage.getItem(BOT_LIST_SCROLL_KEY); sessionStorage.removeItem(BOT_LIST_SCROLL_KEY); } catch (error) { return; }
+    if (savedY !== null) window.scrollTo(0, Number(savedY));
+  });
+</script>
 {% endblock %}

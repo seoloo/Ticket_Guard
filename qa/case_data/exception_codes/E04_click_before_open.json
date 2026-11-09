@@ -1,0 +1,8 @@
+{
+  "related_code": "E04",
+  "title": "오픈 전 클릭",
+  "stage": "공연 상세",
+  "input": "오픈 시각 이전 예매하기 클릭",
+  "expected": "예매 시작 거부 · 오픈 시각 안내",
+  "system_error_code": "NOT_OPEN"
+}

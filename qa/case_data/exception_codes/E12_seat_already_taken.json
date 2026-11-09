@@ -1,0 +1,8 @@
+{
+  "related_code": "E12",
+  "title": "이미 선택한 좌석",
+  "stage": "좌석 선택",
+  "input": "같은 좌석 동시 확정",
+  "expected": "예매 1건 · 나머지 먼저 판매 안내",
+  "system_error_code": "SEAT_SOLD"
+}

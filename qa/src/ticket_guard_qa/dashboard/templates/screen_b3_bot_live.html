@@ -14,6 +14,10 @@
   .step-cell .progress-bar i { transition: none; }
   .entry-chart { width: 100%; height: 190px; margin-top: 12px; }
   .entry-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12.5px; }
+  .capture-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+  .capture-frame { margin: 0; }
+  .capture-frame svg, .capture-frame img { width: 100%; display: block; border-radius: 8px; }
+  .capture-frame figcaption { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; margin-top: 4px; white-space: nowrap; }
   .capture-box { border: 1.5px dashed #CBD3DF; border-radius: 14px; padding: 26px; text-align: center; color: var(--muted-text-color); margin-top: 12px; }
   .behavior-log { list-style: none; padding: 0; margin: 12px 0 0; max-height: 200px; overflow: auto; font-size: 13px; color: var(--sub-text-color); }
   .behavior-log li { padding: 5px 0; border-bottom: 1px solid var(--soft-line-color); }
@@ -44,7 +48,7 @@
       <div class="row"><h2 class="section-heading">유형별 퍼널</h2><span class="spacer"></span><span class="muted" id="progress-updated">{{ 'Live' if is_running else 'Final' }}</span></div>
       <table class="result-table" style="margin-top:12px">
         <tr><th>유형</th><th>계획</th>{% for step, title in session_step_titles.items() %}<th>{{ title }}</th>{% endfor %}</tr>
-        {% for info in bot_type_catalog if info.actor_type.value in actor_progress %}
+        {% for info in bot_type_catalog() if info.actor_type.value in actor_progress %}
         {% set progress = actor_progress[info.actor_type.value] %}
         {% set planned_count = progress[planned_progress_key] %}
         <tr data-actor="{{ info.actor_type.value }}" data-planned="{{ planned_count }}">
@@ -102,8 +106,32 @@
     </section>
 
     <section class="card panel">
-      <div class="row"><h2 class="section-heading">봇 C 스크린샷</h2><span class="spacer"></span>{{ actor_chip('BOT_C' | bot_type_info) }}</div>
-      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">스크린샷 수집 미구현</div></div>
+      <div class="row"><h2 class="section-heading">브라우저 봇 화면 캡처</h2><span class="spacer"></span>{% if capture_frames and is_mock_capture %}<span class="pill is-skipped">Mock 캡처</span>{% endif %}{% if captured_browser_type %}{{ actor_chip(captured_browser_type) }}{% endif %}</div>
+      {% if capture_frames %}
+      {% set screen_width, screen_height = capture_screen_size %}
+      <div class="capture-strip">
+        {% for frame in capture_frames %}
+        <figure class="capture-frame">
+          {% if frame.image_file_name %}
+          <img src="{{ base_path }}/runs/{{ summary.run_id }}/captures/{{ frame.image_file_name }}" alt="{{ frame.step }} 화면">
+          {% else %}
+          <svg viewBox="0 0 {{ screen_width }} {{ screen_height }}" role="img" aria-label="{{ frame.step }} 화면">
+            <rect x="0.5" y="0.5" width="{{ screen_width - 1 }}" height="{{ screen_height - 1 }}" rx="8" fill="#fff" stroke="var(--line-color)"/>
+            <rect x="0.5" y="0.5" width="{{ screen_width - 1 }}" height="16" rx="8" fill="var(--qa-blue-light)"/>
+            <text x="8" y="12" font-size="8" font-weight="700" fill="var(--qa-blue-text)">{{ frame.step }}</text>
+            <rect x="10" y="26" width="{{ screen_width - 20 }}" height="10" rx="3" fill="#EEF1F5"/>
+            <rect x="10" y="42" width="{{ (screen_width - 20) * 0.6 }}" height="10" rx="3" fill="#EEF1F5"/>
+            <rect x="10" y="{{ screen_height - 24 }}" width="{{ screen_width - 20 }}" height="14" rx="4" fill="var(--qa-blue)" opacity=".85"/>
+            {% if frame.click_x is not none %}<circle cx="{{ frame.click_x }}" cy="{{ frame.click_y }}" r="6" fill="var(--fail-red)" opacity=".35"/><circle cx="{{ frame.click_x }}" cy="{{ frame.click_y }}" r="2.5" fill="var(--fail-red)"/>{% endif %}
+          </svg>
+          {% endif %}
+          <figcaption><b>{{ frame.step }}</b><span class="muted">+{{ '%.2f' % (frame.elapsed_ms / 1000) }}초</span></figcaption>
+        </figure>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">{{ '브라우저 트래픽 유형 비율 0%' if not captured_browser_type else ('Run 진행 중 · 종료 후 표시' if summary.status.value == 'RUNNING' else '캡처 없음 · 브라우저 실행 환경 미구성(browser 묶음 · Chromium)') }}</div></div>
+      {% endif %}
     </section>
   </aside>
 </div>

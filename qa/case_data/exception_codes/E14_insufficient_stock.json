@@ -1,0 +1,8 @@
+{
+  "related_code": "E14",
+  "title": "잔여 수량 부족",
+  "stage": "좌석 선택 · 자유석",
+  "input": "잔여 수량보다 많은 인원 확정",
+  "expected": "확정 거부 · 초과 판매 0",
+  "system_error_code": "INSUFFICIENT_STOCK"
+}

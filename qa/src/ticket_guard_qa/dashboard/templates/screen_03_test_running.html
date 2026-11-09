@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% from "screen_parts.html" import test_steps %}
+{% from "screen_parts.html" import suite_tooltip, test_steps %}
 {% block title %}Run 모니터 | TicketGuard QA{% endblock %}
 {% block head %}
 <style>
@@ -14,6 +14,7 @@
   .elapsed-total { font-size: 30px; font-weight: 800; color: var(--sub-text-color); }
   .remaining-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--qa-blue-light); color: var(--qa-blue-text); border-radius: 999px; padding: 14px 28px; font-size: 30px; font-weight: 800; margin-top: 14px; }
   .remaining-pill svg { width: 30px; height: 30px; }
+  .remaining-pill.is-over { background: var(--fail-red-light); color: var(--fail-red-text); }  /* 예상 시간 지남 */
   .connection-line { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 16px 0 20px; color: var(--sub-text-color); font-size: 16px; }
   .connection-line b { color: var(--pass-green); }
   .connection-line.is-down b { color: var(--fail-red-text); }
@@ -27,6 +28,24 @@
   .progress-log { list-style: none; padding: 0; margin: 14px 0 0; max-height: 140px; overflow: auto; font-size: 13.5px; color: var(--sub-text-color); }
   .progress-log li { padding: 5px 0; border-bottom: 1px solid var(--soft-line-color); }
   .state-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; }
+  .run-heading { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .run-heading .section-heading { font-size: 22px; margin: 0; }
+  .tag.is-gray { background: var(--gray-chip-background); color: var(--sub-text-color); }
+  .suite-progress-line { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--sub-text-color); }
+  .suite-progress-line b { color: var(--qa-blue-text); }
+  .suite-segments { display: grid; gap: 4px; margin-top: 8px; }
+  .suite-segment { height: 10px; border-radius: 3px; background: #E5E9F0; transition: background .2s; }
+  .suite-segment.is-done { background: var(--pass-green); }
+  .suite-segment.is-now { background: var(--qa-blue); }
+  .run-suite-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .run-suite-chip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1.5px solid #DCE2EA;
+    background: #fff; color: var(--muted-text-color); font-size: 13px; font-weight: 700; white-space: nowrap; cursor: default; }
+  .run-suite-chip .suite-order { font-size: 11px; opacity: .75; }
+  .run-suite-chip.is-done { background: var(--pass-green-light); border-color: #BFE6CD; color: var(--pass-green); }
+  .run-suite-chip.is-done .suite-mark::before { content: "✓"; }
+  .run-suite-chip.is-now { background: var(--qa-blue); border-color: var(--qa-blue); color: #fff; }
+  .run-suite-chip.is-now .suite-mark::before { content: "●"; font-size: 10px; }
+  .run-suite-chip .suite-tooltip { font-size: 13px; }
   [hidden] { display: none !important; }
 </style>
 {% endblock %}
@@ -40,7 +59,7 @@
       {% if run_config.target_kind.value == 'fake' %}<span class="pill is-skipped">Mock · 예시 수치</span>{% endif %}</div>
     <div class="time-box">
       <div><div class="time-label">경과 시간</div><span class="elapsed-number" id="elapsed-number">0</span><span class="elapsed-total"> / {{ measurement_window_sec | int }}초</span></div>
-      <div><div class="time-label">남은 시간(예상)</div><span class="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
+      <div><div class="time-label">남은 시간(예상)</div><span class="remaining-pill" id="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
     </div>
     <div class="progress-bar"><i id="progress-fill"></i></div>
     <div class="connection-line" id="connection-line"><span class="status-dot" id="connection-dot"></span><b id="connection-text">연결 정상</b><span class="muted">|</span>종료 시 Run 리포트 자동 이동</div>
@@ -53,7 +72,23 @@
   <div class="running-right">
     <div class="row"><span class="tag is-qa"><i data-lucide="activity"></i>실시간 지표</span><span class="spacer"></span>
       <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots/live"><i data-lucide="bot"></i>봇 트래픽 모니터</a><span class="live-badge">LIVE</span></div>
-    <h2 class="section-heading" style="font-size:22px;margin-top:12px;line-height:1.35">Run {{ summary.run_id[-11:] }} · {% for suite_name in run_config.suite_names %}{{ suite_title_by_name.get(suite_name, suite_name) }}{{ ' · ' if not loop.last }}{% endfor %}</h2>
+    <div class="run-heading">
+      <h2 class="section-heading">Run {{ summary.run_id[-11:] }}</h2>
+      <span class="tag is-gray">{{ 'Mock' if run_config.target_kind.value == 'fake' else 'Live' }}</span>
+      <span class="tag is-gray">VU {{ run_config.virtual_user_count }}</span>
+    </div>
+    <div class="suite-progress-line">Suite 진행 <b id="suite-progress-count">0 / {{ run_suites | length }}</b> · 완료 <span id="suite-done-count">0</span> · 대기 <span id="suite-wait-count">{{ run_suites | length }}</span></div>
+    <div class="suite-segments" style="grid-template-columns: repeat({{ run_suites | length }}, 1fr)">
+      {% for suite in run_suites %}<span class="suite-segment is-wait" data-suite-name="{{ suite.suite_name }}"></span>{% endfor %}
+    </div>
+    <div class="run-suite-chips suite-chips">
+      {% for suite in run_suites %}
+      <span class="run-suite-chip suite-chip is-wait" data-suite-name="{{ suite.suite_name }}" tabindex="0" aria-describedby="suite-guide-{{ suite.suite_name }}">
+        <span class="suite-mark" aria-hidden="true"></span><span class="suite-order">{{ loop.index }}</span>{{ suite.title }}
+        {{ suite_tooltip(suite) }}
+      </span>
+      {% endfor %}
+    </div>
     <div class="live-metrics">
       {% set live_cards = [
         ("api_latency_p95_sec", "판정 API p95 지연", "초"),
@@ -98,7 +133,11 @@
   const pageOpenedAt = Date.now();
 
   function formatRemaining(seconds) {
-    return seconds < 60 ? `약 ${Math.max(Math.round(seconds), 0)}초` : `약 ${Math.round(seconds / 60)}분`;
+    if (seconds < 0) {  // 예상 시간 지남 · Suite 아직 진행 중
+      const overSec = Math.round(-seconds);
+      return overSec < 60 ? `${overSec}초 초과` : `${Math.round(overSec / 60)}분 초과`;
+    }
+    return seconds < 60 ? `약 ${Math.round(seconds)}초` : `약 ${Math.round(seconds / 60)}분`;
   }
 
   function drawSparkline(card, values) {
@@ -135,6 +174,24 @@
     document.getElementById("progress-log").prepend(item);
   }
 
+  // Suite 진행 · 실행 순서 = Run 설정 순서 · 시작 메시지의 suite_name 기준
+  const runSuiteNames = {{ run_suites | map(attribute='suite_name') | list | tojson }};
+  function markSuiteProgress(currentIndex) {
+    if (currentIndex < 0) return;
+    const stateOf = (index) => index < currentIndex ? "is-done" : index === currentIndex ? "is-now" : "is-wait";
+    runSuiteNames.forEach((suiteName, index) => {
+      document.querySelectorAll(`[data-suite-name="${suiteName}"]`).forEach((element) => {
+        element.classList.remove("is-done", "is-now", "is-wait");
+        element.classList.add(stateOf(index));
+      });
+    });
+    const total = runSuiteNames.length;
+    const doneCount = Math.min(currentIndex, total);
+    document.getElementById("suite-progress-count").textContent = `${Math.min(currentIndex + 1, total)} / ${total}`;
+    document.getElementById("suite-done-count").textContent = doneCount;
+    document.getElementById("suite-wait-count").textContent = Math.max(total - doneCount - (currentIndex < total ? 1 : 0), 0);
+  }
+
   const progressEvents = new EventSource("{{ base_path }}/runs/{{ summary.run_id }}/events");
   progressEvents.onmessage = (event) => {
     const message = JSON.parse(event.data);
@@ -144,13 +201,18 @@
       const ratio = message.total_sec ? message.elapsed_sec / message.total_sec : 1;
       document.getElementById("progress-fill").style.width = `${Math.min(ratio, 1) * 100}%`;
       document.getElementById("remaining-text").textContent = formatRemaining(message.total_sec - message.elapsed_sec);
+      document.getElementById("remaining-pill").classList.toggle("is-over", message.elapsed_sec > message.total_sec);
     } else {
       addLog(message.text);
     }
     if (message.live_metrics) showLiveMetrics(message.live_metrics);
-    if (message.suite_name) document.getElementById("state-recovering").hidden = message.suite_name !== "failure_recovery";
+    if (message.suite_name) {
+      document.getElementById("state-recovering").hidden = message.suite_name !== "failure_recovery";
+      markSuiteProgress(runSuiteNames.indexOf(message.suite_name));
+    }
     if (message.is_finished) {
       progressEvents.close();
+      markSuiteProgress(runSuiteNames.length);
       document.getElementById("progress-fill").style.width = "100%";
       window.location.href = resultUrl;  // 끝나면 04로 자동 이동
     }

@@ -14,6 +14,9 @@ from ticket_guard_qa.domain.models import (
 )
 
 
+PIPELINE_SERVICE_NAME = "pipeline"  # 장애 복구 · Kafka → 정제 · 격리 저장 작업
+
+
 class AccountPoolExhaustedError(RuntimeError):
     """Live 시험 계정 수보다 VU가 많음"""
 
@@ -40,6 +43,24 @@ class ConfirmResponse:
     booking_id: str | None  # 200일 때만
     remaining_quantity: int | None  # 409 재고 응답 본문
     latency_ms: float
+
+
+@dataclass(frozen=True)
+class AdmissionSample:
+    """대기열 통과 구간 하나 · T1 동시 입장 측정 · 단조 시계 초 · 입장 실패면 시각 None"""
+    admitted_at_sec: float | None
+    released_at_sec: float | None
+    wait_ms: float  # 대기열 진입 → 입장
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class StoredOutcome:
+    """토픽 메시지 하나의 정제 · 격리 저장 결과 · 위치(파티션 · 오프셋)로 연결"""
+    partition: int
+    offset: int
+    collection_name: str  # clean_events · quarantine_events
+    reason_code: str | None = None  # 격리 사유
 
 
 @dataclass
@@ -71,6 +92,13 @@ class BookingApi(Protocol):
     ) -> list[ConfirmResponse]: ...  # repeat_count 2 = 같은 확정 동시 재전송
 
     async def release_seat_contender(self, contender: SeatContender) -> None: ...
+    async def send_confirm_with_last_sequence(
+        self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, is_same_sequence: bool
+    ) -> ConfirmResponse: ...  # is_same_sequence = 직전 순번 재사용 · 오래된 요청 거부 확인
+    # 부하 · T1 동시 입장 상한 · T2 요청 속도 제한
+    def admission_limit(self) -> int | None: ...  # 시스템 동시 입장 상한 · None = 모름 · T1 판정 기준
+    async def hold_admitted_session(self, show_id: str, hold_sec: float) -> AdmissionSample: ...  # 대기열 진입 → 입장 → hold_sec 유지 → 이탈
+    async def send_request_burst(self, request_count: int, interval_sec: float) -> list[int]: ...  # 세션 하나 연속 요청 · 상태 코드 · 0 = 연결 오류
 
 
 class VerdictReader(Protocol):
@@ -87,10 +115,18 @@ class PipelineReader(Protocol):
     def read_session_features(self, run_id: str) -> list[SessionFeatureRecord]: ...  # SESSION_FEATURES
 
     def read_quarantine_records(self, run_id: str) -> list[QuarantineRecord]: ...  # QUARANTINE_EVENTS
+    def find_processed_event_ids(self, event_ids: list[str]) -> list[str]: ...  # 정제 · 격리 저장 eventId · 중복 저장은 중복 그대로
+    def read_stored_outcomes(self, positions: list[tuple[int, int]]) -> list[StoredOutcome]: ...  # 위치별 정제 · 격리 결과
 
 
 class LiveMetricsReader(Protocol):
     def read_live_metrics(self, run_id: str, elapsed_sec: float) -> LiveMetrics: ...  # 03 화면 · 실행 중 1초마다
+
+
+class EventInjector(Protocol):
+    """이벤트 토픽 직접 주입 · 계약 시험 전용 · 시스템 파이프라인 입력 형식 검사"""
+
+    def inject_messages(self, messages: list[tuple[str | None, bytes]]) -> list[tuple[int, int]]: ...  # (키, 값) → (파티션, 오프셋)
 
 
 class ProcessControl(Protocol):
@@ -145,3 +181,4 @@ class SystemTarget:
     process_control: ProcessControl
     event_stream_reader: EventStreamReader | None = None  # None = 이벤트 전달 검증 건너뜀
     raw_event_reader: RawEventReader | None = None  # None = 원본 적재 검증 건너뜀
+    event_injector: EventInjector | None = None  # None = 토픽 계약 사례 건너뜀

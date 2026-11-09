@@ -1,0 +1,8 @@
+{
+  "related_code": "E05",
+  "title": "매진 회차",
+  "stage": "공연 선택",
+  "input": "잔여 좌석 0 회차 예매",
+  "expected": "매진 안내 · 확정 0건",
+  "system_error_code": "SEAT_SOLD"
+}

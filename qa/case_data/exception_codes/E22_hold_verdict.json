@@ -1,0 +1,8 @@
+{
+  "related_code": "E22",
+  "title": "보류 판정",
+  "stage": "판정",
+  "input": "매크로 의심 세션 · 보류 판정",
+  "expected": "결제 전 보류 · 운영자 확인 대상",
+  "system_error_code": null
+}

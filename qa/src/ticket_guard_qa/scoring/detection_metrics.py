@@ -23,7 +23,7 @@ def calculate_detection_rate_percent(
 
 
 def calculate_false_positive_rate_percent(answer_key: AnswerKey, system_verdicts: SystemVerdicts) -> float | None:
-    human_sessions = [key for key, actor_type in answer_key.items() if actor_type is ActorType.HUMAN]
+    human_sessions = [key for key, actor_type in answer_key.items() if actor_type == ActorType.HUMAN]
     if not human_sessions:
         return None
     false_positive_count = sum(1 for key in human_sessions if _is_detected(key, system_verdicts))
@@ -40,7 +40,7 @@ def find_missed_bots(answer_key: AnswerKey, system_verdicts: SystemVerdicts) -> 
 def find_false_positives(answer_key: AnswerKey, system_verdicts: SystemVerdicts) -> list[SessionKey]:
     return [
         key for key, actor_type in answer_key.items()
-        if actor_type is ActorType.HUMAN and _is_detected(key, system_verdicts)
+        if actor_type == ActorType.HUMAN and _is_detected(key, system_verdicts)
     ]
 
 

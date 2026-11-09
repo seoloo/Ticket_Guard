@@ -1,5 +1,6 @@
 """실행 시작 · 중지 · 동시 실행 잠금 · 결과 판정 · 저장 · 보고서"""
 import secrets
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -13,6 +14,7 @@ from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
 from ticket_guard_qa.domain.models import LiveMetrics, RunConfig, RunSummary, SuiteResult
 from ticket_guard_qa.domain.pass_criteria import evaluate_pass_criteria
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
+from ticket_guard_qa.macro_bots.browser_capture import CAPTURE_FOLDER_NAME
 from ticket_guard_qa.qa_database.archive_export import find_published_bot_versions, find_published_versions_in_use
 from ticket_guard_qa.reports.html_report import write_html_report
 from ticket_guard_qa.reports.json_report import write_json_report
@@ -28,7 +30,13 @@ from ticket_guard_qa.test_suites.suite_registry import get_suite
 PROGRESS_TICK_SEC = 1.0
 
 
+REPORT_SUFFIXES = ("html", "json")  # 보고서 파일 · reports/
+
 class RunAlreadyActiveError(Exception):
+    pass
+
+
+class RunDeleteError(Exception):
     pass
 
 
@@ -101,6 +109,32 @@ class RunService:
         threading.Thread(target=self._execute, args=(run_id, run_config, started_at), daemon=True).start()
         return run_id
 
+    def list_delete_items(self, summary: RunSummary) -> list[str]:
+        """삭제 확인 창 · 이 Run과 함께 지워지는 것 · 실제로 있는 것만"""
+        report_output_dir = self.settings.report_output_dir
+        items = ["Run 기록 · Suite 결과 · 합격 기준 결과"]
+        session_count = len(self.answer_key_repository.load(summary.run_id))
+        if session_count:
+            items.append(f"정답표 · 세션 {session_count:,}개")
+        report_titles = [suffix.upper() for suffix in REPORT_SUFFIXES if (report_output_dir / f"{summary.run_id}.{suffix}").exists()]
+        if report_titles:
+            items.append(f"리포트 파일 · {' · '.join(report_titles)}")
+        if (report_output_dir / CAPTURE_FOLDER_NAME / summary.run_id).exists():
+            items.append("봇 C 화면 캡처")
+        return items
+
+    def delete_run(self, run_id: str) -> None:
+        """Run 기록 · 정답표 · 보고서 · 캡처 삭제 · 진행 중 Run 거절 · 내보내기 기록(archive_exports)은 감사용 유지"""
+        if run_id == self._active_run_id:
+            raise RunDeleteError("진행 중 Run 삭제 불가 · 중지 후 삭제")
+        if not self.run_repository.delete_run(run_id):  # 없는 Run · 진행 중 Run → 파일 경로에 쓰지 않음
+            raise RunDeleteError("삭제할 Run 없음 · 진행 중 Run 삭제 불가")
+        self.answer_key_repository.delete(run_id)
+        report_output_dir = self.settings.report_output_dir
+        for report_suffix in REPORT_SUFFIXES:
+            (report_output_dir / f"{run_id}.{report_suffix}").unlink(missing_ok=True)
+        shutil.rmtree(report_output_dir / CAPTURE_FOLDER_NAME / run_id, ignore_errors=True)
+
     def cancel(self, run_id: str) -> None:
         self._cancel_requested_run_ids.add(run_id)  # 묶음 사이에서 멈춤
 
@@ -129,6 +163,7 @@ class RunService:
                 case_data_dir=self.settings.case_data_dir,
                 report_progress=lambda text, **fields: self.progress_stream.publish(run_id, text, **fields),
                 bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
+                report_output_dir=self.settings.report_output_dir,
             )
             published_in_use = find_published_versions_in_use(
                 find_published_bot_versions(self.qa_database), run_config.bot_version_numbers
@@ -142,7 +177,7 @@ class RunService:
             else:  # 실제 대상 · 트래픽과 함께 경과 시간 표시
                 threading.Thread(
                     target=self._watch_measurement_window,
-                    args=(run_id, context.system_target, window_sec, suites_finished), daemon=True,
+                    args=(run_id, context.system_target, window_sec, suites_finished, True), daemon=True,
                 ).start()
             try:
                 for suite_name in run_config.suite_names:
@@ -177,21 +212,27 @@ class RunService:
         return summary
 
     def _watch_measurement_window(
-        self, run_id: str, system_target: SystemTarget, window_sec: float, stop_event: threading.Event
+        self, run_id: str, system_target: SystemTarget, window_sec: float, stop_event: threading.Event,
+        keeps_counting_after_window: bool = False,
     ) -> None:
-        """측정 시간 동안 1초마다 03 화면에 진행 · 실시간 수치 전달 · 시험이 먼저 끝나면 멈춤"""
+        """1초마다 03 화면에 경과 시간 · 실시간 수치 전달 · 시험이 먼저 끝나면 멈춤
+        Mock = 측정 시간에서 끝 · Live = Suite가 끝날 때까지 계속 (121 / 120초처럼 초과 표시)"""
         started_at = time.monotonic()
         while run_id not in self._cancel_requested_run_ids and not stop_event.is_set():
-            elapsed_sec = min(time.monotonic() - started_at, window_sec)
+            elapsed_sec = time.monotonic() - started_at
+            if not keeps_counting_after_window:
+                elapsed_sec = min(elapsed_sec, window_sec)
+            is_over_window = elapsed_sec > window_sec
             self.progress_stream.publish(
-                run_id, "측정 중",
+                run_id, "예상 시간 초과 · Suite 진행 중" if is_over_window else "측정 중",
                 elapsed_sec=round(elapsed_sec, 1),
                 total_sec=window_sec,
-                live_metrics=read_live_metrics_or_none(system_target, run_id, elapsed_sec),
+                live_metrics=read_live_metrics_or_none(system_target, run_id, min(elapsed_sec, window_sec)),
             )
-            if elapsed_sec >= window_sec:
+            if elapsed_sec >= window_sec and not keeps_counting_after_window:
                 return
-            stop_event.wait(min(PROGRESS_TICK_SEC, window_sec - elapsed_sec))
+            remaining_in_window = window_sec - elapsed_sec
+            stop_event.wait(PROGRESS_TICK_SEC if remaining_in_window <= 0 else min(PROGRESS_TICK_SEC, remaining_in_window))
 
 
 def read_live_metrics_or_none(system_target: SystemTarget, run_id: str, elapsed_sec: float) -> LiveMetrics | None:

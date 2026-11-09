@@ -13,6 +13,7 @@
   .field-input { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--strong-text-color); }
   .field-input .input-box { display: flex; align-items: center; border: 1.5px solid #DCE2EA; border-radius: 9px; padding: 0 10px; height: 40px; background: #fff; }
   .field-input input { border: 0; outline: 0; width: 110px; font-size: 15px; font-weight: 700; background: transparent; }
+  .field-input select { border: 0; outline: 0; font-size: 14px; font-weight: 700; background: transparent; font-family: inherit; }
   .field-input .input-box:focus-within { border-color: var(--qa-blue); }
   .field-input .unit { color: var(--muted-text-color); font-weight: 600; }
   .field-input .hint { color: var(--muted-text-color); font-weight: 500; font-size: 12px; }
@@ -25,9 +26,10 @@
   .save-row input[type=text] { flex: 1; min-width: 220px; height: 44px; border: 1.5px solid #DCE2EA; border-radius: 10px; padding: 0 12px; font-size: 14px; }
   .side-card { padding: 22px 24px; }
   .side-card + .side-card { margin-top: 18px; }
-  .rule-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rule-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
   .rule-list li { border: 1px solid var(--soft-line-color); border-radius: 10px; padding: 9px 12px; display: flex; gap: 8px; align-items: center; font-size: 13px; }
-  .rule-list b { font-size: 14px; }
+  .rule-list b, .rule-list .pill { font-size: 14px; white-space: nowrap; }
+  .rule-list .pill { font-size: 12px; }
   .trial-score { font-size: 40px; font-weight: 800; letter-spacing: -.05em; }
   .stage-bars { display: grid; gap: 6px; margin-top: 10px; }
   .stage-bar { display: grid; grid-template-columns: 82px 1fr 34px; gap: 8px; align-items: center; font-size: 12.5px; font-weight: 700; }
@@ -78,8 +80,14 @@
           <div class="field-inputs">
             {% for spec in specs %}
             <label class="field-input">{{ spec.title }}
+              {% if spec.choices %}
+              <span class="input-box"><select name="{{ spec.field_name }}" data-saved-value="{{ profile.behavior | attr(spec.field_name) }}" required {{ 'disabled' if type_info.is_locked }}>
+                {% for choice_value, choice_title in spec.choices %}<option value="{{ choice_value }}" {{ 'selected' if behavior_values[spec.field_name] | int == choice_value }}>{{ choice_title }}</option>{% endfor %}
+              </select></span>
+              {% else %}
               <span class="input-box"><input type="number" name="{{ spec.field_name }}" min="{{ spec.minimum }}" max="{{ spec.maximum }}"
                 value="{{ behavior_values[spec.field_name] }}" data-saved-value="{{ profile.behavior | attr(spec.field_name) }}" required {{ 'readonly' if type_info.is_locked }}><span class="unit">{{ spec.unit }}</span></span>
+              {% endif %}
               {% if spec.hint %}<span class="hint">{{ spec.hint }}</span>{% endif %}
             </label>
             {% endfor %}
@@ -117,7 +125,7 @@
 
   <aside>
     <section class="card side-card">
-      <div class="row"><h2 class="section-heading">룰 매칭 예측</h2><span class="spacer"></span><span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">R1 ~ R6</span></div>
+      <div class="row"><h2 class="section-heading">룰 매칭 예측</h2><span class="spacer"></span><span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">룰셋 {{ rule_set_version }}</span></div>
       <ul class="rule-list">
         {% for preview in rule_previews %}
         <li>
@@ -176,7 +184,7 @@
   const CURVE_POINT_COUNT = 80;
   const CHART_WIDTH = 400, CHART_HEIGHT = 120, CHART_PADDING = 10;
   const form = document.getElementById("behavior-form");
-  const inputs = [...form.querySelectorAll("input[type=number]")];
+  const inputs = [...form.querySelectorAll("input[type=number], select[data-saved-value]")];
   const readValue = (name) => Number(form.elements[name]?.value || 0);
 
   function buildCurvePoints(mean, deviation, maxValue) {

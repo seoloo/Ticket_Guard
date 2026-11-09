@@ -1,5 +1,7 @@
 """가짜 대상 · 시스템 없이 시험 흐름 점검 · 규칙은 docs/contracts.md와 같게 · 화면 숫자는 예시 값"""
 import asyncio
+import contextlib
+import json
 import math
 import random
 import re
@@ -13,6 +15,7 @@ from typing import Any
 
 from ticket_guard_qa.domain.enums import BookingOutcome, TargetKind, VerdictStage
 from ticket_guard_qa.domain.raw_event_routing import find_expected_raw_collection
+from ticket_guard_qa.domain.rule_sets import MOCK_RULE_SET_VERSION, find_matched_rule_ids
 from ticket_guard_qa.domain.models import (
     LiveMetrics,
     QuarantineRecord,
@@ -25,11 +28,14 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionResult,
 )
 from ticket_guard_qa.system_targets.target_interfaces import (
+    PIPELINE_SERVICE_NAME,
+    AdmissionSample,
     ConfirmResponse,
     HttpResult,
     InventorySnapshot,
     RawStoredRecord,
     SeatContender,
+    StoredOutcome,
     StreamRecord,
     SystemTarget,
 )
@@ -90,23 +96,17 @@ FIXED_SESSION_VERDICTS: SystemVerdicts = {
 DETECTION_PROBABILITY_BY_RISK_SIGNAL_COUNT = {0: 0.006, 1: 0.85, 2: 0.93}
 DETECTION_PROBABILITY_HIGH_RISK = 0.98
 HOLD_RISK_SIGNAL_COUNT = 3
-REGULAR_CLICK_DEVIATION_RATIO = 0.3
-FAST_CLICK_INTERVAL_MS = 200
-INSTANT_ENTRY_DELAY_MS = 100
-MULTI_SESSION_DEVICE_COUNT = 2
-
-# 가짜 룰 이름 · 실제 R1 ~ R6와 무관 · 화면에서 Mock 룰임이 보이게
-MOCK_RULE_SET_VERSION = "mock-1"
-MOCK_RULE_REGULAR_INTERVAL = "MOCK-R1"
-MOCK_RULE_FAST_INTERVAL = "MOCK-R2"
-MOCK_RULE_MULTI_SESSION = "MOCK-R3"
-MOCK_RULE_INSTANT_ENTRY = "MOCK-R4"
 MAX_RISK_SIGNAL_COUNT = 4
 
 # 가짜 이벤트 토픽 · 파티션 3 · 키 = 예매 시도 번호 · docs/contracts.md 4장
 FAKE_STREAM_PARTITION_COUNT = 3
 FAKE_CONTRACT_USER_ID = "ticketguard"
 FAKE_SEAT_CLICK_COUNT = 2
+CLEAN_COLLECTION_NAME = "clean_events"  # 시스템 Spark 정제 저장
+QUARANTINE_COLLECTION_NAME = "quarantine_events"  # 시스템 Spark 격리 저장
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
+FAKE_QUEUE_ADMISSION_LIMIT = 20  # T1 가짜 동시 입장 상한
+FAKE_RATE_LIMIT_PER_SEC = 10  # T2 가짜 초당 요청 한도 · 1초 구간
 FAKE_INGEST_LATENCY_MS = 120  # 원본 적재 지연 예시 · 배치 1초 이내
 FAKE_MISROUTE_COLLECTION_NAME = "collector_events"  # QA 이벤트가 오지 않는 컬렉션 · 오분류 · 중복 흉내
 FAKE_BOOKED_SERVER_EVENT_TYPES = (
@@ -195,14 +195,8 @@ def find_browser_event_error(event: dict[str, Any], now: datetime) -> str | None
 
 
 def find_matched_mock_rules(behavior: SessionBehavior) -> tuple[str, ...]:
-    """가짜 판정의 근거 · 행동 값만 봄 · 정답표 모름"""
-    checks = (
-        (MOCK_RULE_REGULAR_INTERVAL, behavior.click_interval_deviation_ms < behavior.click_interval_mean_ms * REGULAR_CLICK_DEVIATION_RATIO),
-        (MOCK_RULE_FAST_INTERVAL, behavior.click_interval_mean_ms < FAST_CLICK_INTERVAL_MS),
-        (MOCK_RULE_MULTI_SESSION, behavior.sessions_per_device > MULTI_SESSION_DEVICE_COUNT),
-        (MOCK_RULE_INSTANT_ENTRY, behavior.entry_delay_after_open_ms < INSTANT_ENTRY_DELAY_MS),
-    )
-    return tuple(rule_id for rule_id, is_matched in checks if is_matched)
+    """가짜 판정의 근거 · 행동 값만 봄 · 정답표 모름 · B2 룰 매칭 예측과 같은 규칙"""
+    return find_matched_rule_ids(behavior, MOCK_RULE_SET_VERSION)
 
 
 def count_risk_signals(behavior: SessionBehavior) -> int:
@@ -258,6 +252,30 @@ class FakeSystemState:
     remaining_quantity: int = FAKE_INITIAL_REMAINING_QUANTITY
     booking_count: int = 0
     is_seat_lock_broken: bool = False  # True = 확인과 차감 사이 잠금 없음 · 초과 판매 결함 흉내 · FAIL 검출 확인용
+    is_queue_limit_broken: bool = False  # True = 동시 입장 상한 없음 · T1 결함 흉내
+    is_rate_limit_missing: bool = False  # True = 요청 속도 제한 없음 · T2 결함 흉내
+    is_pipeline_running: bool = True
+    processed_event_ids: list[str] = field(default_factory=list)  # 가짜 정제 · 격리 저장
+    pipeline_backlog: list[str] = field(default_factory=list)  # 중지 중 쌓인 이벤트
+    clean_event_ids: set[str] = field(default_factory=set)  # 토픽 주입 정제 저장 eventId
+    stored_outcomes: list[StoredOutcome] = field(default_factory=list)  # 토픽 주입 정제 · 격리 결과
+    is_backlog_lost: bool = False  # True = 재시작 후 중지 중 이벤트 유실 · 장애 복구 결함 흉내
+    is_checkpoint_broken: bool = False  # True = 재시작 후 처음부터 다시 처리 · 중복 저장 결함 흉내
+
+    def process_event(self, event_id: str) -> None:
+        if self.is_pipeline_running:
+            self.processed_event_ids.append(event_id)
+        else:
+            self.pipeline_backlog.append(event_id)
+
+    def restart_pipeline(self) -> None:
+        """checkpoint 다음부터 이어서 처리"""
+        if self.is_checkpoint_broken:
+            self.processed_event_ids += list(self.processed_event_ids)
+        if not self.is_backlog_lost:
+            self.processed_event_ids += self.pipeline_backlog
+        self.pipeline_backlog = []
+        self.is_pipeline_running = True
 
     def publish_to_stream(self, event: dict[str, Any], key: str) -> None:
         partition = zlib.crc32(key.encode()) % FAKE_STREAM_PARTITION_COUNT  # 같은 키 = 같은 파티션
@@ -276,6 +294,7 @@ class FakeBookingApi:
     def __init__(self, state: FakeSystemState | None = None) -> None:
         self.state = state or FakeSystemState()
         self.random_source = random.Random(f"fake-system-{self.state.random_seed}")  # 정답표 시드와 분리
+        self.admission_slots: tuple[asyncio.AbstractEventLoop, asyncio.Semaphore] | None = None  # 실행 루프마다 새로
         self.pipeline_random_source = random.Random(f"fake-pipeline-{self.state.random_seed}")  # 판정 난수 순서 유지
 
     def check_health(self) -> bool:
@@ -291,6 +310,7 @@ class FakeBookingApi:
                 return HttpResult(400, {"error": "eventId 내용 충돌"}, latency_ms=1.0)
             return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": True}, latency_ms=1.0)
         self.state.accepted_event_by_id[event["eventId"]] = event
+        self.state.process_event(event["eventId"])
         self.state.publish_to_stream({**event, "schemaVersion": 1, "userId": FAKE_CONTRACT_USER_ID}, FAKE_CONTRACT_USER_ID)
         return HttpResult(200, {"accepted": True, "state": "delivered", "duplicate": False}, latency_ms=1.0)
 
@@ -304,9 +324,9 @@ class FakeBookingApi:
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
     ) -> VirtualUserSessionResult:
         """대기 없이 바로 판정 · 생성 순서대로 끝나서 같은 시드 = 같은 결과"""
-        return self.record_session(session_plan.behavior)
+        return self.record_session(session_plan.behavior, session_plan.device_key)
 
-    def record_session(self, behavior: SessionBehavior) -> VirtualUserSessionResult:
+    def record_session(self, behavior: SessionBehavior, device_key: str = "") -> VirtualUserSessionResult:
         session_key = SessionKey(f"attempt-{len(self.state.session_verdicts) + 1:05d}")
         stage = judge_behavior(behavior, self.random_source)
         feature_record = build_mock_feature_record(session_key, behavior, self.pipeline_random_source, datetime.now(timezone.utc))
@@ -328,26 +348,73 @@ class FakeBookingApi:
         for event_type in FAKE_BOOKED_SERVER_EVENT_TYPES:
             self.state.publish_to_stream(build_fake_event(event_type, user_id, session_key), session_key)
         return VirtualUserSessionResult(session_key, latency_ms, is_error=False, booking_outcome=BookingOutcome.BOOKED,
-                                        sent_event_ids=sent_event_ids)
+                                        sent_event_ids=sent_event_ids, device_key=device_key)
 
     async def prepare_seat_contender(self, show_id: str) -> SeatContender:
         contender_id = f"contender-{uuid.uuid4().hex[:8]}"
         inventory = InventorySnapshot(frozenset(self.state.sold_seat_ids), self.state.remaining_quantity)
-        return SeatContender(contender_id, inventory, {"show_id": show_id, "booking_id": None})
+        return SeatContender(contender_id, inventory, {"show_id": show_id, "booking_id": None, "sent_sequence": 0, "accepted_sequence": 0})
 
     async def send_confirms(
         self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, repeat_count: int = 1
     ) -> list[ConfirmResponse]:
-        return list(await asyncio.gather(*(self.confirm(contender, seat_ids, quantity) for _ in range(repeat_count))))
+        first_sequence = contender.handle["sent_sequence"] + 1
+        contender.handle["sent_sequence"] += repeat_count
+        return list(await asyncio.gather(*(
+            self.confirm(contender, seat_ids, quantity, first_sequence + index) for index in range(repeat_count)
+        )))
+
+    async def send_confirm_with_last_sequence(
+        self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, is_same_sequence: bool
+    ) -> ConfirmResponse:
+        if not is_same_sequence:
+            contender.handle["sent_sequence"] += 1
+        return await self.confirm(contender, seat_ids, quantity, contender.handle["sent_sequence"])
 
     async def release_seat_contender(self, contender: SeatContender) -> None:
         return None
 
-    async def confirm(self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int) -> ConfirmResponse:
-        """main web/services.py confirm 규칙 · 이미 예매한 시도 = 같은 예매 번호 · 확인과 차감은 한 번에"""
+    def get_admission_slots(self) -> asyncio.Semaphore:
+        loop = asyncio.get_running_loop()
+        if self.admission_slots is None or self.admission_slots[0] is not loop:
+            self.admission_slots = (loop, asyncio.Semaphore(FAKE_QUEUE_ADMISSION_LIMIT))
+        return self.admission_slots[1]
+
+    def admission_limit(self) -> int | None:
+        return FAKE_QUEUE_ADMISSION_LIMIT  # 상한 붕괴 결함 Mock도 같은 값 · 실제 입장이 넘으면 FAIL
+
+    async def hold_admitted_session(self, show_id: str, hold_sec: float) -> AdmissionSample:
+        """상한만큼만 동시 입장 · 나머지는 빈자리 대기"""
+        entered_at = time.monotonic()
+        slots = contextlib.nullcontext() if self.state.is_queue_limit_broken else self.get_admission_slots()
+        async with slots:
+            admitted_at = time.monotonic()
+            await asyncio.sleep(hold_sec)
+            released_at = time.monotonic()
+        return AdmissionSample(admitted_at, released_at, (admitted_at - entered_at) * 1000)
+
+    async def send_request_burst(self, request_count: int, interval_sec: float) -> list[int]:
+        """가상 시각 · 직전 1초 안 요청이 한도 이상이면 429"""
+        accepted_times: list[float] = []
+        status_codes = []
+        for index in range(request_count):
+            now = index * interval_sec
+            recent_count = sum(now - accepted_time < 1.0 for accepted_time in accepted_times)
+            if not self.state.is_rate_limit_missing and recent_count >= FAKE_RATE_LIMIT_PER_SEC:
+                status_codes.append(429)
+                continue
+            accepted_times.append(now)
+            status_codes.append(200)
+        return status_codes
+
+    async def confirm(self, contender: SeatContender, seat_ids: tuple[str, ...], quantity: int, sequence: int) -> ConfirmResponse:
+        """main web/services.py confirm 규칙 · 이미 예매한 시도 = 같은 예매 번호 · 받은 순번 이하 = 거부 · 확인과 차감은 한 번에"""
         attempt = contender.handle
         if attempt["booking_id"]:
             return ConfirmResponse(200, None, attempt["booking_id"], None, 1.0)
+        if sequence <= attempt["accepted_sequence"]:
+            return ConfirmResponse(409, "STALE_REQUEST", None, None, 1.0)
+        attempt["accepted_sequence"] = sequence  # 검증 실패해도 순번은 소모
         is_general = attempt["show_id"] in FAKE_GENERAL_SHOW_IDS
         if is_general and not 1 <= quantity <= MAX_SEATS_PER_BOOKING:
             return ConfirmResponse(400, "SELECTION_LIMIT", None, None, 1.0)
@@ -415,6 +482,15 @@ class FakePipelineReader:
     def read_quarantine_records(self, run_id: str) -> list[QuarantineRecord]:
         return list(self.state.quarantine_records) if self.state else []
 
+    def read_stored_outcomes(self, positions: list[tuple[int, int]]) -> list[StoredOutcome]:
+        wanted_positions = set(positions)
+        return [outcome for outcome in self.state.stored_outcomes
+                if (outcome.partition, outcome.offset) in wanted_positions] if self.state else []
+
+    def find_processed_event_ids(self, event_ids: list[str]) -> list[str]:
+        wanted_event_ids = set(event_ids)
+        return [event_id for event_id in self.state.processed_event_ids if event_id in wanted_event_ids] if self.state else []
+
 
 class FakeLiveMetricsReader:
     """03 화면 실시간 수치 흉내 · 실행 번호마다 같은 곡선"""
@@ -430,15 +506,58 @@ class FakeLiveMetricsReader:
         )
 
 
+def normalize_fake_message(value: bytes, clean_event_ids: set[str]) -> tuple[str, str | None]:
+    """가짜 정제 · 격리 · docs/contracts.md 3-4 격리 사유 코드 · (컬렉션, 사유)"""
+    try:
+        event = json.loads(value)
+    except (ValueError, UnicodeDecodeError):
+        return QUARANTINE_COLLECTION_NAME, "PARSE_ERROR"
+    if not isinstance(event, dict):
+        return QUARANTINE_COLLECTION_NAME, "PARSE_ERROR"
+    if type(event.get("schemaVersion")) is not int or event["schemaVersion"] not in SUPPORTED_SCHEMA_VERSIONS:
+        return QUARANTINE_COLLECTION_NAME, "UNSUPPORTED_SCHEMA"
+    if not isinstance(event.get("eventId"), str) or not isinstance(event.get("eventType"), str):
+        return QUARANTINE_COLLECTION_NAME, "MISSING_FIELD"
+    if event["eventId"] in clean_event_ids:
+        return QUARANTINE_COLLECTION_NAME, "DUPLICATE_EVENT_ID"
+    clean_event_ids.add(event["eventId"])
+    return CLEAN_COLLECTION_NAME, None
+
+
+class FakeEventInjector:
+    """토픽 주입 흉내 · 받은 즉시 가짜 정제 · 격리 저장"""
+
+    def __init__(self, state: FakeSystemState) -> None:
+        self.state = state
+
+    def inject_messages(self, messages: list[tuple[str | None, bytes]]) -> list[tuple[int, int]]:
+        positions = []
+        for key, value in messages:
+            partition = zlib.crc32((key or "").encode()) % FAKE_STREAM_PARTITION_COUNT
+            offset = sum(record.partition == partition for record in self.state.stream_records)
+            self.state.stream_records.append(StreamRecord(partition, offset, key, int(time.time() * 1000), None))
+            collection_name, reason_code = normalize_fake_message(value, self.state.clean_event_ids)
+            self.state.stored_outcomes.append(StoredOutcome(partition, offset, collection_name, reason_code))
+            positions.append((partition, offset))
+        return positions
+
+
 class FakeProcessControl:
-    def __init__(self) -> None:
+    """가짜 파이프라인 중지 · 시작 · state 없으면 이름만 기록"""
+
+    def __init__(self, state: FakeSystemState | None = None) -> None:
+        self.state = state
         self.stopped_services: set[str] = set()
 
     def stop_service(self, service_name: str) -> None:
         self.stopped_services.add(service_name)
+        if self.state and service_name == PIPELINE_SERVICE_NAME:
+            self.state.is_pipeline_running = False
 
     def start_service(self, service_name: str) -> None:
         self.stopped_services.discard(service_name)
+        if self.state and service_name == PIPELINE_SERVICE_NAME:
+            self.state.restart_pipeline()
 
 
 class FakeEventStreamReader:
@@ -501,7 +620,8 @@ def build_fake_system_target(random_seed: int = 20261103) -> SystemTarget:
         verdict_reader=FakeVerdictReader(state),
         pipeline_reader=FakePipelineReader(state),
         live_metrics_reader=FakeLiveMetricsReader(),
-        process_control=FakeProcessControl(),
+        process_control=FakeProcessControl(state),
         event_stream_reader=FakeEventStreamReader(state),
         raw_event_reader=FakeRawEventReader(state),
+        event_injector=FakeEventInjector(state),
     )

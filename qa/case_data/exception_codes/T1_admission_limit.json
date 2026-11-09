@@ -1,0 +1,8 @@
+{
+  "related_code": "T1",
+  "title": "동시 입장 상한",
+  "stage": "대기열",
+  "input": "상한보다 많은 VU 동시 진입",
+  "expected": "동시 입장 수 ≤ 상한 · 나머지 대기",
+  "system_error_code": null
+}

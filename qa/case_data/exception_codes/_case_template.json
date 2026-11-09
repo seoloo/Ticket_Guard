@@ -1,0 +1,8 @@
+{
+  "related_code": "E00",
+  "title": "예외 이름",
+  "stage": "예매 단계",
+  "input": "어떤 요청 · 상태",
+  "expected": "시스템 기대 동작",
+  "system_error_code": null
+}

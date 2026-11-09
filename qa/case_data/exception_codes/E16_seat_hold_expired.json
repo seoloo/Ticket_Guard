@@ -1,0 +1,8 @@
+{
+  "related_code": "E16",
+  "title": "좌석 점유 만료",
+  "stage": "좌석 선택 → 결제",
+  "input": "좌석 선택 후 5분 경과",
+  "expected": "점유 해제 · 좌석 재판매",
+  "system_error_code": null
+}

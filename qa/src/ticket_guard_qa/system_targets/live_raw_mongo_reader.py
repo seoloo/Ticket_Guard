@@ -19,11 +19,12 @@ class RawEventReadError(RuntimeError):
     pass
 
 
-def build_position_filter(topic: str, positions: list[tuple[int, int]]) -> dict:
+def build_position_filter(source: str, topic: str, positions: list[tuple[int, int]]) -> dict:
+    """위치 인덱스 raw_kafka_position_v1(source · topic · partition · offset) 앞부분부터 · source 빠지면 전체 훑기"""
     offsets_by_partition: dict[int, list[int]] = {}
     for partition, offset in positions:
         offsets_by_partition.setdefault(partition, []).append(offset)
-    return {"topic": topic, "$or": [
+    return {"source": source, "topic": topic, "$or": [
         {"partition": partition, "offset": {"$in": sorted(offsets)}}
         for partition, offsets in sorted(offsets_by_partition.items())
     ]}
@@ -48,9 +49,10 @@ def to_raw_stored_record(collection_name: str, document: dict) -> RawStoredRecor
 
 
 class LiveMongoRawEventReader:
-    def __init__(self, mongo_uri: str, topic: str) -> None:
+    def __init__(self, mongo_uri: str, topic: str, source: str) -> None:
         self.mongo_uri = mongo_uri
         self.topic = topic
+        self.source = source  # 원본 적재기 RAW_SOURCE_ID
 
     def find_by_positions(self, positions: list[tuple[int, int]]) -> list[RawStoredRecord]:
         """9개 컬렉션 전부 조회 · 같은 위치가 여러 컬렉션에 있으면 전부 반환 (중복 판정용)"""
@@ -60,7 +62,7 @@ class LiveMongoRawEventReader:
             with MongoClient(self.mongo_uri, tz_aware=True, serverSelectionTimeoutMS=SERVER_SELECTION_TIMEOUT_MS) as client:
                 database = client.get_default_database(default=RAW_DATABASE_NAME)
                 for start in range(0, len(unique_positions), POSITIONS_PER_QUERY):
-                    position_filter = build_position_filter(self.topic, unique_positions[start:start + POSITIONS_PER_QUERY])
+                    position_filter = build_position_filter(self.source, self.topic, unique_positions[start:start + POSITIONS_PER_QUERY])
                     for collection_name in RAW_COLLECTION_NAMES:
                         records += [
                             to_raw_stored_record(collection_name, document)
