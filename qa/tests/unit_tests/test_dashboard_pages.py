@@ -116,6 +116,23 @@ def test_full_fake_run_shows_result(dashboard_client):
     assert run_id in dashboard_client.get("/bots").text  # B1 카드가 최근 실행을 씀
 
 
+def test_raw_ingest_suite_button_and_result(dashboard_client):
+    assert 'value="raw_ingest"' in dashboard_client.get("/runs/new").text  # Run 설정 Suite 버튼
+    response = dashboard_client.post("/runs", data={
+        "suite_names": ["raw_ingest"], "target_kind": "fake", "virtual_user_count": "20", "duration_sec": "120",
+        "alert_policy": "never", "human_percent": "80", "bot_a_percent": "5", "bot_b_percent": "5",
+        "bot_c_percent": "5", "bot_d_percent": "5",
+    }, follow_redirects=False)
+    run_path = response.headers["location"].removeprefix("/qa").removesuffix("/live")
+    run_service = dashboard_client.app.state.run_service
+    for _ in range(100):
+        if run_service.active_run_id is None:
+            break
+        time.sleep(0.05)
+    result_page = dashboard_client.get(run_path).text
+    assert "원본 적재 검증" in result_page and "원본 적재 160/160" in result_page
+
+
 def test_booking_flow_suite_button_and_result(dashboard_client):
     assert 'value="booking_flow"' in dashboard_client.get("/runs/new").text  # Run 설정 Suite 버튼
     response = dashboard_client.post("/runs", data={

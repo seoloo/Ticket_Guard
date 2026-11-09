@@ -5,6 +5,7 @@ from ticket_guard_qa.test_suites.event_delivery import EventDeliverySuite
 from ticket_guard_qa.test_suites.failure_recovery import FailureRecoverySuite
 from ticket_guard_qa.test_suites.load_capacity import LoadCapacitySuite
 from ticket_guard_qa.test_suites.pipeline_latency import PipelineLatencySuite
+from ticket_guard_qa.test_suites.raw_ingest import RawIngestSuite
 from ticket_guard_qa.test_suites.seat_concurrency import SeatConcurrencySuite
 from ticket_guard_qa.test_suites.self_check import SelfCheckSuite
 from ticket_guard_qa.test_suites.suite_interface import QaSuite
@@ -15,6 +16,7 @@ REGISTERED_SUITES: tuple[QaSuite, ...] = (
     EventContractSuite(),
     BookingFlowSuite(),
     EventDeliverySuite(),
+    RawIngestSuite(),
     VerdictAccuracySuite(),
     PipelineLatencySuite(),
     SeatConcurrencySuite(),

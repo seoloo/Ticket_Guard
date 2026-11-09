@@ -7,11 +7,12 @@ import statistics
 import time
 import uuid
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ticket_guard_qa.domain.enums import BookingOutcome, TargetKind, VerdictStage
+from ticket_guard_qa.domain.raw_event_routing import find_expected_raw_collection
 from ticket_guard_qa.domain.models import (
     LiveMetrics,
     QuarantineRecord,
@@ -27,6 +28,7 @@ from ticket_guard_qa.system_targets.target_interfaces import (
     ConfirmResponse,
     HttpResult,
     InventorySnapshot,
+    RawStoredRecord,
     SeatContender,
     StreamRecord,
     SystemTarget,
@@ -105,6 +107,8 @@ MAX_RISK_SIGNAL_COUNT = 4
 FAKE_STREAM_PARTITION_COUNT = 3
 FAKE_CONTRACT_USER_ID = "ticketguard"
 FAKE_SEAT_CLICK_COUNT = 2
+FAKE_INGEST_LATENCY_MS = 120  # 원본 적재 지연 예시 · 배치 1초 이내
+FAKE_MISROUTE_COLLECTION_NAME = "collector_events"  # QA 이벤트가 오지 않는 컬렉션 · 오분류 · 중복 흉내
 FAKE_BOOKED_SERVER_EVENT_TYPES = (
     "queue_enter", "queue_register", "queue_admitted", "captcha_success", "booking_confirm_request", "booking_confirm_success",
 )
@@ -451,6 +455,44 @@ class FakeEventStreamReader:
         return [record for record in self.state.stream_records if record.offset >= start_offsets.get(record.partition, 0)]
 
 
+class FakeRawEventReader:
+    """가짜 원본 DB · 가짜 토픽 메시지를 raw-routing-v1대로 보관한 것처럼 · *_every_nth = n번째마다 결함 흉내 · FAIL 검출 확인용"""
+
+    def __init__(self, state: FakeSystemState) -> None:
+        self.state = state
+        self.drop_every_nth = 0  # 적재 누락
+        self.duplicate_every_nth = 0  # 다른 컬렉션에 한 번 더
+        self.misroute_every_nth = 0  # 다른 컬렉션에 보관
+        self.alter_every_nth = 0  # 원문 변형
+
+    def find_by_positions(self, positions: list[tuple[int, int]]) -> list[RawStoredRecord]:
+        wanted_positions = set(positions)
+        stored_records: list[RawStoredRecord] = []
+        for index, record in enumerate(self.state.stream_records, start=1):
+            if (record.partition, record.offset) not in wanted_positions or is_every_nth(index, self.drop_every_nth):
+                continue
+            collection_name = find_expected_raw_collection(record.event)
+            event = record.event
+            if is_every_nth(index, self.misroute_every_nth):
+                collection_name = FAKE_MISROUTE_COLLECTION_NAME
+            if is_every_nth(index, self.alter_every_nth) and event is not None:
+                event = {**event, "eventType": "altered"}
+            stored_record = RawStoredRecord(
+                collection_name=collection_name, partition=record.partition, offset=record.offset, event=event,
+                timestamp_ms=record.timestamp_ms,
+                ingested_at_ms=record.timestamp_ms + FAKE_INGEST_LATENCY_MS + (record.offset % 5) * 10
+                if record.timestamp_ms is not None else None,
+            )
+            stored_records.append(stored_record)
+            if is_every_nth(index, self.duplicate_every_nth):
+                stored_records.append(replace(stored_record, collection_name=FAKE_MISROUTE_COLLECTION_NAME))
+        return stored_records
+
+
+def is_every_nth(index: int, every_nth: int) -> bool:
+    return every_nth > 0 and index % every_nth == 0
+
+
 def build_fake_system_target(random_seed: int = 20261103) -> SystemTarget:
     state = FakeSystemState(random_seed=random_seed)
     return SystemTarget(
@@ -461,4 +503,5 @@ def build_fake_system_target(random_seed: int = 20261103) -> SystemTarget:
         live_metrics_reader=FakeLiveMetricsReader(),
         process_control=FakeProcessControl(),
         event_stream_reader=FakeEventStreamReader(state),
+        raw_event_reader=FakeRawEventReader(state),
     )

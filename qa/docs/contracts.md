@@ -103,7 +103,7 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 
 | 컬렉션 | 상태 | QA가 확인하는 것 |
 |---|---|---|
-| `RAW_EVENTS` (PK = `topic:partition:offset`) | 초안 | Kafka 메시지 1건 = 1행 · `ingestedAt`(요청) 적재 지연 |
+| 원본 MongoDB `ticketguard_raw` (27020 · `raw_consumer`) · 9개 컬렉션 (아래 4-2) | 구현됨 (main 2026-11-06) | Kafka 메시지 1건 = 1문서 · 위치(`topic` · `partition` · `offset`)로 찾기 · `ingestedAt` 적재 지연 · 기존 `raw_events`는 과거 기록 |
 | `ACTIVITY_EVENTS` | 초안 | 이벤트 스키마 v1 필드 · `eventId` UK(요청)로 중복 0건 · `receivedAt` · `processedAt`(요청) 단계 지연 |
 
 **Gold 반영 지연 계산**: `SESSION_FEATURES.computedAt − 그 구간 마지막 ACTIVITY_EVENTS.receivedAt` · 단계별로는 `receivedAt → RAW_EVENTS.ingestedAt → processedAt → computedAt`
@@ -185,6 +185,39 @@ QA가 시스템 데이터를 읽거나 db 브랜치와 형식을 맞출 때 보�
 | 같은 예매 시도 = 같은 파티션 | 파티션 키 일관성 (순서 보장 조건) | 위반 0 |
 | 메시지 생성 시각 − `occurredAt` | 적시성 · 전달 지연 p95 | 기록 (기준선 미정) |
 | 스키마 v2 · `capture_chunk` | 관측 이벤트 수 | 기록 |
+
+### 4-2. 원본 적재 검증 (`test_suites/raw_ingest.py` · `system_targets/live_raw_mongo_reader.py`)
+
+| 항목 | 규칙 |
+|---|---|
+| 접속 | `TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI` · 원본 DB 읽기 전용 계정만 · `find`만 · 비우면 건너뜀 |
+| 읽는 범위 | 4-1과 같은 트래픽 · 토픽에서 고른 QA 메시지의 위치(파티션 · 오프셋)만 · 위치 인덱스 `raw_kafka_position_v1` |
+| 대기 | 전부 보일 때까지 1초마다 다시 조회 · 최대 30초 · 마지막에 전체 한 번 더 (늦게 생긴 중복 포함) |
+| 읽는 필드 | `partition` · `offset` · `value`(원문 바이트) · `timestampMs` · `ingestedAt` · `routing.reason` |
+| 분류표 | `raw-routing-v1` QA 사본 `domain/raw_event_routing.py` · 시스템 원본 `raw_consumer/router.py` · 시스템이 바꾸면 오분류로 드러남 |
+
+| 컬렉션 | eventType |
+|---|---|
+| `behavior_events` | `page_enter` · `page_exit` · `search_change` · `genre_change` · `show_select` · `schedule_select` · `seat_select` · `seat_cancel` · `quantity_change` · `ui_interaction` · `page_lifecycle` |
+| `booking_events` | `queue_*` · `connection_timeout` · `captcha_*` · `booking_confirm_*` · `booking_access_rejected` · `booking_not_open` |
+| `auth_events` | `login_success` · `login_fail` |
+| `http_events` | `browser_request_start` · `browser_request_body` · `browser_response_headers` · `browser_request` · `server_request` · `server_response_headers` |
+| `performance_events` | `resource_timing` · `navigation_timing` · `performance_entry` |
+| `browser_errors` | `browser_error` |
+| `collector_events` | `collector_limitation` · `collector_failure` · `scenario_executed` |
+| `raw_chunks` | `capture_chunk` |
+| `unclassified_events` | 해석 실패 · 빈 값 · 미지원 `schemaVersion` · 미등록 `eventType` (`routing.reason`) |
+
+**원본 적재 검증 항목**
+
+| 항목 | 현업 용어 | 합격 |
+|---|---|---|
+| QA 메시지 위치마다 원본 문서 있음 | 완전성 | 적재 누락 0 |
+| 같은 위치가 9개 컬렉션 전체에서 1건 | 유일성 | 중복 적재 0 |
+| `eventType`별 기대 컬렉션에 보관 | 분류 정확성 | 오분류 0 · 미분류 0 |
+| 저장된 `value` 해석 결과 = 토픽 메시지 | 원문 보존 | 원문 변형 0 |
+| `ingestedAt` − `timestampMs` | 적재 지연 p95 | 기록 (기준선 미정) |
+| 토픽에서 QA 메시지 0건 | 시험 성립 | FAIL (이벤트 전달 검증 먼저) |
 
 ## 5. 계약 시험 데이터
 

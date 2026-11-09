@@ -118,6 +118,24 @@ class EventStreamReader(Protocol):
 
 
 @dataclass(frozen=True)
+class RawStoredRecord:
+    """원본 DB 문서 하나 · 위치(파티션 · 오프셋)로 토픽 메시지와 연결 · event None = 원문 해석 실패"""
+    collection_name: str
+    partition: int
+    offset: int
+    event: dict[str, Any] | None
+    timestamp_ms: int | None  # timestampMs · 메시지 생성 시각
+    ingested_at_ms: float | None  # ingestedAt · 최초 적재 시각
+    routing_reason: str | None = None  # 미분류 사유
+
+
+class RawEventReader(Protocol):
+    """원본 DB 읽기 전용 · 읽기 전용 계정만 · 쓰기 · 삭제 없음"""
+
+    def find_by_positions(self, positions: list[tuple[int, int]]) -> list[RawStoredRecord]: ...  # (파티션, 오프셋)
+
+
+@dataclass(frozen=True)
 class SystemTarget:
     kind: TargetKind
     booking_api: BookingApi
@@ -126,3 +144,4 @@ class SystemTarget:
     live_metrics_reader: LiveMetricsReader
     process_control: ProcessControl
     event_stream_reader: EventStreamReader | None = None  # None = 이벤트 전달 검증 건너뜀
+    raw_event_reader: RawEventReader | None = None  # None = 원본 적재 검증 건너뜀

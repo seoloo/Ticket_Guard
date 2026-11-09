@@ -13,7 +13,7 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionResult,
 )
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
-from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, StreamRecord
+from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, EventStreamReader, StreamRecord
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_session_plans,
@@ -71,14 +71,15 @@ def is_capture_event(event: dict) -> bool:
     return event.get("schemaVersion") == CAPTURE_SCHEMA_VERSION or event.get("eventType") == CAPTURE_CHUNK_EVENT_TYPE
 
 
-def evaluate_delivery(session_results: list[VirtualUserSessionResult], records: list[StreamRecord]) -> DeliveryReport:
-    """QA가 보낸 것(eventId · 예매 시도 번호 · 시험 계정) ↔ 토픽 메시지 대조"""
-    report = DeliveryReport(invalid_record_count=sum(record.event is None for record in records))
-    sent_event_ids = {event_id for result in session_results for event_id in result.sent_event_ids}
-    attempt_ids = {result.session_key for result in session_results}
-    report.sent_browser_event_count = len(sent_event_ids)
+def collect_sent_event_ids(session_results: list[VirtualUserSessionResult]) -> set[str]:
+    return {event_id for result in session_results for event_id in result.sent_event_ids}
 
-    qa_records = [
+
+def select_qa_records(session_results: list[VirtualUserSessionResult], records: list[StreamRecord]) -> list[StreamRecord]:
+    """QA 메시지 = 시험 계정 · QA가 받은 예매 시도 번호 · QA가 만든 eventId · 원본 적재 검증도 사용"""
+    sent_event_ids = collect_sent_event_ids(session_results)
+    attempt_ids = {result.session_key for result in session_results}
+    return [
         record for record in records
         if record.event is not None and (
             str(record.event.get("userId") or "").startswith(TEST_ACCOUNT_PREFIX)
@@ -86,6 +87,34 @@ def evaluate_delivery(session_results: list[VirtualUserSessionResult], records: 
             or record.event.get("eventId") in sent_event_ids
         )
     ]
+
+
+def send_traffic_and_read_stream(
+    context: SuiteContext, stream_reader: EventStreamReader,
+) -> tuple[dict[int, int], list[VirtualUserSessionResult], list[StreamRecord]]:
+    """초기화 → 토픽 끝 위치 기록 → VU 트래픽 → 시작 위치부터 읽기 · AccountPoolExhaustedError는 호출한 Suite가 처리"""
+    run_config = context.run_config
+    planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
+    behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
+
+    context.report_progress(reset_before_traffic(context.system_target.booking_api))
+    start_offsets = stream_reader.snapshot_end_offsets()
+    context.report_progress(f"토픽 시작 위치 · {' · '.join(f'P{p}={o}' for p, o in sorted(start_offsets.items()))}")
+    session_results = send_virtual_user_traffic(
+        context.system_target.booking_api, build_session_plans(behaviors, run_config.random_seed), run_config.duration_sec,
+        lambda results: context.report_progress(f"VU {sum(r is not None for r in results)}/{len(planned_users)} 종료"),
+    )
+    context.report_progress("이벤트 수신 대기 · 토픽 조회")
+    return start_offsets, session_results, stream_reader.read_since(start_offsets, context.run_id)
+
+
+def evaluate_delivery(session_results: list[VirtualUserSessionResult], records: list[StreamRecord]) -> DeliveryReport:
+    """QA가 보낸 것(eventId · 예매 시도 번호 · 시험 계정) ↔ 토픽 메시지 대조"""
+    report = DeliveryReport(invalid_record_count=sum(record.event is None for record in records))
+    sent_event_ids = collect_sent_event_ids(session_results)
+    report.sent_browser_event_count = len(sent_event_ids)
+
+    qa_records = select_qa_records(session_results, records)
     report.qa_record_count = len(qa_records)
     event_id_counts = Counter(record.event.get("eventId") for record in qa_records)
     report.duplicate_event_ids = sorted(event_id for event_id, count in event_id_counts.items() if count > 1)
@@ -156,24 +185,11 @@ class EventDeliverySuite:
         stream_reader = context.system_target.event_stream_reader
         if stream_reader is None:
             raise NotImplementedError("이벤트 스트림 읽기 미설정 · TICKET_GUARD_QA_KAFKA_BOOTSTRAP_SERVERS")
-        run_config = context.run_config
-        booking_api = context.system_target.booking_api
-        planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
-        behaviors = [context.bot_profile_registry.get_profile(user.actor_type).behavior for user in planned_users]
-
-        context.report_progress(reset_before_traffic(booking_api))
-        start_offsets = stream_reader.snapshot_end_offsets()
-        context.report_progress(f"토픽 시작 위치 · {' · '.join(f'P{p}={o}' for p, o in sorted(start_offsets.items()))}")
         try:
-            session_results = send_virtual_user_traffic(
-                booking_api, build_session_plans(behaviors, run_config.random_seed), run_config.duration_sec,
-                lambda results: context.report_progress(f"VU {sum(r is not None for r in results)}/{len(planned_users)} 종료"),
-            )
+            start_offsets, session_results, records = send_traffic_and_read_stream(context, stream_reader)
         except AccountPoolExhaustedError as error:
             return SuiteResult(self.suite_name, SuiteOutcome.FAILED, message=f"FAIL: {error}")
 
-        context.report_progress("이벤트 수신 대기 · 토픽 조회")
-        records = stream_reader.read_since(start_offsets, context.run_id)
         report = evaluate_delivery(session_results, records)
         is_passed = report.issue_count == 0  # 전달 결과만 판정
         return SuiteResult(

@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from ticket_guard_qa.domain.models import QuarantineRecord, SessionFeatureRecord, SessionVerdictRecord, SystemVerdicts
 
 SCHEMA_NOT_READY_MESSAGE = "MongoDB 스키마 확정 전 · docs/contracts.md 3장"
+QA_READ_TIMEOUT_MS = 3000
 
 class LiveMongoVerdictReader:
     def __init__(self, mongo_uri: str) -> None:
@@ -42,7 +43,12 @@ class LiveMongoPipelineReader:
         raise NotImplementedError("Kafka · Spark · MongoDB 없음 · AGENTS.md 5장")
 
     def count_quarantined_events(self, run_id: str) -> int:
-        return int(self.summary()['quarantine_events'])  # TODO(Run 구분 필드 확정 후): run_id 범위로 좁히기 · 지금은 전체 건수
+        """QA 시험용 · 05 화면 summary()와 분리 · summary 반환 모양이 바뀌어도 영향 없음"""
+        if not self.mongo_uri:
+            raise ValueError("system_mongo_uri is not configured")
+        with MongoClient(self.mongo_uri, serverSelectionTimeoutMS=QA_READ_TIMEOUT_MS) as client:
+            # TODO(Run 구분 필드 확정 후): run_id 범위로 좁히기 · 지금은 전체 건수
+            return int(client.get_default_database().quarantine_events.count_documents({}))
 
     def read_session_features(self, run_id: str) -> list[SessionFeatureRecord]:
         # TODO(스키마 확정 후): SESSION_FEATURES
