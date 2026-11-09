@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     target_kind: TargetKind = TargetKind.FAKE
 
     system_base_url: str = "http://127.0.0.1:8000"
+    browser_executable_path: str = ""  # 브라우저 봇 Chromium 위치 · 비면 Playwright 기본 · qa-dashboard 이미지 = /usr/bin/chromium
     system_username: str = ""
     system_password: str = ""
     system_mongo_uri: str = ""  # 읽기 전용 계정만

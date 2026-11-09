@@ -1,6 +1,7 @@
 """지금의 Django 시스템에 HTTP로 접속 · 시스템 코드 import 금지"""
 import asyncio
 import time
+from functools import partial
 from dataclasses import dataclass
 from typing import Any
 
@@ -88,7 +89,8 @@ class LiveDjangoBookingApi:
                  test_accounts: VirtualUserAccountPool | None = None,
                  admin_account: SystemAdminAccount | None = None,
                  transport: httpx.AsyncBaseTransport | None = None,
-                 queue_admission_limit: int = 0) -> None:
+                 queue_admission_limit: int = 0,
+                 browser_executable_path: str = "") -> None:
         self.queue_admission_limit = queue_admission_limit  # 시스템 동시 입장 상한 · 0 = 모름
         self.base_url = base_url.rstrip("/")
         self.username = username
@@ -103,7 +105,7 @@ class LiveDjangoBookingApi:
         self.device_loop: asyncio.AbstractEventLoop | None = None
         self.browser_loop: asyncio.AbstractEventLoop | None = None
         self.browser_slots: asyncio.Semaphore | None = None
-        self.browser_page_opener = open_browser_page  # 시험에서 가짜 페이지로 교체
+        self.browser_page_opener = partial(open_browser_page, executable_path=browser_executable_path)  # 시험에서 가짜 페이지로 교체
         self.issued_account_count = 0  # 처음 쓰는 계정 번호
         self.free_account_numbers: list[int] = []  # 정리 끝난 계정 · 다시 사용 · 계정당 진행 중 예매 1건
 

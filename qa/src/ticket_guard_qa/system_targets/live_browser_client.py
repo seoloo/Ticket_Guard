@@ -23,7 +23,7 @@ PAGE_TIMEOUT_MS = 15_000
 QUEUE_TIMEOUT_MS = 60_000  # 기본 대기 12초 + 여유
 CONFIRM_RESULT_TIMEOUT_SEC = 10.0
 RESULT_POLL_INTERVAL_SEC = 0.2
-BROWSER_SETUP_HINT = "browser 묶음 미설치 · pip install -e qa[browser] · playwright install chromium"
+BROWSER_SETUP_HINT = "browser 묶음 · Chromium 필요 · qa-dashboard 이미지 다시 빌드 · 내 PC = pip install -e qa[browser] · playwright install chromium"
 
 # 예매 화면(templates/page.html) 요소 · 화면이 바뀌면 여기만
 LOGIN_USERNAME = "#username"
@@ -107,16 +107,20 @@ class PlaywrightBrowserPage:
         return await self.page.screenshot(type="png")
 
 
+CHROMIUM_LAUNCH_ARGS = ["--disable-dev-shm-usage"]  # 컨테이너 공유 메모리(/dev/shm) 작음 · 탭 비정상 종료 방지
+
+
 @asynccontextmanager
-async def open_browser_page(user_agent: str | None = None) -> AsyncIterator[BrowserPage]:
-    """화면 없는 Chromium 탭 하나 · 세션 끝나면 브라우저 닫음"""
+async def open_browser_page(user_agent: str | None = None, executable_path: str = "") -> AsyncIterator[BrowserPage]:
+    """화면 없는 Chromium 탭 하나 · 세션 끝나면 브라우저 닫음 · executable_path = 설치된 Chromium(비면 Playwright 기본)"""
     try:
         from playwright.async_api import async_playwright
     except ImportError:
         raise BrowserUnavailableError(BROWSER_SETUP_HINT) from None
     async with async_playwright() as playwright:
         try:
-            browser = await playwright.chromium.launch(headless=True)
+            browser = await playwright.chromium.launch(headless=True, executable_path=executable_path or None,
+                                                       args=CHROMIUM_LAUNCH_ARGS)
         except Exception as error:  # noqa: BLE001 · Chromium 미설치 · 실행 권한
             raise BrowserUnavailableError(f"Chromium 실행 불가 · {type(error).__name__} · {BROWSER_SETUP_HINT}") from None
         try:

@@ -29,6 +29,7 @@ def build_system_target(settings: Settings, target_kind: TargetKind | None = Non
             VirtualUserAccountPool(settings.test_account_count, settings.test_account_password, settings.captcha_fixed_answer),
             SystemAdminAccount(settings.system_admin_username, settings.system_admin_password),
             queue_admission_limit=settings.queue_admission_limit,
+            browser_executable_path=settings.browser_executable_path,
         ),
         verdict_reader=LiveMongoVerdictReader(settings.system_mongo_uri) if has_mongo else LiveDjangoVerdictReader(),
         pipeline_reader=LiveMongoPipelineReader(settings.system_mongo_uri, settings.kafka_events_topic),
