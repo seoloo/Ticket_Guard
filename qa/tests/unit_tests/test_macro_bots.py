@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from ticket_guard_qa.domain.detection_targets import DETECTION_TARGETS, find_detection_target
-from ticket_guard_qa.domain.enums import ActorType, VerdictStage
+from ticket_guard_qa.domain.enums import BUILT_IN_ACTOR_TYPES, ActorType, VerdictStage
 from ticket_guard_qa.domain.models import SessionBehavior
 from ticket_guard_qa.domain.rule_sets import MOCK_RULE_SET_VERSION
 from ticket_guard_qa.macro_bots.browser_capture import (
@@ -16,7 +16,8 @@ from ticket_guard_qa.macro_bots.browser_capture import (
 )
 from ticket_guard_qa.macro_bots.behavior_fields import BEHAVIOR_FIELD_SPECS, BehaviorInputError, behavior_to_dict, parse_behavior_form
 from ticket_guard_qa.macro_bots.behavior_description import describe_behavior
-from ticket_guard_qa.macro_bots.bot_catalog import BOT_ROLE_CATALOG, BOT_TYPE_CATALOG, find_bot_type_by_slug
+from ticket_guard_qa.macro_bots.bot_catalog import BOT_CATEGORY_BY_ID, BOT_TYPE_CATALOG, BotStatus, find_bot_type_by_slug, list_bot_types
+from ticket_guard_qa.macro_bots.bot_type_store import BotTypeInputError, BotTypeStore
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.macro_bots.bot_trial_run import run_trial_sessions
@@ -29,8 +30,8 @@ SAVED_AT = datetime(2026, 11, 4, tzinfo=timezone.utc)
 
 # 확장 지점 · 새 종류 · 새 행동 값을 추가할 때 빠뜨리면 여기서 실패
 def test_every_actor_type_has_catalog_entry_and_default_behavior():
-    assert {info.actor_type for info in BOT_TYPE_CATALOG} == set(ActorType)
-    assert set(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE) == set(ActorType)
+    assert {info.actor_type for info in BOT_TYPE_CATALOG} == set(BUILT_IN_ACTOR_TYPES)
+    assert set(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE) == set(BUILT_IN_ACTOR_TYPES)
 
 
 def test_every_behavior_field_has_input_spec():
@@ -43,11 +44,36 @@ def test_detection_targets_do_not_overlap():
     assert find_detection_target(ActorType.BOT_NEW) is None  # 새 유형 = 목표 없음
 
 
-def test_every_bot_type_belongs_to_listed_role_and_has_signals():
-    listed_roles = {role_info.role for role_info in BOT_ROLE_CATALOG}
+def test_every_bot_type_belongs_to_listed_category_and_has_signals():
     for info in BOT_TYPE_CATALOG:
-        assert info.role in listed_roles  # B1 구획에 빠짐없이 표시
+        assert info.category_id in BOT_CATEGORY_BY_ID  # B1 분류 타일에 빠짐없이 표시
         assert info.detection_signals and info.purpose
+
+
+def test_custom_bot_type_flows_from_draft_to_run_targets(qa_database):
+    from ticket_guard_qa.domain.detection_targets import find_detection_target
+    from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileStore
+
+    type_store = BotTypeStore(qa_database)
+    bot_a = find_bot_type_by_slug("bot_a")
+    draft = type_store.create_draft(bot_a, DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A], SAVED_AT)
+    assert (draft.actor_type, draft.short_name, draft.status) == ("BOT_E", "E", BotStatus.DRAFT)
+    assert not draft.is_in_traffic_mix  # 작성 중 = Run 제외
+
+    with pytest.raises(BotTypeInputError):
+        type_store.change_status(draft.actor_type, BotStatus.REVIEW, SAVED_AT)  # 이름 · 흔적 없이 검증 중 불가
+    type_store.update_identity(draft.actor_type, "취소표 감시 매크로", "매진 뒤 취소 좌석을 짧은 주기로 조회", "inventory_hoarding", SAVED_AT)
+    type_store.update_detection(draft.actor_type, ["짧고 일정한 주기의 좌석 조회", " "], "bot_abd_detection",
+                                {"bot_abd_detection"}, SAVED_AT)
+    reviewed = type_store.change_status(draft.actor_type, BotStatus.REVIEW, SAVED_AT)
+
+    assert reviewed.is_in_traffic_mix and reviewed.detection_signals == ("짧고 일정한 주기의 좌석 조회",)
+    assert reviewed.display_name == "봇 E · 취소표 감시 매크로" and reviewed.category.title == "재고 선점"
+    assert ActorType("BOT_E") in find_detection_target(ActorType("BOT_E")).actor_types  # A · B · D와 합산
+    assert ActorType("BOT_E") in [info.actor_type for info in list_bot_types()]
+    registry = BotProfileStore(qa_database).load_current_registry()
+    assert registry.get_profile(ActorType("BOT_E")).behavior == DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]  # 시작 봇 복사
+    assert type_store.create_draft(bot_a, DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A], SAVED_AT).short_name == "F"
 
 
 def test_behavior_description_reads_values_in_plain_words():
@@ -74,7 +100,7 @@ def test_browser_trace_choice_rejects_unknown_value():
 
 
 def test_bot_slug_lookup():
-    assert find_bot_type_by_slug("BOT_C").actor_type is ActorType.BOT_C
+    assert find_bot_type_by_slug("BOT_C").actor_type == ActorType.BOT_C
     assert find_bot_type_by_slug("bot_z") is None
 
 

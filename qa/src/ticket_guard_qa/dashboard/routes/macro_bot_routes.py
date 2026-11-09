@@ -38,8 +38,8 @@ from ticket_guard_qa.macro_bots.browser_capture import (
     build_mock_capture_frames,
     load_capture_frames,
 )
-from ticket_guard_qa.macro_bots.behavior_description import BehaviorLine, describe_behavior
-from ticket_guard_qa.macro_bots.bot_catalog import BOT_ROLE_CATALOG, BotRoleInfo, BotTypeInfo, find_bot_type_by_slug
+from ticket_guard_qa.dashboard.bot_list_view import BotListItem, build_bot_list_view
+from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, find_bot_type_by_slug
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfile, BotProfileRegistry
 from ticket_guard_qa.macro_bots.bot_trial_run import TRIAL_SESSION_COUNT, TrialRunResult, run_trial_sessions
@@ -65,33 +65,6 @@ ENTRY_BUCKET_COUNT = 12  # 마지막 칸 = 5.5초 이후 전부
 LISTED_SESSION_COUNT_PER_TYPE = 5  # B4 종류별로 보여 줄 놓친 · 오탐 세션 수
 
 router = APIRouter()
-
-
-@dataclass(frozen=True)
-class BotCard:
-    profile: BotProfile
-    detection_row: ActorDetectionRow | None  # None = 아직 판정 정확도 시험 결과 없음
-
-    @property
-    def behavior_lines(self) -> list[BehaviorLine]:
-        return describe_behavior(self.profile.behavior)
-
-
-@dataclass(frozen=True)
-class BotRoleSection:
-    """B1 구획 하나 · 기준 트래픽 → 탐지 대상 봇 → 평가 전용 봇"""
-    number: int
-    role_info: BotRoleInfo
-    cards: list[BotCard]
-
-
-def group_cards_by_role(cards: list[BotCard]) -> list[BotRoleSection]:
-    sections = []
-    for role_info in BOT_ROLE_CATALOG:
-        role_cards = [card for card in cards if card.profile.type_info.role is role_info.role]
-        if role_cards:
-            sections.append(BotRoleSection(len(sections) + 1, role_info, role_cards))
-    return sections
 
 
 @dataclass(frozen=True)
@@ -127,10 +100,9 @@ def show_bot_list(
 ) -> HTMLResponse:
     latest_summary = run_service.run_repository.find_latest_finished_summary_with_suite(VERDICT_ACCURACY_SUITE_NAME)
     rows = build_actor_detection_rows_from_details(read_verdict_details(latest_summary)) if latest_summary else {}
-    cards = [BotCard(profile, rows.get(profile.actor_type)) for profile in store.load_current_registry().list_profiles()]
+    items = [BotListItem(profile, rows.get(profile.actor_type)) for profile in store.load_current_registry().list_profiles()]
     return render_screen(request, "screen_b1_bot_list.html", {
-        **BOT_SCREEN_CONTEXT, "role_sections": group_cards_by_role(cards), "latest_summary": latest_summary,
-        "field_groups": group_field_specs(),
+        **BOT_SCREEN_CONTEXT, "view": build_bot_list_view(items, request.query_params), "latest_summary": latest_summary,
     })
 
 
@@ -253,7 +225,7 @@ def show_bot_live(
 def read_capture_frames(request: Request, summary: RunSummary, registry: BotProfileRegistry) -> list[CaptureFrame]:
     """Mock = 봇 C 행동 값으로 만든 프레임 · Live = 브라우저 봇이 저장한 프레임 · 봇 C 0%면 없음"""
     run_config = summary.run_config
-    if not run_config.traffic_mix.bot_c_percent:
+    if not run_config.traffic_mix.percent_of(ActorType.BOT_C):
         return []
     if run_config.target_kind is TargetKind.FAKE:
         return build_mock_capture_frames(registry.get_profile(ActorType.BOT_C).behavior, run_config.random_seed)

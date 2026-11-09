@@ -60,11 +60,42 @@ BOT_B_FORM = {  # 기본 위장 매크로 값 + 간격 편차만 키움
 } | {"click_interval_deviation_ms": "200"}
 
 
-def test_bot_list_groups_bots_by_role_with_plain_behavior(dashboard_client):
-    page = dashboard_client.get("/bots").text
-    assert page.index("기준 트래픽") < page.index("탐지 대상 봇") < page.index("평가 전용 봇")
-    assert "예매 오픈과 동시에 예매하기 버튼 클릭" in page  # 봇 A 기본값
-    assert "탐지 시스템이 잡아야 할 흔적" in page and "탐지 결과 없음" in page
+def test_bot_list_shows_category_tiles_table_and_detail(dashboard_client):
+    page = dashboard_client.get("/bots?bot=bot_a").text
+    assert "수법 분류별 탐지 현황" in page and page.index("요청 자동화") < page.index("세션 · 기기 위장")
+    assert "예매 오픈과 동시에 예매하기 버튼 클릭" in page  # 선택한 봇 A 상세
+    assert "탐지 시스템이 잡아야 할 흔적" in page and "6종 중 6종" in page
+    filtered = dashboard_client.get("/bots?category=browser_automation").text
+    assert "6종 중 1종" in filtered and "브라우저 자동화 매크로" in filtered
+
+
+def test_new_bot_steps_create_reviewed_bot_in_traffic_mix(dashboard_client):
+    created = dashboard_client.post("/bots/new", data={"base_bot": "bot_a"}, follow_redirects=False)
+    assert created.status_code == 303 and created.headers["location"].endswith("/bots/bot_e/setup/2")
+    assert dashboard_client.get("/bots/bot_e/setup/2").status_code == 200
+    assert "percent_BOT_E" not in dashboard_client.get("/runs/new").text  # 작성 중 = 트래픽 구성 제외
+
+    dashboard_client.post("/bots/bot_e/setup/2", data={
+        "display_name": "취소표 감시 매크로", "purpose": "매진 뒤 취소 좌석을 짧은 주기로 조회", "category_id": "inventory_hoarding"})
+    behavior_form = BOT_B_FORM | {"click_interval_mean_ms": "1000", "action": "save"}
+    assert dashboard_client.post("/bots/bot_e/setup/3", data=behavior_form, follow_redirects=False).status_code == 303
+    assert dashboard_client.post("/bots/bot_e/setup/4", data={
+        "detection_signals": ["짧고 일정한 주기의 좌석 조회"], "detection_target_id": "bot_abd_detection"}, follow_redirects=False).status_code == 303
+    trial_page = dashboard_client.post("/bots/bot_e/setup/5", data={"action": "trial"})
+    assert "봇 의심 판정" in trial_page.text
+    finished = dashboard_client.post("/bots/bot_e/setup/5", data={"action": "finish"}, follow_redirects=False)
+    assert finished.headers["location"].endswith("/bots?bot=bot_e")
+
+    detail = dashboard_client.get("/bots?bot=bot_e").text
+    assert "취소표 감시 매크로" in detail and "좌석 클릭 사이 평균 1초" in detail and "사용 중으로 전환" in detail
+    assert "percent_BOT_E" in dashboard_client.get("/runs/new").text  # 검증 중 = 트래픽 구성 포함
+    assert dashboard_client.get("/bots/bot_e/setup/3", follow_redirects=False).status_code == 303  # 검증 중 → B2
+
+
+def test_new_bot_rejects_missing_identity(dashboard_client):
+    dashboard_client.post("/bots/new", data={"base_bot": "bot_b"})
+    response = dashboard_client.post("/bots/bot_e/setup/2", data={"display_name": "", "purpose": "x", "category_id": "behavior_disguise"})
+    assert response.status_code == 400 and "봇 이름" in response.text
 
 
 def test_bot_trial_shows_score_without_saving(dashboard_client):

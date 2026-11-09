@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 
 from ticket_guard_qa.dashboard.dependencies import render_screen
 from ticket_guard_qa.domain.enums import ActorType
-from ticket_guard_qa.macro_bots.bot_catalog import get_bot_type_info
+from ticket_guard_qa.macro_bots.bot_catalog import get_bot_type_info, list_actor_types
 from ticket_guard_qa.test_suites.event_contract import ACTION_ENDPOINT, BROWSER_EVENTS_ENDPOINT, load_contract_cases
 from ticket_guard_qa.test_suites.exception_cases import find_covering_suites, load_exception_cases
 from ticket_guard_qa.test_suites.suite_registry import list_suites
@@ -44,7 +44,7 @@ def show_test_cases(request: Request, run_id: str | None = None) -> HTMLResponse
         "run_ids": run_ids_with_answer_key,
         "selected_run_id": selected_run_id,
         "answer_key_total": len(answer_key),
-        "actor_rows": [(get_bot_type_info(actor_type), actor_counts[actor_type]) for actor_type in ActorType if actor_counts[actor_type]],
+        "actor_rows": [(get_bot_type_info(actor_type), actor_counts[actor_type]) for actor_type in list_actor_types() if actor_counts[actor_type]],
         "answer_key_entries": [(session_key, get_bot_type_info(actor_type))
                                for session_key, actor_type in list(answer_key.items())[:MAX_SHOWN_ANSWER_KEY_ENTRIES]],
     })

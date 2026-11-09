@@ -13,17 +13,39 @@ class VerdictStage(StrEnum):
         return self in (VerdictStage.CHALLENGE, VerdictStage.HOLD)  # 탐지 = CHALLENGE 이상
 
 
-class ActorType(StrEnum):
-    HUMAN = "HUMAN"
-    BOT_A = "BOT_A"
-    BOT_B = "BOT_B"
-    BOT_C = "BOT_C"
-    BOT_D = "BOT_D"
-    BOT_NEW = "BOT_NEW"  # 새 유형 · 목표 없음 · 결과만 공개
+class ActorType(str):
+    """봇 유형 id · 기본 6종 = 아래 상수 · 화면에서 추가한 유형 = QA DB bot_types · 전체 목록은 macro_bots/bot_catalog"""
+    __slots__ = ()
+
+    HUMAN: "ActorType"
+    BOT_A: "ActorType"
+    BOT_B: "ActorType"
+    BOT_C: "ActorType"
+    BOT_D: "ActorType"
+    BOT_NEW: "ActorType"  # 새 유형 · 목표 없음 · 결과만 공개
+
+    @property
+    def value(self) -> str:
+        return str.__str__(self)
 
     @property
     def is_bot(self) -> bool:
-        return self is not ActorType.HUMAN
+        return self.value != HUMAN_ACTOR_ID
+
+    def __repr__(self) -> str:
+        return f"ActorType({self.value!r})"
+
+
+HUMAN_ACTOR_ID = "HUMAN"
+ActorType.HUMAN = ActorType(HUMAN_ACTOR_ID)
+ActorType.BOT_A = ActorType("BOT_A")
+ActorType.BOT_B = ActorType("BOT_B")
+ActorType.BOT_C = ActorType("BOT_C")
+ActorType.BOT_D = ActorType("BOT_D")
+ActorType.BOT_NEW = ActorType("BOT_NEW")
+BUILT_IN_ACTOR_TYPES: tuple[ActorType, ...] = (
+    ActorType.HUMAN, ActorType.BOT_A, ActorType.BOT_B, ActorType.BOT_C, ActorType.BOT_D, ActorType.BOT_NEW,
+)
 
 
 class SessionStep(StrEnum):

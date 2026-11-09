@@ -48,7 +48,7 @@
       <div class="row"><h2 class="section-heading">유형별 퍼널</h2><span class="spacer"></span><span class="muted" id="progress-updated">{{ 'Live' if is_running else 'Final' }}</span></div>
       <table class="result-table" style="margin-top:12px">
         <tr><th>유형</th><th>계획</th>{% for step, title in session_step_titles.items() %}<th>{{ title }}</th>{% endfor %}</tr>
-        {% for info in bot_type_catalog if info.actor_type.value in actor_progress %}
+        {% for info in bot_type_catalog() if info.actor_type.value in actor_progress %}
         {% set progress = actor_progress[info.actor_type.value] %}
         {% set planned_count = progress[planned_progress_key] %}
         <tr data-actor="{{ info.actor_type.value }}" data-planned="{{ planned_count }}">
@@ -130,7 +130,7 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">{{ '봇 C 비율 0%' if not summary.run_config.traffic_mix.bot_c_percent else '캡처 없음 · 브라우저 자동화 실행 환경 미구성' }}</div></div>
+      <div class="capture-box"><i data-lucide="image-off"></i><div style="margin-top:6px">{{ '봇 C 비율 0%' if not summary.run_config.traffic_mix.percent_of('BOT_C') else '캡처 없음 · 브라우저 자동화 실행 환경 미구성' }}</div></div>
       {% endif %}
     </section>
   </aside>

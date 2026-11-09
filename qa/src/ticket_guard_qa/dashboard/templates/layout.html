@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <link rel="stylesheet" href="{{ base_path }}/static/css/theme_tokens.css?v={{ static_version }}">
   <link rel="stylesheet" href="{{ base_path }}/static/css/screen_layout.css?v={{ static_version }}">
+  {% set custom_bot_types = bot_type_catalog() | selectattr('is_custom') | list %}
+  {% if custom_bot_types %}<style>:root { {% for info in custom_bot_types %}--{{ info.color_token }}: {{ info.color_hex }}; {% endfor %}}</style>{% endif %}
   {% block head %}{% endblock %}
 </head>
 <body>

@@ -1,0 +1,217 @@
+{% extends "layout.html" %}
+{% from "screen_parts.html" import bot_screen_header, bot_badge, bot_status_chip %}
+{% block title %}새 봇 추가 | TicketGuard QA{% endblock %}
+{% block head %}
+<style>
+  .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13.5px; color: var(--sub-text-color); margin-bottom: 12px; }
+  .back-link svg { width: 16px; height: 16px; }
+  .setup-steps { display: flex; gap: 8px; padding: 14px 16px; margin-bottom: 16px; }
+  .setup-step { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-radius: 12px; background: #F3F5F9;
+    font-size: 13.5px; font-weight: 700; color: var(--sub-text-color); white-space: nowrap; }
+  .setup-step.is-done { background: var(--pass-green-light); color: var(--pass-green); }
+  .setup-step.is-current { background: var(--qa-blue-light); color: var(--qa-blue-text); }
+  .setup-step .step-index { width: 24px; height: 24px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; flex: none; }
+  .setup-step .step-index svg { width: 14px; height: 14px; }
+  .setup-step .step-value { margin-left: auto; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .setup-layout { display: grid; grid-template-columns: minmax(0, 1fr) 470px; gap: 16px; align-items: start; }
+  .setup-form { padding: 22px 24px; }
+  .setup-form h2 { margin: 0 0 4px; font-size: 18px; }
+  .form-description { color: var(--sub-text-color); font-size: 13.5px; margin-bottom: 8px; }
+  .field-group { display: grid; grid-template-columns: 190px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--soft-line-color); }
+  .field-group:last-of-type { border-bottom: none; }
+  .field-group-title { font-weight: 800; font-size: 14.5px; }
+  .field-group-description { font-size: 12.5px; color: var(--sub-text-color); margin-top: 4px; line-height: 1.45; }
+  .field-inputs { display: flex; gap: 14px; flex-wrap: wrap; }
+  .field-input { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; }
+  .input-box { display: flex; align-items: center; border: 1.5px solid #DCE2EA; border-radius: 9px; padding: 0 10px; height: 40px; background: #fff; }
+  .input-box:focus-within { border-color: var(--qa-blue); }
+  .input-box input, .input-box select { border: 0; outline: 0; font-size: 15px; font-weight: 700; background: transparent; font-family: inherit; }
+  .input-box input[type=number] { width: 110px; }
+  .input-box.is-wide { width: 100%; } .input-box.is-wide input { width: 100%; font-size: 14px; }
+  .input-box .unit { color: var(--muted-text-color); font-weight: 600; }
+  .hint { color: var(--muted-text-color); font-weight: 500; font-size: 12px; }
+  .choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .choice { position: relative; border: 1.5px solid var(--line-color); border-radius: 12px; padding: 12px; display: flex; gap: 10px; align-items: center;
+    font-size: 13.5px; font-weight: 700; cursor: pointer; background: #fff; }
+  .choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .choice:has(input:checked) { border-color: var(--qa-blue); background: var(--qa-blue-soft); }
+  .choice .choice-sub { display: block; font-size: 12px; font-weight: 600; color: var(--sub-text-color); margin-top: 2px; }
+  .chip-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip-choice { position: relative; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 13px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--line-color); background: #fff; cursor: pointer; white-space: nowrap; }
+  .chip-choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .chip-choice:has(input:checked) { background: var(--qa-blue-light); color: var(--qa-blue-text); border-color: var(--qa-blue-light); }
+  .chip-choice svg { width: 15px; height: 15px; }
+  .form-footer { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .error-box { background: var(--fail-red-light); color: var(--fail-red-text); border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 13.5px; margin-bottom: 12px; }
+  .summary-list { display: grid; grid-template-columns: 150px 1fr; gap: 10px 14px; font-size: 13.5px; margin: 12px 0; }
+  .summary-list dt { font-weight: 700; color: var(--sub-text-color); }
+  .summary-list dd { margin: 0; font-weight: 600; }
+
+  .side-column { display: flex; flex-direction: column; gap: 14px; }
+  .preview-card { padding: 18px 20px; border-top: 5px solid var(--bot-color); }
+  .preview-heading { font-size: 13px; font-weight: 800; color: var(--sub-text-color); display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  .preview-heading svg { width: 15px; height: 15px; }
+  .behavior-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+  .behavior-list li { display: grid; grid-template-columns: 100px 1fr; gap: 9px; }
+  .behavior-step { font-size: 12px; font-weight: 700; border-radius: 7px; padding: 3px 7px; text-align: center; white-space: nowrap; height: fit-content;
+    background: color-mix(in srgb, var(--bot-color) 12%, #fff); color: var(--bot-color); }
+  .behavior-headline { font-size: 13.5px; font-weight: 700; }
+  .behavior-detail { font-size: 12.5px; color: var(--sub-text-color); margin-top: 1px; }
+  .signal-list { display: grid; gap: 7px; margin: 10px 0 0; padding: 0; list-style: none; }
+  .signal-list li { display: flex; gap: 7px; font-size: 13px; }
+  .signal-list svg { width: 15px; height: 15px; color: var(--bot-color); flex: none; margin-top: 2px; }
+  .rule-card { padding: 16px 20px; }
+  .rule-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--soft-line-color); font-size: 13px; }
+  .rule-row:last-child { border-bottom: none; }
+  .rule-row b { width: 76px; }
+  .stage-row { display: grid; grid-template-columns: 90px 1fr 30px; gap: 8px; align-items: center; font-size: 12.5px; margin-top: 6px; }
+  .stage-row .progress-bar { height: 8px; }
+</style>
+{% endblock %}
+
+{% macro step_bar() %}
+<section class="card setup-steps">
+  {% for item in steps %}
+  {% set state = 'is-done' if item.number < step else ('is-current' if item.number == step else '') %}
+  <div class="setup-step {{ state }}"><span class="step-index">{% if item.number < step %}<i data-lucide="check"></i>{% else %}{{ item.number }}{% endif %}</span>{{ item.title }}
+    {% if item.number < step and step_values.get(item.number) %}<span class="step-value">{{ step_values[item.number] }}</span>{% endif %}</div>
+  {% endfor %}
+</section>
+{% endmacro %}
+
+{% block content %}
+{{ bot_screen_header("새 봇 추가", "기존 봇 행동 설정 복사 → 바꿀 값만 수정 · 저장 = 작성 중 · 모의 판정 후 검증 중 · 사용 중 전환 후 학습 · 평가 Run 포함") }}
+<a class="back-link" href="{{ base_path }}/bots{{ '?bot=' ~ info.slug if info }}"><i data-lucide="chevron-left"></i>봇 프로필 목록</a>
+{{ step_bar() }}
+
+<div class="setup-layout">
+  <section class="card setup-form">
+    {% if error_message %}<div class="error-box">{{ error_message }}</div>{% endif %}
+
+    {% if step == 1 %}
+    <form method="post" action="{{ base_path }}/bots/new">
+      <h2>1 · 시작 봇 선택</h2>
+      <div class="form-description">선택한 봇의 예매 중 행동 값 복사 · 다음 단계에서 이름 · 분류 · 행동 값 수정</div>
+      <div class="choice-grid">
+        {% for candidate in base_candidates %}
+        <label class="choice"><input type="radio" name="base_bot" value="{{ candidate.slug }}" {{ 'checked' if loop.first }}>{{ bot_badge(candidate, 34) }}
+          <span>{{ candidate.type_name }}<span class="choice-sub">{{ candidate.role_label }} · {{ candidate.category.title }}</span></span></label>
+        {% endfor %}
+      </div>
+      <div class="form-footer"><a class="button is-outline is-small" href="{{ base_path }}/bots">취소</a><span class="spacer"></span>
+        <button class="button is-small" type="submit">다음 · 이름 · 수법 분류</button></div>
+    </form>
+
+    {% elif step == 2 %}
+    <form method="post" action="{{ base_path }}/bots/{{ info.slug }}/setup/2">
+      <h2>2 · 이름 · 수법 분류</h2>
+      <div class="form-description">B1 목록 · 상세에 그대로 표시 · 처음 보는 사람 기준 문장</div>
+      <div class="field-group"><div><div class="field-group-title">봇 이름</div><div class="field-group-description">무엇을 하는 매크로인지 · 1 ~ 30자</div></div>
+        <label class="field-input"><span class="input-box is-wide"><input type="text" name="display_name" maxlength="30" required value="{{ '' if info.type_name.startswith('새 봇') else info.type_name }}" placeholder="예: 취소표 감시 매크로"></span></label></div>
+      <div class="field-group"><div><div class="field-group-title">한 줄 정의</div><div class="field-group-description">언제 · 무엇을 · 어떻게 · 1 ~ 80자</div></div>
+        <label class="field-input"><span class="input-box is-wide"><input type="text" name="purpose" maxlength="80" required value="{{ info.purpose }}" placeholder="예: 매진 뒤 취소 좌석을 짧은 주기로 계속 조회하는 매크로"></span></label></div>
+      <div class="field-group"><div><div class="field-group-title">공격 수법 분류</div><div class="field-group-description">B1 분류 타일 · 목록 묶음 기준</div></div>
+        <div class="chip-choices">{% for category in categories %}<label class="chip-choice"><input type="radio" name="category_id" value="{{ category.category_id }}" {{ 'checked' if category.category_id == info.category_id }}><i data-lucide="{{ category.icon_name }}"></i>{{ category.title }}</label>{% endfor %}</div></div>
+      <div class="field-group"><div><div class="field-group-title">트래픽</div><div class="field-group-description">추가 봇 실행 방식</div></div>
+        <div><span class="tag is-qa"><i data-lucide="network"></i>HTTP 트래픽</span></div></div>
+      <div class="form-footer"><span class="spacer"></span><button class="button is-small" type="submit">다음 · 예매 중 행동</button></div>
+    </form>
+
+    {% elif step == 3 %}
+    <form method="post" action="{{ base_path }}/bots/{{ info.slug }}/setup/3">
+      <h2>3 · 예매 중 행동</h2>
+      <div class="form-description">시작 봇 값에서 바꿀 값만 수정 · 오른쪽 미리보기 = B1에 표시될 문장</div>
+      {% for group_title, specs in field_groups.items() %}
+      <div class="field-group"><div class="field-group-title">{{ group_title }}</div>
+        <div class="field-inputs">
+          {% for spec in specs %}
+          <label class="field-input">{{ spec.title }}
+            {% if spec.choices %}
+            <span class="input-box"><select name="{{ spec.field_name }}">{% for choice_value, choice_title in spec.choices %}<option value="{{ choice_value }}" {{ 'selected' if behavior_values[spec.field_name] | int == choice_value }}>{{ choice_title }}</option>{% endfor %}</select></span>
+            {% else %}
+            <span class="input-box"><input type="number" name="{{ spec.field_name }}" min="{{ spec.minimum }}" max="{{ spec.maximum }}" value="{{ behavior_values[spec.field_name] }}" required><span class="unit">{{ spec.unit }}</span></span>
+            {% endif %}
+            {% if spec.hint %}<span class="hint">{{ spec.hint }}</span>{% endif %}
+          </label>
+          {% endfor %}
+        </div></div>
+      {% endfor %}
+      <div class="form-footer"><a class="button is-outline is-small" href="{{ base_path }}/bots/{{ info.slug }}/setup/2">이전</a><span class="spacer"></span>
+        <button class="button is-outline is-small" type="submit" name="action" value="preview"><i data-lucide="eye"></i>문장 미리보기</button>
+        <button class="button is-small" type="submit" name="action" value="save">다음 · 탐지 흔적 · 합격 기준</button></div>
+    </form>
+
+    {% elif step == 4 %}
+    <form method="post" action="{{ base_path }}/bots/{{ info.slug }}/setup/4">
+      <h2>4 · 탐지 흔적 · 합격 기준</h2>
+      <div class="form-description">탐지 시스템이 이 봇에서 잡아야 할 흔적 · 탐지율을 어느 합격 기준에 합산할지</div>
+      <div class="field-group"><div><div class="field-group-title">탐지 흔적</div><div class="field-group-description">1 ~ {{ signal_slots }}줄 · 줄마다 60자 이하 · 관찰 가능한 행동 기준</div></div>
+        <div style="display:grid;gap:8px">{% for index in range(signal_slots) %}<span class="input-box is-wide"><input type="text" name="detection_signals" maxlength="60" value="{{ info.detection_signals[index] if index < info.detection_signals | length else '' }}" placeholder="{{ ['예: 짧고 일정한 주기의 좌석 조회', '예: 취소 직후 즉시 확정', '예: 매진 뒤에도 좌석 화면 장시간 유지'][index] }}"></span>{% endfor %}</div></div>
+      <div class="field-group"><div><div class="field-group-title">합격 기준</div><div class="field-group-description">기획서 21쪽 탐지 목표 · 고른 묶음에 합산 판정</div></div>
+        <div style="display:grid;gap:8px">
+          {% for target in detection_targets %}<label class="choice"><input type="radio" name="detection_target_id" value="{{ target.criterion_id }}" {{ 'checked' if info.detection_target_id == target.criterion_id }}><i data-lucide="target"></i><span>{{ target.title }}</span></label>{% endfor %}
+          <label class="choice"><input type="radio" name="detection_target_id" value="{{ no_target_value }}" {{ 'checked' if not info.detection_target_id }}><i data-lucide="eye"></i><span>합격 기준 없음 · 결과 공개만</span></label>
+        </div></div>
+      <div class="form-footer"><a class="button is-outline is-small" href="{{ base_path }}/bots/{{ info.slug }}/setup/3">이전</a><span class="spacer"></span>
+        <button class="button is-small" type="submit">다음 · 모의 판정 · 저장</button></div>
+    </form>
+
+    {% elif step == 5 %}
+    <form method="post" action="{{ base_path }}/bots/{{ info.slug }}/setup/5">
+      <h2>5 · 모의 판정 · 저장</h2>
+      <div class="form-description">가짜 대상 {{ trial_session_count }}세션 판정 분포 확인 · 저장 = 검증 중 · Run 트래픽 구성에 포함</div>
+      <dl class="summary-list">
+        <dt>봇 이름</dt><dd>{{ info.display_name }}</dd>
+        <dt>한 줄 정의</dt><dd>{{ info.purpose or '미입력' }}</dd>
+        <dt>공격 수법 분류</dt><dd>{{ info.category.title }}</dd>
+        <dt>합격 기준</dt><dd>{% for target in detection_targets if target.criterion_id == info.detection_target_id %}{{ target.title }}{% else %}합격 기준 없음 · 결과 공개만{% endfor %}</dd>
+        <dt>탐지 흔적</dt><dd>{{ info.detection_signals | length }}줄</dd>
+      </dl>
+      <div class="field-group"><div><div class="field-group-title">모의 판정</div><div class="field-group-description">항상 가짜 대상 · 실제 시스템에 시험 세션 미생성</div></div>
+        <div>
+          {% if trial_result %}
+          <div class="row" style="align-items:baseline;gap:8px"><b style="font-size:26px">{{ trial_result.detection_rate_percent | metric('rate_percent') }}</b>
+            <span class="muted">봇 의심 판정 {{ trial_result.detected_count }} / {{ trial_result.session_count }}세션</span></div>
+          {% for stage, count in trial_result.count_by_stage.items() %}
+          <div class="stage-row"><span>{{ stage.value }}</span><span class="progress-bar"><i style="width:{{ count / trial_result.session_count * 100 }}%;background:{{ 'var(--fail-red)' if stage.is_detected else 'var(--bot-human)' }}"></i></span><span>{{ count }}</span></div>
+          {% endfor %}
+          {% else %}<span class="muted">모의 판정 미실행</span>{% endif %}
+        </div></div>
+      <div class="form-footer"><a class="button is-outline is-small" href="{{ base_path }}/bots/{{ info.slug }}/setup/4">이전</a><span class="spacer"></span>
+        <button class="button is-outline is-small" type="submit" name="action" value="trial"><i data-lucide="flask-conical"></i>모의 판정 실행 ({{ trial_session_count }}세션)</button>
+        <button class="button is-small" type="submit" name="action" value="finish"><i data-lucide="save"></i>검증 중으로 저장</button></div>
+    </form>
+    {% endif %}
+  </section>
+
+  <aside class="side-column">
+    {% if info %}
+    <section class="card preview-card" style="--bot-color:var(--{{ info.color_token }})">
+      <div class="preview-heading"><i data-lucide="eye"></i>B1 목록 표시 미리보기</div>
+      <div class="row" style="margin-bottom:10px">{{ bot_badge(info, 44) }}<div><div class="muted" style="font-size:12px;font-weight:700">{{ info.role_label }} · {{ info.category.title }}</div><b style="font-size:18px">{{ info.type_name }}</b></div><span class="spacer"></span>{{ bot_status_chip(info.status_key, info.status_title) }}</div>
+      <div style="font-size:13.5px;font-weight:600;margin-bottom:12px">{{ info.purpose or '한 줄 정의 미입력' }}</div>
+      <ul class="behavior-list">{% for line in behavior_lines %}<li><span class="behavior-step">{{ line.step_title }}</span><div><div class="behavior-headline">{{ line.headline }}</div><div class="behavior-detail">{{ line.detail }}</div></div></li>{% endfor %}</ul>
+      {% if info.detection_signals %}<ul class="signal-list">{% for signal in info.detection_signals %}<li><i data-lucide="scan-search"></i>{{ signal }}</li>{% endfor %}</ul>{% endif %}
+    </section>
+    <section class="card rule-card">
+      <div class="row" style="margin-bottom:6px"><b>룰 매칭 예측</b><span class="spacer"></span><span class="tag" style="background:var(--gray-chip-background);color:var(--sub-text-color)">룰셋 {{ rule_set_version }}</span></div>
+      {% for preview in rule_previews %}
+      <div class="rule-row"><b>{{ preview.rule_id }}</b>
+        {% if preview.is_expected_hit is none %}<span class="pill is-not-measured">Pending</span>{% elif preview.is_expected_hit %}<span class="pill is-failed">Hit</span>{% else %}<span class="pill is-passed">Pass</span>{% endif %}
+        {% if preview.is_expected_hit is not none %}<span class="muted">{{ preview.reason }}</span>{% endif %}</div>
+      {% endfor %}
+    </section>
+    {% else %}
+    <section class="card preview-card" style="--bot-color:var(--qa-blue)">
+      <div class="preview-heading"><i data-lucide="list-checks"></i>추가 절차</div>
+      <ul class="behavior-list">
+        {% for item in steps %}<li><span class="behavior-step">{{ item.number }}단계</span><div><div class="behavior-headline">{{ item.title }}</div></div></li>{% endfor %}
+        <li><span class="behavior-step">저장 후</span><div><div class="behavior-headline">검증 중 → 사용 중 전환</div><div class="behavior-detail">B1 상세 · 사용 중 = 학습 · 평가 Run 포함</div></div></li>
+      </ul>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

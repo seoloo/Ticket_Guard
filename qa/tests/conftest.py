@@ -3,8 +3,17 @@ from pathlib import Path
 
 import pytest
 
+from ticket_guard_qa.macro_bots.bot_catalog import replace_custom_bot_types
 from ticket_guard_qa.qa_database.database import connect_qa_database
 from ticket_guard_qa.settings import Settings
+
+
+@pytest.fixture(autouse=True)
+def reset_custom_bot_types():
+    """화면에서 추가한 봇 유형 목록은 프로세스 공용 · 테스트끼리 섞이지 않게 비움"""
+    replace_custom_bot_types(())
+    yield
+    replace_custom_bot_types(())
 
 
 @pytest.fixture

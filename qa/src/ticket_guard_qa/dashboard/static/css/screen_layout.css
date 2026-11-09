@@ -173,3 +173,15 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 2; flex-shrink: 0; }
 .suite-tooltip-code { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 6px; background: var(--qa-blue-light); color: var(--qa-blue-text); }
 .suite-tooltip-row { display: grid; grid-template-columns: 70px 1fr; gap: 8px; }
 .suite-tooltip-row b { color: var(--muted-text-color); font-weight: 700; white-space: nowrap; }
+
+/* 봇 배지 · 상태 칩 · 봇 수가 늘어도 아이콘 + 알파벳 코드로 구분 · 색은 보조 */
+.bot-badge { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 30%;
+  background: color-mix(in srgb, var(--bot-color) 14%, #fff); color: var(--bot-color); }
+.bot-badge svg { width: 55%; height: 55%; }
+.bot-badge-code { position: absolute; right: -5px; bottom: -5px; background: #fff; border: 1.5px solid currentColor; border-radius: 7px;
+  font-size: 10.5px; font-weight: 800; line-height: 15px; padding: 0 4px; }
+.bot-status { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.bot-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.bot-status.is-active { background: var(--pass-green-light); color: var(--pass-green); }
+.bot-status.is-review { background: var(--qa-blue-light); color: var(--qa-blue-text); }
+.bot-status.is-draft, .bot-status.is-locked { background: var(--gray-chip-background); color: var(--sub-text-color); }

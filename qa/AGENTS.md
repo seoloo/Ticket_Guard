@@ -107,7 +107,7 @@ main ← develop ← qa   (qa/ 만)
 | 저장소 | 시스템 | QA |
 |---|---|---|
 | 시스템 MongoDB (`ticketguard`) · 운영 데이터 구조만 | 읽기 · 쓰기 | **읽기만** |
-| QA DB `ticketguard_qa` (정답표 · 봇 설정 · 실행 기록 · 점수) · MongoDB QA 전용 인스턴스 `qa-mongo` (`qa/compose.qa-db.yml` · `qa-backend` 네트워크 · 시스템 MongoDB와 서버 · 계정 분리) | **접근 못 함** | 읽기 · 쓰기 |
+| QA DB `ticketguard_qa` (정답표 · 봇 설정 · 추가한 봇 유형 · 실행 기록 · 점수) · MongoDB QA 전용 인스턴스 `qa-mongo` (`qa/compose.qa-db.yml` · `qa-backend` 네트워크 · 시스템 MongoDB와 서버 · 계정 분리) | **접근 못 함** | 읽기 · 쓰기 |
 | QA 전달용 (`ticketguard_qa_archive` 또는 JSON 파일) · 요청 시에만 | 분석 담당만 읽기 · 판정 코드 읽기 금지 | 만듦 |
 | 실행 보고서 | 볼 수 있음 | 만듦 |
 

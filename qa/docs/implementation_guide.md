@@ -120,13 +120,21 @@ qa/
 5. AGENTS.md 5장 시험 대상 현황과 이 문서 5장을 고쳐요.
 
 ### 새 봇
-빠뜨리면 `tests/unit_tests/test_macro_bots.py`가 실패해요.
-1. `domain/enums.py`의 `ActorType`에 이름을 추가해요.
-2. `macro_bots/bot_catalog.py`에 소개 한 줄(이름 · 한 줄 정의 · 역할(`BotRole`) · 아이콘 · 탐지 신호 · 트래픽 종류 · 색 변수)을 추가해요. 역할이 새로 필요하면 `BOT_ROLE_CATALOG`에 한 줄 추가해요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
-3. `macro_bots/bot_profiles.py`의 `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 시작 행동 값을 추가해요. 이후 값은 B2 화면에서 버전으로 바꿔요.
-4. 목표가 있으면 `domain/pass_criteria.py`에 기준, `domain/detection_targets.py`에 묶음 한 줄을 추가해요. B1 · B4 · 점수 계산이 같이 따라와요.
-5. 트래픽 구성에 넣으려면 `domain/models.py`의 `TrafficMix`와 02 화면 입력 칸을 고쳐요.
-6. 브라우저가 필요하면 `traffic_generators/bot_c_browser.py` 방식으로 따로 만들어요. 대기 시간 식은 `macro_bots/behavior_sampling.py`를 써요.
+봇 추가는 두 가지예요. 기존 행동 값의 새 조합이면 화면, 새 행동 방식이면 코드예요.
+
+**화면에서 추가 (B5 · 코드 수정 없음)** · 행동 값(`SessionBehavior`) 조합으로 만들 수 있는 봇
+1. B1 "새 봇 추가" → ① 시작 봇 복사 → ② 이름 · 한 줄 정의 · 공격 수법 분류 → ③ 예매 중 행동 → ④ 탐지 흔적 · 합격 기준 묶음 → ⑤ 모의 판정 · 저장
+2. 저장 위치: QA DB `bot_types` (이름 · 분류 · 상태 · 탐지 흔적 · 합격 기준 · v1 행동 값) · 이후 행동 값은 B2 버전(`bot_versions`)
+3. 상태: 작성 중(Run 제외) → 검증 중(Run 포함) → 사용 중 · B1 상세에서 전환
+4. 유형 id `BOT_E` · `BOT_F` … 자동 · 색은 `bot_catalog.CUSTOM_BOT_COLORS` 순서 · 구분은 아이콘 + 알파벳 코드
+5. 따라오는 곳: 02 트래픽 구성 칸 · 정답표 · 합격 기준 합산(`detection_target_id`) · B1 분류 타일 · B3 · B4 · 실행 트래픽
+
+**코드로 추가** · 새 행동 방식(대기열 우회 · 보안문자 판독 등)이 필요한 봇 · 빠뜨리면 `tests/unit_tests/test_macro_bots.py`가 실패해요.
+1. `domain/enums.py`의 `ActorType` 상수 · `BUILT_IN_ACTOR_TYPES`에 추가해요.
+2. `macro_bots/bot_catalog.py`의 `BUILT_IN_BOT_TYPES`에 한 줄(이름 · 한 줄 정의 · 역할 · 아이콘 · 탐지 흔적 · 분류 · 합격 기준 묶음 · 색 변수)을 추가해요. 새 분류는 `BOT_CATEGORIES`에 한 줄이에요. 색은 `theme_tokens.css`와 [`ui.md`](ui.md) 2장에 함께 추가해요.
+3. `macro_bots/bot_profiles.py`의 `DEFAULT_BEHAVIOR_BY_ACTOR_TYPE`에 시작 행동 값을 추가해요.
+4. 새 합격 기준이 필요하면 `domain/pass_criteria.py`에 기준, `domain/detection_targets.py`에 묶음 한 줄을 추가해요. 소속은 봇마다 `detection_target_id`로 정해요.
+5. 새 행동 방식은 `SessionBehavior` 필드(아래 "새 행동 값") + `system_targets/live_booking_client.py` 실행 단계로 넣어요. 브라우저가 필요하면 `traffic_generators/bot_c_browser.py` 방식이에요.
 
 ### 새 행동 값 (예: ③ 화면 흐름)
 1. `domain/models.py`의 `SessionBehavior`에 필드를 추가해요.
@@ -154,7 +162,7 @@ qa/
 | 이벤트 전달 검증 (2단계) | `system_targets/live_kafka_reader.py` · `test_suites/event_delivery.py` · Mock `FakeEventStreamReader` | 동작 (Run 설정 "이벤트 전달 검증" · Run 직전 토픽 끝 위치 기록 → VU 트래픽 → QA 전용 소비자 그룹으로 읽기(commit 없음) → 좌석 클릭 · 서버 이벤트 완전성 · 중복 · 형식 · 파티션 키 · 전달 지연 p95 · 관측 이벤트 수) · `docs/contracts.md` 4-1 | 전달 지연 기준선 미정 | |
 | 원본 적재 검증 (2-b) | `system_targets/live_raw_mongo_reader.py` · `test_suites/raw_ingest.py` · `domain/raw_event_routing.py` · Mock `FakeRawEventReader` | Mock 동작 (Run 설정 "원본 적재 검증" · 이벤트 전달 검증과 같은 트래픽 · 토픽 읽기 → QA 메시지 위치(파티션 · 오프셋)로 원본 DB 9개 컬렉션 조회 · 최대 30초 적재 대기 → 적재 누락 · 중복 적재 · 오분류 · 미분류 · 원문 변형 · 적재 지연 p95) · `docs/contracts.md` 4-2 | Live 미실행: 원본 DB 읽기 전용 계정 · qa-dashboard ↔ `raw-backend` 네트워크 없음 · 적재 지연 기준선 미정 | Live 연결 (db팀 계정 · 네트워크) |
 | QA 데이터 넘기기 | `qa_database/archive_export.py` · `command_line.py` (`export-archive`) · `archive_exports` 테이블 | 동작 (요청 · QA 담당 승인 시 · 끝난 Run만 · 기본 결과 숫자 + 적발 목록 · 정답표 · 봇 설정은 `--collection` 직접 지정 · 컬렉션별 JSON + manifest → 받는 쪽 `ticketguard_qa_archive` · 시스템 DB에는 쓰지 않음 · 필드 추가 = `*_FIELDS` 한 줄 · 정답표 · 봇 설정을 넘긴 봇 버전으로 Run 시작 시 03 경고) | 대시보드 버튼 없음(의도) · 받는 쪽 가져오기는 수동(`mongoimport`) | |
-| QA DB MongoDB | `compose.qa-db.yml` · `compose.qa-db.local.yml` · `compose.qa-db.init.js` · `qa_database/database.py` | 동작 (QA 전용 인스턴스 `qa-mongo` · 팀 compose에 덧붙여 실행 · `qa-backend` 네트워크 = qa-dashboard · qa-mongo만 · QA 계정 = `ticketguard_qa` 읽기 · 쓰기만 · 컬렉션 `runs` · `answer_keys` · `bot_versions` · `archive_exports` · 컨테이너 안 27017 · 내 PC 27021은 local 파일로만 · 단위 테스트는 `mongomock://` 메모리 DB) | 백업 미구성 | 서버 배포 시 백업 (`mongodump`) |
+| QA DB MongoDB | `compose.qa-db.yml` · `compose.qa-db.local.yml` · `compose.qa-db.init.js` · `qa_database/database.py` | 동작 (QA 전용 인스턴스 `qa-mongo` · 팀 compose에 덧붙여 실행 · `qa-backend` 네트워크 = qa-dashboard · qa-mongo만 · QA 계정 = `ticketguard_qa` 읽기 · 쓰기만 · 컬렉션 `runs` · `answer_keys` · `bot_versions` · `bot_types` · `archive_exports` · 컨테이너 안 27017 · 내 PC 27021은 local 파일로만 · 단위 테스트는 `mongomock://` 메모리 DB) | 백업 미구성 | 서버 배포 시 백업 (`mongodump`) |
 | 터미널 명령 · 종료 코드 | `command_line.py` | 동작 | | |
 | QA DB · 실행 관리 | `qa_database/` · `test_runs/` | 동작 | | 스키마 바뀌면 Alembic |
 | 보고서 | `reports/` | 동작 | | |

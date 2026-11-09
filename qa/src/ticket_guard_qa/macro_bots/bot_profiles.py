@@ -4,7 +4,7 @@ from datetime import datetime
 
 from ticket_guard_qa.domain.enums import ActorType
 from ticket_guard_qa.domain.models import SessionBehavior
-from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, get_bot_type_info
+from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, find_bot_type_info, get_bot_type_info, list_bot_types
 
 DEFAULT_VERSION_NUMBER = 1
 
@@ -62,10 +62,21 @@ class BotProfile:
         return get_bot_type_info(self.actor_type)
 
 
+def find_default_behavior(actor_type: ActorType) -> SessionBehavior:
+    """v1 행동 값 · 기본 유형 = 위 표 · 추가 유형 = QA DB bot_types 시작 값 · 모르는 유형 = 정상 값"""
+    if actor_type in DEFAULT_BEHAVIOR_BY_ACTOR_TYPE:
+        return DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[actor_type]
+    info = find_bot_type_info(actor_type)
+    if info is not None and info.initial_behavior is not None:
+        return info.initial_behavior
+    return DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN]
+
+
 def build_default_profiles() -> tuple[BotProfile, ...]:
+    """목록의 모든 유형 v1 · 추가 유형 포함"""
     return tuple(
-        BotProfile(actor_type, behavior, change_note="초기값")
-        for actor_type, behavior in DEFAULT_BEHAVIOR_BY_ACTOR_TYPE.items()
+        BotProfile(info.actor_type, find_default_behavior(info.actor_type), change_note="초기값")
+        for info in list_bot_types()
     )
 
 
@@ -79,6 +90,8 @@ class BotProfileRegistry:
         return list(self.profile_by_actor_type.values())
 
     def get_profile(self, actor_type: ActorType) -> BotProfile:
+        if actor_type not in self.profile_by_actor_type:  # 실행 도중 추가된 유형 · 기본값
+            return BotProfile(ActorType(actor_type), find_default_behavior(ActorType(actor_type)), change_note="초기값")
         return self.profile_by_actor_type[actor_type]
 
     def version_number_by_actor_type(self) -> dict[str, int]:

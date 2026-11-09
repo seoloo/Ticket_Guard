@@ -10,12 +10,13 @@ from ticket_guard_qa.domain.enums import ActorType
 from ticket_guard_qa.domain.models import SessionBehavior
 from ticket_guard_qa.macro_bots.behavior_fields import behavior_to_dict
 from ticket_guard_qa.macro_bots.bot_profiles import (
-    DEFAULT_BEHAVIOR_BY_ACTOR_TYPE,
     DEFAULT_VERSION_NUMBER,
+    find_default_behavior,
     BotProfile,
     BotProfileRegistry,
     build_default_profiles,
 )
+from ticket_guard_qa.macro_bots.bot_type_store import BotTypeStore
 from ticket_guard_qa.qa_database.database import BOT_VERSIONS, as_utc
 
 
@@ -26,7 +27,7 @@ class BotProfileLockedError(Exception):
 def profile_from_document(document: dict[str, Any]) -> BotProfile:
     actor_type = ActorType(document["actor_type"])
     stored_behavior = document["profile"].get("behavior", {})
-    default_values = behavior_to_dict(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[actor_type])
+    default_values = behavior_to_dict(find_default_behavior(actor_type))
     known_values = {name: stored_behavior[name] for name in default_values if name in stored_behavior}
     return BotProfile(
         actor_type=actor_type,
@@ -40,9 +41,11 @@ def profile_from_document(document: dict[str, Any]) -> BotProfile:
 class BotProfileStore:
     def __init__(self, qa_database: Database) -> None:
         self.bot_versions = qa_database[BOT_VERSIONS]
+        self.bot_type_store = BotTypeStore(qa_database)
 
     def load_current_registry(self) -> BotProfileRegistry:
-        """종류마다 가장 최근 버전 · 저장 기록 없으면 기본값 v1"""
+        """종류마다 가장 최근 버전 · 저장 기록 없으면 기본값 v1 · 추가 유형 목록도 QA DB와 맞춤"""
+        self.bot_type_store.refresh_catalog()
         latest_by_actor_type = {profile.actor_type: profile for profile in build_default_profiles()}
         for actor_type in latest_by_actor_type:
             document = self.bot_versions.find_one({"actor_type": actor_type.value}, sort=[("version_number", DESCENDING)])
@@ -52,6 +55,7 @@ class BotProfileStore:
 
     def load_registry_for_versions(self, version_numbers: Mapping[str, int]) -> BotProfileRegistry:
         """실행 당시 버전 그대로 · B3 · 다시 계산할 때"""
+        self.bot_type_store.refresh_catalog()
         profiles = []
         for default_profile in build_default_profiles():
             wanted_version = version_numbers.get(default_profile.actor_type.value, DEFAULT_VERSION_NUMBER)
@@ -68,7 +72,7 @@ class BotProfileStore:
         """최신 먼저 · 마지막 줄은 기본값 v1"""
         documents = self.bot_versions.find({"actor_type": actor_type.value}).sort("version_number", DESCENDING)
         saved_profiles = [profile_from_document(document) for document in documents]
-        default_profile = next(profile for profile in build_default_profiles() if profile.actor_type is actor_type)
+        default_profile = next(profile for profile in build_default_profiles() if profile.actor_type == actor_type)
         return [*saved_profiles, default_profile]
 
     def save_new_version(

@@ -6,7 +6,7 @@ from ticket_guard_qa.domain.models import SessionKey, TrafficMix
 
 def test_plan_matches_traffic_mix():
     planned_users = plan_virtual_users(TrafficMix(), virtual_user_count=200, random_seed=1)
-    human_count = sum(1 for user in planned_users if user.actor_type is ActorType.HUMAN)
+    human_count = sum(1 for user in planned_users if user.actor_type == ActorType.HUMAN)
     assert len(planned_users) == 200
     assert human_count == 160
 

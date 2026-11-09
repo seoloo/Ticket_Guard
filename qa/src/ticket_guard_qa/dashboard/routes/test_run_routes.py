@@ -16,7 +16,8 @@ from ticket_guard_qa.dashboard.dependencies import (
     render_screen,
 )
 from ticket_guard_qa.domain.enums import AlertPolicy, Comparison, RunStatus, TargetKind
-from ticket_guard_qa.domain.models import CriterionResult, RunConfig, RunSummary, TrafficMix
+from ticket_guard_qa.domain.models import LEGACY_TRAFFIC_FIELD_TO_ACTOR, CriterionResult, RunConfig, RunSummary, TrafficMix
+from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, list_bot_types
 from ticket_guard_qa.domain.pass_criteria import PASS_CRITERIA, PassCriterion
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunDeleteError, RunService
@@ -28,7 +29,24 @@ RESULT_LIST_LIMIT = 50  # 테스트 결과 목록 · 최신 Run
 RUN_STATUS_FILTERS = {"PASSED": "PASS", "FAILED": "FAIL", "RUNNING": "진행 중", "ERROR": "ERROR", "CANCELLED": "중지"}
 VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)
-TRAFFIC_FIELD_NAMES = ("human_percent", "bot_a_percent", "bot_b_percent", "bot_c_percent", "bot_d_percent")
+TRAFFIC_FIELD_PREFIX = "percent_"  # 폼 이름 · percent_HUMAN · percent_BOT_E
+
+
+def list_traffic_types(run_service: RunService) -> list[BotTypeInfo]:
+    """02 트래픽 구성 칸 · 평가 전용 · 작성 중 제외 · QA DB 추가 유형 포함"""
+    run_service.bot_profile_store.bot_type_store.refresh_catalog()
+    return [info for info in list_bot_types() if info.is_in_traffic_mix]
+
+
+def parse_traffic_mix(form, traffic_types: list[BotTypeInfo]) -> TrafficMix:
+    """새 이름(percent_유형) · 이전 이름(human_percent 등) 둘 다"""
+    legacy_name_by_actor = {actor: name for name, actor in LEGACY_TRAFFIC_FIELD_TO_ACTOR.items()}
+    percents = {}
+    for info in traffic_types:
+        actor = info.actor_type.value
+        raw_value = form.get(f"{TRAFFIC_FIELD_PREFIX}{actor}", form.get(legacy_name_by_actor.get(actor, ""), 0))
+        percents[actor] = int(raw_value or 0)
+    return TrafficMix(percents)
 ALERT_POLICY_TITLES = {AlertPolicy.NEVER: "알림 없음", AlertPolicy.ON_FAILURE: "FAIL 시 알림", AlertPolicy.ALWAYS: "항상 알림"}
 NEXT_ACTION_BY_CRITERION_ID = {
     "api_latency": "판정 API 지연 구간 분석 → 백엔드",
@@ -69,6 +87,7 @@ def _render_test_setup(
     return render_screen(request, "screen_02_test_setup.html", {
         "active_tab": "qa",
         "run_config": run_config,
+        "traffic_types": list_traffic_types(run_service),
         "suites": list_suites(),
         "virtual_user_presets": VIRTUAL_USER_PRESETS,
         "duration_presets_sec": DURATION_PRESETS_SEC,
@@ -98,7 +117,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
     form = await request.form()
     suite_names = tuple(form.getlist("suite_names"))
     try:
-        traffic_mix = TrafficMix(**{name: int(form.get(name, 0)) for name in TRAFFIC_FIELD_NAMES})
+        traffic_mix = parse_traffic_mix(form, list_traffic_types(run_service))
         run_config = RunConfig(
             target_kind=TargetKind(form.get("target_kind", TargetKind.FAKE.value)),
             suite_names=suite_names,

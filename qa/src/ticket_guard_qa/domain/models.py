@@ -19,26 +19,36 @@ SystemVerdicts = dict[SessionKey, VerdictStage]
 ActorProgress = dict[str, dict[str, int]]  # 종류 → {"PLANNED" · SessionStep 값: 사람 수} · B3
 
 
+LEGACY_TRAFFIC_FIELD_TO_ACTOR = {  # 이전 Run 기록 · 이전 폼 이름 호환
+    "human_percent": "HUMAN", "bot_a_percent": "BOT_A", "bot_b_percent": "BOT_B",
+    "bot_c_percent": "BOT_C", "bot_d_percent": "BOT_D",
+}
+DEFAULT_TRAFFIC_PERCENTS = {"HUMAN": 80, "BOT_A": 5, "BOT_B": 5, "BOT_C": 5, "BOT_D": 5}
+
+
 @dataclass(frozen=True)
 class TrafficMix:
-    human_percent: int = 80
-    bot_a_percent: int = 5
-    bot_b_percent: int = 5
-    bot_c_percent: int = 5
-    bot_d_percent: int = 5
+    """유형 id → 비율(%) · 봇 유형이 늘어도 구조 그대로 · 0% 유형은 저장 안 함"""
+    percent_by_type: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TRAFFIC_PERCENTS))
 
     def __post_init__(self) -> None:
-        if sum(self.percent_by_actor_type().values()) != 100:
+        if any(percent < 0 for percent in self.percent_by_type.values()):
+            raise ValueError("트래픽 구성 오류 · 음수 비율")
+        if sum(self.percent_by_type.values()) != 100:
             raise ValueError("트래픽 구성 합계 오류 · 100% 필요")
+        object.__setattr__(self, "percent_by_type", {key: value for key, value in self.percent_by_type.items() if value})
 
     def percent_by_actor_type(self) -> dict[ActorType, int]:
-        return {
-            ActorType.HUMAN: self.human_percent,
-            ActorType.BOT_A: self.bot_a_percent,
-            ActorType.BOT_B: self.bot_b_percent,
-            ActorType.BOT_C: self.bot_c_percent,
-            ActorType.BOT_D: self.bot_d_percent,
-        }
+        return {ActorType(key): value for key, value in self.percent_by_type.items()}
+
+    def percent_of(self, actor_type: ActorType | str) -> int:
+        return self.percent_by_type.get(str(actor_type), 0)
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "TrafficMix":
+        if "percent_by_type" in raw:
+            return cls(dict(raw["percent_by_type"]))
+        return cls({LEGACY_TRAFFIC_FIELD_TO_ACTOR[name]: value for name, value in raw.items() if name in LEGACY_TRAFFIC_FIELD_TO_ACTOR})
 
 
 @dataclass(frozen=True)
@@ -235,7 +245,7 @@ def run_config_from_dict(raw: dict[str, Any]) -> RunConfig:
         suite_names=tuple(raw["suite_names"]),
         virtual_user_count=raw["virtual_user_count"],
         duration_sec=raw["duration_sec"],
-        traffic_mix=TrafficMix(**raw["traffic_mix"]),
+        traffic_mix=TrafficMix.from_dict(raw["traffic_mix"]),
         random_seed=raw["random_seed"],
         is_open_burst=raw.get("is_open_burst", True),  # 이전 기록 호환
         alert_policy=AlertPolicy(raw.get("alert_policy", AlertPolicy.ON_FAILURE.value)),

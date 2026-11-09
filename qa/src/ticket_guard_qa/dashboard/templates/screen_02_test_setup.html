@@ -90,23 +90,17 @@
       <div><div class="row-title">트래픽 구성</div><div class="row-hint">Ground Truth 자동 생성</div></div>
       <div>
         <div class="traffic-bar" id="traffic-bar">
-          <span data-share="human_percent" style="background:var(--bot-human)">정상</span>
-          <span data-share="bot_a_percent" style="background:var(--bot-a)">A</span>
-          <span data-share="bot_b_percent" style="background:var(--bot-b)">B</span>
-          <span data-share="bot_c_percent" style="background:var(--bot-c)">C</span>
-          <span data-share="bot_d_percent" style="background:var(--bot-d)">D</span>
+          {% for info in traffic_types %}<span data-share="percent_{{ info.actor_type.value }}" style="background:var(--{{ info.color_token }})">{{ info.short_name }}</span>{% endfor %}
         </div>
         <div class="traffic-inputs">
           {% set mix = run_config.traffic_mix %}
-          <label>정상 <input type="number" min="0" max="100" name="human_percent" value="{{ mix.human_percent }}"></label>
-          <label>봇 A <input type="number" min="0" max="100" name="bot_a_percent" value="{{ mix.bot_a_percent }}"></label>
-          <label>봇 B <input type="number" min="0" max="100" name="bot_b_percent" value="{{ mix.bot_b_percent }}"></label>
-          <label>봇 C <input type="number" min="0" max="100" name="bot_c_percent" value="{{ mix.bot_c_percent }}"></label>
-          <label>봇 D <input type="number" min="0" max="100" name="bot_d_percent" value="{{ mix.bot_d_percent }}"></label>
+          {% for info in traffic_types %}
+          <label title="{{ info.type_name }}">{{ '정상' if not info.actor_type.is_bot else '봇 ' ~ info.short_name }} <input type="number" min="0" max="100" name="percent_{{ info.actor_type.value }}" value="{{ mix.percent_of(info.actor_type) }}"></label>
+          {% endfor %}
           <span class="traffic-sum" id="traffic-sum"></span>
         </div>
         <div class="row" style="margin-top:6px">
-          <span class="row-hint">A 고속 반복 · B 위장 · C 브라우저 매크로 · D 세션 복제 · 최신 프로필 적용</span>
+          <span class="row-hint">{% for info in traffic_types if info.actor_type.is_bot %}{{ info.short_name }} {{ info.type_name }}{{ ' · ' if not loop.last }}{% endfor %} · 최신 프로필 적용</span>
           <span class="spacer"></span>
           <a class="button is-soft is-small" href="{{ base_path }}/bots"><i data-lucide="bot"></i>봇 프로필</a>
         </div>
