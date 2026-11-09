@@ -22,6 +22,7 @@ def test_preview_never_connects_to_system_database(admin_settings, monkeypatch):
     assert all(title in page.text for title in ("흐름 분석", "의심 활동", "사용자 상세"))
     assert "RUNNING" not in page.text
     assert "&lt;script&gt;" in page.text
+    assert 'href="/qa/"' in page.text
     assert 'href="/qa/runs/new"' in page.text
     assert 'href="/admin/admin-static/dashboard.css"' in page.text
     assert client.get("/admin-static/dashboard.css").status_code == 200

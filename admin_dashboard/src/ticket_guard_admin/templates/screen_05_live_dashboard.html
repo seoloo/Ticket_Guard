@@ -1,8 +1,11 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DB 관리자 대시보드 | TicketGuard</title><link rel="stylesheet" href="{{ base_path }}/admin-static/dashboard.css"><script src="{{ base_path }}/admin-static/live_dashboard.js" defer></script></head>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DB 관리자 대시보드 | TicketGuard</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="{{ base_path }}/admin-static/theme_tokens.css">
+<link rel="stylesheet" href="{{ base_path }}/admin-static/dashboard.css">
+<link rel="stylesheet" href="{{ base_path }}/admin-static/shell.css"><script src="{{ base_path }}/admin-static/live_dashboard.js" defer></script></head>
 <body>
-<header class="top-bar"><a class="brand" href="/"><span>티켓가드<small>TICKET GUARD</small></span><b>관리자 콘솔</b></a><nav class="main-nav" aria-label="주 메뉴"><a href="/">⌂ 홈</a><a href="/qa/runs/new">QA 대시보드</a><a href="{{ base_path }}/" class="active" aria-current="page">DB 대시보드</a></nav><div class="account"><span class="sample-status">{{ 'DB 연결 실패' if error else 'DB 연결 정상' }}</span><span>{{ admin_user }}</span></div></header>
-<main><div class="page-heading"><h1>DB 대시보드 <span>읽기 전용</span></h1><b class="chip blue">{{ database if not error else '연결 확인 필요' }}</b>{% if not error %}<time>조회 시각 {{ loaded_at }}</time>{% endif %}</div>
+{% include "header.html" %}
+<main><div class="page-heading"><h1>DB 대시보드</h1><b class="chip blue">{{ database if not error else '연결 확인 필요' }}</b>{% if not error %}<time>조회 시각 {{ loaded_at }}</time>{% endif %}</div>
 {% if error %}<div class="sample-notice" role="alert">{{ error }}</div>{% else %}
 <div class="sample-notice">조회 원본: {{ database }}.clean_events · 원본 집계: quarantine_events / event_metrics · DB 쓰기 없음</div>
 {% if is_truncated %}<div class="info-banner" role="status">선택 조건 {{ matched }}건 중 최근 {{ limit }}건 분석 · 전체 기간 지표로 해석 불가</div>{% endif %}

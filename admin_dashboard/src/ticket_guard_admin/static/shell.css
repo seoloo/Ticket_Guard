@@ -1,0 +1,92 @@
+/* QA 디자인 기준과 동일한 글꼴·브랜드·색·간격. QA 앱 CSS를 런타임에 참조하지 않음. */
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #F6F8FC 0%, #EDF1F7 100%);
+  font-family: var(--font-family);
+  color: var(--text-color);
+  font-size: 14px;
+  letter-spacing: -.01em;
+  line-height: 1.45;
+}
+.top-bar {
+  height: 76px;
+  min-height: 76px;
+  padding: 0 28px;
+  gap: 26px;
+  align-items: center;
+  flex-wrap: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--card-background);
+  border-bottom: 1px solid var(--line-color);
+}
+.brand { gap: 10px; margin: 0; }
+.brand .brand-mark { display: block; }
+.brand-mark svg { display: block; width: 56px; height: 42px; }
+.brand .brand-text { font-size: inherit; letter-spacing: normal; }
+.brand-name { display: block; font-size: 25px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
+.brand-english { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .24em; color: var(--strong-text-color); margin-top: 5px; }
+.brand .brand-badge { margin-left: 4px; background: var(--qa-blue-light); color: var(--qa-blue-text); font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 3px 8px; letter-spacing: -.01em; white-space: nowrap; }
+.vertical-line { flex-shrink: 0; width: 1px; height: 30px; background: var(--line-color); }
+.main-nav { display: flex; gap: 30px; padding: 0; margin: 0; width: auto; align-self: stretch; justify-content: flex-start; order: 0; }
+.main-nav:before { display: none; }
+.main-nav a { padding: 0; gap: 7px; font-size: 17px; font-weight: 700; color: var(--strong-text-color); }
+.main-nav .icon { width: 18px; height: 18px; }
+.main-nav .active { color: var(--db-orange-text); }
+.main-nav .active:after { inset: auto -2px -1px; height: 3px; background: var(--db-orange); border-radius: 2px; }
+.account { margin-left: auto; gap: 16px; }
+.account .sample-status { display: flex; gap: 8px; border: 1px solid var(--line-color); border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; background: #fff; }
+.sample-status .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pass-green); }
+.sample-status .is-down { background: var(--fail-red); }
+.sample-status .is-preview { background: var(--muted-text-color); }
+.account .admin-user { gap: 6px; color: var(--strong-text-color); font-weight: 600; font-size: 13px; }
+.admin-user .icon { width: 22px; height: 22px; stroke-width: 1.8; }
+main { max-width: 1500px; padding: 18px 32px 48px; }
+h1 { font-size: 30px; font-weight: 800; letter-spacing: -.04em; }
+h2 { font-size: 19px; font-weight: 800; letter-spacing: -.03em; }
+.view-title { font-size: 24px; }
+.panel { padding: 24px 28px; border-radius: var(--card-radius); }
+.metric { border-radius: var(--small-card-radius); }
+.metric strong { font-weight: 800; letter-spacing: -.04em; }
+.chip { border-radius: 7px; font-size: 12.5px; }
+.chip.orange, .sample-notice { color: var(--db-orange-text); background: var(--db-orange-light); }
+.chip.blue, .breadcrumb { color: var(--qa-blue-text); }
+.chip.gray { color: var(--sub-text-color); background: var(--gray-chip-background); }
+.subtitle { color: var(--sub-text-color); font-size: 14px; }
+.footnote { color: var(--muted-text-color); font-size: 12.5px; }
+table { font-size: 13.5px; }
+table thead { color: var(--muted-text-color); background: #FAFBFD; }
+table th, table td { padding: 10px 12px; }
+.outline, select, textarea, .save-button { border-radius: var(--button-radius); }
+.outline.blue { color: var(--qa-blue-text); }
+.outline.orange { color: var(--db-orange-text); }
+.save-button { background: var(--db-orange); }
+.info-banner { background: var(--qa-blue-light); color: var(--qa-blue-text); }
+.funnel-bar { background: var(--qa-blue); }
+.step-2 { background: #4F80F0; }
+.step-3 { background: #85A9F4; }
+.step-4 { background: #BED2FA; }
+.step-5 { background: var(--pass-green); }
+@media (max-width: 1100px) {
+  .top-bar { gap: 18px; padding: 0 20px; }
+  .main-nav { gap: 20px; }
+  .main-nav a { font-size: 15px; }
+  .account .sample-status { display: none; }
+}
+@media (max-width: 760px) {
+  .top-bar { height: auto; min-height: 76px; flex-wrap: wrap; gap: 12px; padding: 14px 16px 0; }
+  .brand { margin-right: auto; }
+  .brand-name { font-size: 23px; }
+  .brand .brand-badge { font-size: 10px; }
+  .brand-mark svg { width: 46px; height: 36px; }
+  .brand-english { font-size: 8px; }
+  .vertical-line { display: none; }
+  .account { margin-left: 0; }
+  .main-nav { order: 3; width: 100%; justify-content: center; gap: 26px; }
+  .main-nav a { padding: 10px 0 13px; font-size: 14px; }
+  main { padding: 18px 14px 32px; }
+  .panel { padding: 18px 16px; }
+  h1 { font-size: 25px; }
+  .footnote { font-size: 11px; }
+}

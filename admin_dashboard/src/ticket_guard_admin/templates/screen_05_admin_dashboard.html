@@ -4,7 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DB 대시보드 | TicketGuard QA</title>
-  <link rel="stylesheet" href="{{ base_path }}/admin-static/dashboard.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="{{ base_path }}/admin-static/theme_tokens.css">
+<link rel="stylesheet" href="{{ base_path }}/admin-static/dashboard.css">
+<link rel="stylesheet" href="{{ base_path }}/admin-static/shell.css">
   <script src="{{ base_path }}/admin-static/dashboard.js" defer></script>
 </head>
 <body data-review-owner="{{ admin_user }}" data-review-scope="{{ base_path }}">
@@ -29,13 +32,9 @@
 <article class="metric {{ tone }}"><div class="symbol">{{ icon(name) }}</div><div><h3>{{ label }}</h3><strong>{{ value }}</strong></div></article>
 {%- endmacro %}
 <a class="skip-link" href="#main">본문 바로가기</a>
-<header class="top-bar">
-  <a class="brand" href="{{ base_path }}/"><svg viewBox="0 0 64 48" aria-hidden="true"><g transform="rotate(-14 28 26)"><path d="M6 13h38v9a4 4 0 0 0 0 8v9H6v-9a4 4 0 0 0 0-8Z" fill="currentColor"/><path d="M14 17v18" stroke="white" stroke-width="2" stroke-dasharray="3 3"/></g><path d="m45 12 11 5v8c0 8-5 13-11 16-6-3-11-8-11-16v-8Z" fill="white" stroke="currentColor" stroke-width="3"/><path d="m40 26 4 4 6-7" stroke="currentColor" stroke-width="3" fill="none"/></svg><span>티켓가드<small>TICKET GUARD</small></span><b>QA 콘솔</b></a>
-  <nav class="main-nav" aria-label="주 메뉴"><a href="{{ base_path }}/">{{ icon('home') }}홈</a><a href="/qa/runs/new">{{ icon('flask') }}QA 대시보드</a><a href="{{ base_path }}/db" class="active" aria-current="page">{{ icon('database') }}DB 대시보드</a></nav>
-  <div class="account"><span class="sample-status"><i></i>Mock · 샘플 데이터</span><span>{{ icon('user') }}{{ admin_user }}</span></div>
-</header>
+{% include "header.html" %}
 <main id="main">
-  <div class="page-heading"><h1>DB 대시보드 <span>읽기 전용</span></h1><b class="chip blue">샘플 데이터</b><time>{{ snapshot }}</time></div>
+  <div class="page-heading"><h1>DB 대시보드</h1><b class="chip blue">샘플 데이터</b><time>{{ snapshot }}</time></div>
   <div class="sample-notice">샘플 데이터 기반 화면 시안 · 실제 DB 연결 없음</div>
   {% if run_id %}<p class="run-context">Run ID · {{ run_id }} · 샘플 데이터</p>{% endif %}
   <nav class="view-tabs" aria-label="DB 대시보드 화면"><button type="button" data-view="flow" class="selected" aria-current="page">흐름 분석</button><button type="button" data-view="activity">의심 활동</button><button type="button" data-view="user">사용자 상세</button></nav>
