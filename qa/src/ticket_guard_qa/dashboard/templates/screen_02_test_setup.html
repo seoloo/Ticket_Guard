@@ -85,7 +85,7 @@
     </div>
 
     <div class="setup-row">
-      <div><div class="row-title">트래픽 구성</div><div class="row-hint">Ground Truth 자동 생성</div></div>
+      <div><div class="row-title">트래픽 구성</div><div class="row-hint">합계 100% · 나머지 비율 자동 조정</div></div>
       <div>
         <div class="traffic-bar" id="traffic-bar">
           <span data-share="human_percent" style="background:var(--bot-human)">정상</span>
@@ -101,7 +101,7 @@
           <label>봇 B <input type="number" min="0" max="100" name="bot_b_percent" value="{{ mix.bot_b_percent }}"></label>
           <label>봇 C <input type="number" min="0" max="100" name="bot_c_percent" value="{{ mix.bot_c_percent }}"></label>
           <label>봇 D <input type="number" min="0" max="100" name="bot_d_percent" value="{{ mix.bot_d_percent }}"></label>
-          <span class="traffic-sum" id="traffic-sum"></span>
+          <span class="traffic-sum" id="traffic-sum" role="status" aria-live="polite"></span>
         </div>
         <div class="row" style="margin-top:6px">
           <span class="row-hint">A 고속 반복 · B 위장 · C 브라우저 매크로 · D 세션 복제 · 최신 프로필 적용</span>
@@ -172,8 +172,28 @@
   const userInput = document.getElementById("user-count-input");
   const userText = document.getElementById("user-count-text");
   const trafficSegments = [...document.querySelectorAll("#traffic-bar [data-share]")];
+  const trafficInputs = trafficSegments.map((segment) => setupForm.elements[segment.dataset.share]);
   const segmentLabelByField = Object.fromEntries(trafficSegments.map((segment) => [segment.dataset.share, segment.textContent]));
   const MIN_PERCENT_FOR_NUMBER = 8;  // 좁은 칸은 이름만
+
+  function rebalanceTraffic(changedInput) {
+    const clampPercent = (value) => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    const changedPercent = clampPercent(changedInput.value);
+    changedInput.value = changedPercent;
+    const remainingPercent = 100 - changedPercent;
+    const otherInputs = trafficInputs.filter((input) => input !== changedInput);
+    const weights = otherInputs.map((input) => clampPercent(input.value));
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    // 기존 상대 비율 유지 · 모두 0이면 균등 배분 · 정수 반올림 잔여분 보정
+    const shares = otherInputs.map((input, index) => {
+      const exact = remainingPercent * (totalWeight ? weights[index] / totalWeight : 1 / otherInputs.length);
+      return { input, index, value: Math.floor(exact), remainder: exact - Math.floor(exact) };
+    });
+    const remainderCount = remainingPercent - shares.reduce((sum, share) => sum + share.value, 0);
+    [...shares].sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+      .slice(0, remainderCount).forEach((share) => { share.value += 1; });
+    shares.forEach((share) => { share.input.value = share.value; });
+  }
 
   function setUserCount(count) {
     userRange.value = count; userInput.value = count; userText.textContent = count; refreshSummary();
@@ -213,7 +233,11 @@
     document.getElementById("summary-duration").textContent = expectedSec < 60 ? `약 ${expectedSec}초` : `약 ${Math.round(expectedSec / 60)}분`;
   }
 
-  setupForm.addEventListener("input", () => { refreshTrafficBar(); refreshSummary(); });
+  setupForm.addEventListener("input", (event) => {
+    if (trafficInputs.includes(event.target)) rebalanceTraffic(event.target);
+    refreshTrafficBar();
+    refreshSummary();
+  });
   refreshTrafficBar();
   refreshSummary();
 
