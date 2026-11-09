@@ -15,7 +15,8 @@ from ticket_guard_qa.macro_bots.browser_capture import (
     save_capture_frames,
 )
 from ticket_guard_qa.macro_bots.behavior_fields import BEHAVIOR_FIELD_SPECS, BehaviorInputError, behavior_to_dict, parse_behavior_form
-from ticket_guard_qa.macro_bots.bot_catalog import BOT_TYPE_CATALOG, find_bot_type_by_slug
+from ticket_guard_qa.macro_bots.behavior_description import describe_behavior
+from ticket_guard_qa.macro_bots.bot_catalog import BOT_ROLE_CATALOG, BOT_TYPE_CATALOG, find_bot_type_by_slug
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.macro_bots.bot_trial_run import run_trial_sessions
@@ -42,6 +43,36 @@ def test_detection_targets_do_not_overlap():
     assert find_detection_target(ActorType.BOT_NEW) is None  # 새 유형 = 목표 없음
 
 
+def test_every_bot_type_belongs_to_listed_role_and_has_signals():
+    listed_roles = {role_info.role for role_info in BOT_ROLE_CATALOG}
+    for info in BOT_TYPE_CATALOG:
+        assert info.role in listed_roles  # B1 구획에 빠짐없이 표시
+        assert info.detection_signals and info.purpose
+
+
+def test_behavior_description_reads_values_in_plain_words():
+    bot_a_lines = describe_behavior(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A])
+    assert [line.step_title for line in bot_a_lines] == [
+        "예매 전 화면 조회", "예매 시작 시점", "좌석 클릭 간격", "매진 좌석 대응", "동시 예매 창", "브라우저 흔적"]
+    by_step = {line.step_title: line for line in bot_a_lines}
+    assert by_step["예매 전 화면 조회"].headline == "공연 목록 · 상세 화면 조회 없이 바로 예매"
+    assert by_step["예매 시작 시점"].headline == "예매 오픈과 동시에 예매하기 버튼 클릭"
+    assert "기계적" in by_step["좌석 클릭 간격"].detail and "0.08초" in by_step["좌석 클릭 간격"].headline
+    assert by_step["매진 좌석 대응"].detail == "대기 없이 즉시 재시도"
+    human = {line.step_title: line for line in describe_behavior(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN])}
+    assert human["예매 시작 시점"].headline == "예매 오픈 3초 뒤 예매하기 버튼 클릭"
+    assert human["예매 전 화면 조회"].headline == "예매 오픈 전 공연 목록 · 상세 화면 3회 조회"
+    assert "사람처럼 불규칙" in human["좌석 클릭 간격"].detail
+    bot_d = {line.step_title: line for line in describe_behavior(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_D])}
+    assert "예매 창 8개" in bot_d["동시 예매 창"].headline
+
+
+def test_browser_trace_choice_rejects_unknown_value():
+    form = behavior_to_dict(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]) | {"browser_trace_level": "2"}
+    with pytest.raises(BehaviorInputError, match="범위 오류"):
+        parse_behavior_form(form)
+
+
 def test_bot_slug_lookup():
     assert find_bot_type_by_slug("BOT_C").actor_type is ActorType.BOT_C
     assert find_bot_type_by_slug("bot_z") is None
@@ -49,7 +80,7 @@ def test_bot_slug_lookup():
 
 def test_behavior_form_rejects_out_of_range_value():
     form = behavior_to_dict(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]) | {"sessions_per_device": "0"}
-    with pytest.raises(BehaviorInputError, match="디바이스당"):
+    with pytest.raises(BehaviorInputError, match="동시 예매 창"):
         parse_behavior_form(form)
 
 

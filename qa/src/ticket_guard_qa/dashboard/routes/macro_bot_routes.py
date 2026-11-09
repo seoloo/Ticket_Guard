@@ -38,7 +38,8 @@ from ticket_guard_qa.macro_bots.browser_capture import (
     build_mock_capture_frames,
     load_capture_frames,
 )
-from ticket_guard_qa.macro_bots.bot_catalog import BotTypeInfo, find_bot_type_by_slug
+from ticket_guard_qa.macro_bots.behavior_description import BehaviorLine, describe_behavior
+from ticket_guard_qa.macro_bots.bot_catalog import BOT_ROLE_CATALOG, BotRoleInfo, BotTypeInfo, find_bot_type_by_slug
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfile, BotProfileRegistry
 from ticket_guard_qa.macro_bots.bot_trial_run import TRIAL_SESSION_COUNT, TrialRunResult, run_trial_sessions
@@ -70,6 +71,27 @@ router = APIRouter()
 class BotCard:
     profile: BotProfile
     detection_row: ActorDetectionRow | None  # None = 아직 판정 정확도 시험 결과 없음
+
+    @property
+    def behavior_lines(self) -> list[BehaviorLine]:
+        return describe_behavior(self.profile.behavior)
+
+
+@dataclass(frozen=True)
+class BotRoleSection:
+    """B1 구획 하나 · 기준 트래픽 → 탐지 대상 봇 → 평가 전용 봇"""
+    number: int
+    role_info: BotRoleInfo
+    cards: list[BotCard]
+
+
+def group_cards_by_role(cards: list[BotCard]) -> list[BotRoleSection]:
+    sections = []
+    for role_info in BOT_ROLE_CATALOG:
+        role_cards = [card for card in cards if card.profile.type_info.role is role_info.role]
+        if role_cards:
+            sections.append(BotRoleSection(len(sections) + 1, role_info, role_cards))
+    return sections
 
 
 @dataclass(frozen=True)
@@ -107,7 +129,8 @@ def show_bot_list(
     rows = build_actor_detection_rows_from_details(read_verdict_details(latest_summary)) if latest_summary else {}
     cards = [BotCard(profile, rows.get(profile.actor_type)) for profile in store.load_current_registry().list_profiles()]
     return render_screen(request, "screen_b1_bot_list.html", {
-        **BOT_SCREEN_CONTEXT, "cards": cards, "latest_summary": latest_summary, "field_groups": group_field_specs(),
+        **BOT_SCREEN_CONTEXT, "role_sections": group_cards_by_role(cards), "latest_summary": latest_summary,
+        "field_groups": group_field_specs(),
     })
 
 

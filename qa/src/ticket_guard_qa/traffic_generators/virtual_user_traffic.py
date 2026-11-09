@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 
 from ticket_guard_qa.domain.models import SessionBehavior, SessionKey, VirtualUserSessionPlan, VirtualUserSessionResult
-from ticket_guard_qa.macro_bots.behavior_sampling import pick_click_interval_ms, pick_entry_delay_ms
+from ticket_guard_qa.macro_bots.behavior_sampling import pick_click_interval_ms, pick_entry_delay_ms, pick_page_dwell_ms
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, BookingApi
 
 ALL_SEAT_IDS = tuple(f"{row}{number}" for row in "ABCDEFGHIJ" for number in range(1, 11))  # 시스템 지정석 A1 ~ J10
@@ -29,6 +29,7 @@ def build_session_plans(behaviors: list[SessionBehavior], random_seed: int) -> l
             entry_delay_ms=pick_entry_delay_ms(behavior, random_source),
             click_intervals_ms=tuple(pick_click_interval_ms(behavior, random_source) for _ in range(CLICK_INTERVAL_COUNT)),
             preferred_seat_ids=tuple(preferred_seat_ids),
+            page_dwell_ms=tuple(pick_page_dwell_ms(behavior, random_source) for _ in range(behavior.browse_page_count)),
         ))
     return plans
 
@@ -55,14 +56,21 @@ def send_virtual_user_traffic(
     return asyncio.run(run_concurrent_sessions(booking_api, session_plans, time_limit_sec, on_progress))
 
 
+def calculate_pre_open_sec(session_plans: list[VirtualUserSessionPlan]) -> float:
+    """오픈 전 준비 시간 · 로그인 + 가장 긴 화면 조회 · 화면 조회는 오픈 전에 끝냄"""
+    longest_browse_ms = max((sum(plan.page_dwell_ms) for plan in session_plans), default=0.0)
+    return PRE_OPEN_LOGIN_SEC + longest_browse_ms / 1000
+
+
 async def run_concurrent_sessions(
     booking_api: BookingApi,
     session_plans: list[VirtualUserSessionPlan],
     time_limit_sec: float,
     on_progress: ProgressCallback | None,
 ) -> list[VirtualUserSessionResult]:
-    open_at_monotonic = time.monotonic() + PRE_OPEN_LOGIN_SEC
-    deadline = time.monotonic() + time_limit_sec
+    pre_open_sec = calculate_pre_open_sec(session_plans)
+    open_at_monotonic = time.monotonic() + pre_open_sec
+    deadline = time.monotonic() + time_limit_sec + (pre_open_sec - PRE_OPEN_LOGIN_SEC)  # 화면 조회 시간만큼 연장
     results: list[VirtualUserSessionResult | None] = [None] * len(session_plans)
     index_by_task = {
         asyncio.create_task(booking_api.run_virtual_user_session(plan, open_at_monotonic)): index

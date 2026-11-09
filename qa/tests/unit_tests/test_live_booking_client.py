@@ -12,9 +12,11 @@ from ticket_guard_qa.domain.models import RunConfig, SessionKey, VirtualUserSess
 from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE
 from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
 from ticket_guard_qa.system_targets.live_booking_client import (
+    BROWSER_USER_AGENT,
     BookingFlowError,
     LiveBookingClient,
     build_test_account_username,
+    choose_user_agent,
 )
 from ticket_guard_qa.system_targets.live_django_system import (
     LiveDjangoBookingApi,
@@ -29,6 +31,7 @@ from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     ALL_SEAT_IDS,
     TIMEOUT_FAILED_STEP,
     build_session_plans,
+    calculate_pre_open_sec,
     send_virtual_user_traffic,
 )
 
@@ -36,10 +39,11 @@ BASE_URL = "http://web:8000"
 PASSWORD = "qa-password"
 CAPTCHA_ANSWER = "QA123"
 HUMAN_BEHAVIOR = DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.HUMAN]
+API_ONLY_BEHAVIOR = replace(HUMAN_BEHAVIOR, browser_trace_level=0)  # 좌석 클릭 이벤트만 보는 시험
 
 
 def build_instant_plan(preferred_seat_ids: tuple[str, ...] = ALL_SEAT_IDS) -> VirtualUserSessionPlan:
-    return VirtualUserSessionPlan(HUMAN_BEHAVIOR, 0.0, (0.0, 0.0, 0.0), preferred_seat_ids)
+    return VirtualUserSessionPlan(API_ONLY_BEHAVIOR, 0.0, (0.0, 0.0, 0.0), preferred_seat_ids)
 
 
 class FakeDjango:
@@ -53,8 +57,14 @@ class FakeDjango:
         self.events: list[dict] = []
         self.reset_count = 0
         self.heartbeat_count = 0
+        self.page_paths: list[str] = []
+        self.user_agents: set[str] = set()
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        self.user_agents.add(request.headers.get("user-agent", ""))
+        if request.method == "GET" and (request.url.path == "/" or request.url.path.startswith("/detail/")):
+            self.page_paths.append(request.url.path)
+            return httpx.Response(200, html="<html></html>")
         if request.url.path == "/login/":
             return httpx.Response(200, headers={"set-cookie": "csrftoken=token-1; Path=/"})
         if request.url.path == "/captcha.png":
@@ -252,3 +262,55 @@ def test_booking_flow_suite_fails_on_account_shortage():
     result = BookingFlowSuite().run(build_booking_flow_context(system_target, 3))
     assert result.outcome is SuiteOutcome.FAILED
     assert "시험 계정 부족 · VU 3명 · 계정 2개" in result.message
+
+
+def test_browser_trace_session_browses_pages_and_sends_page_events():
+    fake_django = FakeDjango()
+    client = LiveBookingClient(BASE_URL, httpx.MockTransport(fake_django.handle), choose_user_agent(HUMAN_BEHAVIOR))
+    plan = VirtualUserSessionPlan(HUMAN_BEHAVIOR, 0.0, (0.0, 0.0, 0.0), ("C3", "C4"), page_dwell_ms=(0.0, 0.0, 0.0))
+    asyncio.run(run_flow(client, plan))
+
+    assert fake_django.page_paths == ["/detail/blue-hour/", "/", "/detail/blue-hour/"]  # 상세 → 목록 → 상세
+    page_events = [(event["eventType"], event["details"]["pageName"]) for event in fake_django.events if event["eventType"] != "seat_select"]
+    assert page_events == [("page_enter", "detail"), ("page_exit", "detail"), ("page_enter", "shows"), ("page_exit", "shows"),
+                           ("page_enter", "detail"), ("page_exit", "detail"), ("page_enter", "select")]
+    assert BROWSER_USER_AGENT in fake_django.user_agents
+
+
+def test_api_only_session_skips_page_events_and_keeps_library_agent():
+    fake_django = FakeDjango()
+    bot_a_behavior = DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]
+    client = LiveBookingClient(BASE_URL, httpx.MockTransport(fake_django.handle), choose_user_agent(bot_a_behavior))
+    asyncio.run(run_flow(client, VirtualUserSessionPlan(bot_a_behavior, 0.0, (0.0, 0.0, 0.0), ("C3", "C4"))))
+
+    assert fake_django.page_paths == []
+    assert {event["eventType"] for event in fake_django.events} == {"seat_select"}
+    assert BROWSER_USER_AGENT not in fake_django.user_agents
+
+
+class AlwaysSoldDjango(FakeDjango):
+    """확정마다 고른 좌석이 먼저 팔렸다고 응답 · 재시도 횟수 확인용"""
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/action/" and json.loads(request.content).get("action") == "confirm":
+            body = json.loads(request.content)
+            self.actions.append(body)
+            return httpx.Response(409, json={"code": "SEAT_SOLD", "sold": body["seats"]})
+        return super().handle(request)
+
+
+@pytest.mark.parametrize("retry_count, expected_confirms", [(0, 1), (2, 3)])
+def test_sold_out_retry_count_follows_behavior(retry_count, expected_confirms):
+    fake_django = AlwaysSoldDjango()
+    behavior = replace(API_ONLY_BEHAVIOR, sold_out_retry_count=retry_count, sold_out_retry_delay_ms=0)
+    client = LiveBookingClient(BASE_URL, httpx.MockTransport(fake_django.handle))
+    result = asyncio.run(run_flow(client, VirtualUserSessionPlan(behavior, 0.0, (0.0, 0.0, 0.0), ALL_SEAT_IDS[:8])))
+
+    assert result.booking_outcome is BookingOutcome.SOLD_OUT
+    assert [action["action"] for action in fake_django.actions].count("confirm") == expected_confirms
+
+
+def test_session_plans_sample_one_dwell_per_browsed_page():
+    plans = build_session_plans([HUMAN_BEHAVIOR, DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_A]], random_seed=7)
+    assert len(plans[0].page_dwell_ms) == HUMAN_BEHAVIOR.browse_page_count and plans[1].page_dwell_ms == ()
+    assert calculate_pre_open_sec(plans) == pytest.approx(sum(plans[0].page_dwell_ms) / 1000)  # 오픈 전 대기 0 고정

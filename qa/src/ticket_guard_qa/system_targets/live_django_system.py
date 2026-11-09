@@ -18,6 +18,7 @@ from ticket_guard_qa.system_targets.live_booking_client import (
     BookingFlowError,
     LiveBookingClient,
     build_test_account_username,
+    choose_user_agent,
 )
 from ticket_guard_qa.system_targets.target_interfaces import (
     AccountPoolExhaustedError,
@@ -152,7 +153,7 @@ class LiveDjangoBookingApi:
         """시험 계정 하나로 예매 확정까지 → 확정 못 했으면 예매 취소로 계정 반환"""
         account_number = self.acquire_account_number()
         username = build_test_account_username(account_number)
-        client = LiveBookingClient(self.base_url, self.transport)
+        client = LiveBookingClient(self.base_url, self.transport, choose_user_agent(session_plan.behavior))
         try:
             flow_result = await client.run_booking_flow(
                 username, self.test_accounts.password, self.test_accounts.captcha_answer, session_plan, open_at_monotonic

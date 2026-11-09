@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 
 from ticket_guard_qa.domain.enums import BookingOutcome
-from ticket_guard_qa.domain.models import VirtualUserSessionPlan
+from ticket_guard_qa.domain.models import SessionBehavior, VirtualUserSessionPlan
 from ticket_guard_qa.system_targets.target_interfaces import HttpResult
 
 CSRF_COOKIE_NAME = "csrftoken"
@@ -19,7 +19,13 @@ MAX_QUEUE_WAIT_SEC = 60.0  # 기본 대기 12초 + 여유
 DEFAULT_SHOW_ID = "blue-hour"  # 지정석 공연 · A1 ~ J10
 TEST_ACCOUNT_PREFIX = "qa-user-"  # 시스템 web/qa_test_hooks.py 규칙 · 번호 4자리
 SEATS_PER_BOOKING = 2  # 시스템 한도 1 ~ 4석
-MAX_CONFIRM_ATTEMPT_COUNT = 3  # 먼저 팔린 좌석 → 다른 좌석으로 다시
+BROWSER_USER_AGENT = (  # 브라우저 흔적 전송 세션 · 일반 PC 크롬
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+SHOW_LIST_PAGE = "shows"
+SHOW_DETAIL_PAGE = "detail"
+SEAT_SELECTION_PAGE = "select"
+CAPTCHA_PAGE = "captcha"
 EVENT_ACCEPTED_STATUS_CODES = (200, 202)  # 202 = Kafka 전달 대기
 
 STAGE_QUEUE = "queue"
@@ -55,6 +61,20 @@ class BookingFlowResult:
         return sum(self.step_latency_ms.values())
 
 
+def has_browser_trace(behavior: SessionBehavior) -> bool:
+    return behavior.browser_trace_level >= 1
+
+
+def choose_user_agent(behavior: SessionBehavior) -> str | None:
+    """None = 라이브러리 기본값 · 흔적 없는 매크로 그대로"""
+    return BROWSER_USER_AGENT if has_browser_trace(behavior) else None
+
+
+def build_browse_pages(page_count: int) -> list[str]:
+    """마지막 = 공연 상세(예매하기 버튼 화면) · 앞으로 목록 · 상세 번갈아 · 3회 = 상세 → 목록 → 상세"""
+    return [SHOW_DETAIL_PAGE if (page_count - 1 - index) % 2 == 0 else SHOW_LIST_PAGE for index in range(page_count)]
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -62,8 +82,10 @@ def utc_now_iso() -> str:
 class LiveBookingClient:
     """예매 화면(static/app.js)이 보내는 요청과 같은 순서 · 같은 본문 · VU 하나 = 클라이언트 하나"""
 
-    def __init__(self, base_url: str, transport: httpx.AsyncBaseTransport | None = None) -> None:
-        self.http_client = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=REQUEST_TIMEOUT_SEC, transport=transport)
+    def __init__(self, base_url: str, transport: httpx.AsyncBaseTransport | None = None, user_agent: str | None = None) -> None:
+        headers = {"User-Agent": user_agent} if user_agent else None
+        self.http_client = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=REQUEST_TIMEOUT_SEC, transport=transport,
+                                             headers=headers)
         self.page_instance_id = str(uuid.uuid4())  # 탭 하나
         self.page_view_id = str(uuid.uuid4())  # 화면 한 번 표시
         self.booking_attempt_id: str | None = None
@@ -123,9 +145,42 @@ class LiveBookingClient:
             raise BookingFlowError("captcha_image", image_response.status_code, None)
         return self._expect_ok("verify", await self._post_action("verify", answer=answer))
 
-    async def click_seats(self, seat_ids: list[str], click_intervals_ms: tuple[float, ...]) -> None:
+    async def post_page_event(self, event_type: str, page_name: str, previous_page_name: str | None, page_view_id: str,
+                              show_id: str | None) -> None:
+        """page_enter · page_exit · 예매 화면(static/app.js)과 같은 본문"""
+        event_id = str(uuid.uuid4())
+        result = await self.post_json("/api/events/", {
+            "eventType": event_type, "eventId": event_id, "occurredAt": utc_now_iso(),
+            "pageInstanceId": self.page_instance_id, "pageViewId": page_view_id,
+            "showId": show_id, "scheduleId": f"{show_id}-evening" if show_id else None,
+            "details": {"pageName": page_name, "previousPageName": previous_page_name},
+        })
+        if result.status_code not in EVENT_ACCEPTED_STATUS_CODES:
+            raise BookingFlowError(event_type, result.status_code, result.body.get("code"))
+        self.sent_event_ids.append(event_id)
+
+    async def browse_pages(self, show_id: str, page_dwell_ms: tuple[float, ...], sends_page_events: bool) -> None:
+        """예매 전 공연 목록 · 상세 조회 · 화면마다 머무는 시간 · 흔적 전송이면 화면 이벤트도"""
+        previous_page_name: str | None = None
+        for page_name, dwell_ms in zip(build_browse_pages(len(page_dwell_ms)), page_dwell_ms):
+            path = "/" if page_name == SHOW_LIST_PAGE else f"/{SHOW_DETAIL_PAGE}/{show_id}/"
+            response = await self.http_client.get(path)
+            if response.status_code != 200:
+                raise BookingFlowError("browse", response.status_code, None)
+            page_view_id = str(uuid.uuid4())
+            page_show_id = show_id if page_name == SHOW_DETAIL_PAGE else None
+            if sends_page_events:
+                await self.post_page_event("page_enter", page_name, previous_page_name, page_view_id, page_show_id)
+            await asyncio.sleep(dwell_ms / 1000)
+            if sends_page_events:
+                await self.post_page_event("page_exit", page_name, previous_page_name, page_view_id, page_show_id)
+            previous_page_name = page_name
+
+    async def click_seats(self, seat_ids: list[str], click_intervals_ms: tuple[float, ...], sends_page_events: bool = False) -> None:
         """좌석 하나 = seat_select 이벤트 하나 · 행동 값 간격대로 · 탐지에 쓰이는 입력"""
         select_page_view_id = str(uuid.uuid4())
+        if sends_page_events:
+            await self.post_page_event("page_enter", SEAT_SELECTION_PAGE, CAPTCHA_PAGE, select_page_view_id, self.show_id)
         for index, seat_id in enumerate(seat_ids):
             await asyncio.sleep(click_intervals_ms[index % len(click_intervals_ms)] / 1000)
             event_id = str(uuid.uuid4())
@@ -177,7 +232,13 @@ class LiveBookingClient:
                                show_id: str = DEFAULT_SHOW_ID,
                                poll_interval_sec: float = QUEUE_POLL_INTERVAL_SEC) -> BookingFlowResult:
         """오픈 전 로그인 → 오픈 + 진입 지연 → 예매 시작 → … → 확정 · 팔린 좌석은 다른 좌석으로 다시"""
+        behavior = session_plan.behavior
+        sends_page_events = has_browser_trace(behavior)
         step_latency_ms = {"login": (await self.login(username, password)).latency_ms}
+        if session_plan.page_dwell_ms:  # 화면 조회는 오픈 전에 끝나도록 시작
+            browse_at = open_at_monotonic - sum(session_plan.page_dwell_ms) / 1000
+            await asyncio.sleep(max(browse_at - time.monotonic(), 0.0))
+            await self.browse_pages(show_id, session_plan.page_dwell_ms, sends_page_events)
         entry_at = open_at_monotonic + session_plan.entry_delay_ms / 1000
         await asyncio.sleep(max(entry_at - time.monotonic(), 0.0))
 
@@ -191,12 +252,14 @@ class LiveBookingClient:
 
         sold_seat_ids: set[str] = set()
         step_latency_ms["seat_select"] = step_latency_ms["confirm"] = 0.0
-        for _ in range(MAX_CONFIRM_ATTEMPT_COUNT):
+        for attempt_index in range(1 + behavior.sold_out_retry_count):
             seat_ids = [seat for seat in session_plan.preferred_seat_ids if seat not in sold_seat_ids][:SEATS_PER_BOOKING]
             if not seat_ids:
                 break
+            if attempt_index:
+                await asyncio.sleep(behavior.sold_out_retry_delay_ms / 1000)  # 먼저 팔린 좌석 → 다른 좌석 재시도 전 대기
             click_started_at = time.perf_counter()
-            await self.click_seats(seat_ids, session_plan.click_intervals_ms)
+            await self.click_seats(seat_ids, session_plan.click_intervals_ms, sends_page_events and not attempt_index)
             step_latency_ms["seat_select"] += (time.perf_counter() - click_started_at) * 1000
             confirmed = await self.confirm_seats(seat_ids)
             step_latency_ms["confirm"] += confirmed.latency_ms

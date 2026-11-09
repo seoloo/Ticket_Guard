@@ -25,8 +25,12 @@ MOCK_RULES: tuple[RuleDefinition, ...] = (
                    lambda behavior: behavior.click_interval_mean_ms < FAST_CLICK_INTERVAL_MS),
     RuleDefinition("MOCK-R3", "기기당 세션 > 2",
                    lambda behavior: behavior.sessions_per_device > MULTI_SESSION_DEVICE_COUNT),
-    RuleDefinition("MOCK-R4", "오픈 후 진입 < 100ms",
+    RuleDefinition("MOCK-R4", "오픈 후 예매 시작 < 100ms",
                    lambda behavior: behavior.entry_delay_after_open_ms < INSTANT_ENTRY_DELAY_MS),
+    RuleDefinition("MOCK-R5", "예매 전 화면 조회 0회",
+                   lambda behavior: behavior.browse_page_count == 0),
+    RuleDefinition("MOCK-R6", "화면 이벤트 · 브라우저 정보 없음",
+                   lambda behavior: behavior.browser_trace_level == 0),
 )
 
 RULE_SETS: dict[str, tuple[RuleDefinition, ...]] = {MOCK_RULE_SET_VERSION: MOCK_RULES}

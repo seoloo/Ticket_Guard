@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from ticket_guard_qa.dashboard.dashboard_app import create_dashboard_app  # noqa: E402
 from ticket_guard_qa.dashboard.dependencies import ADMIN_USER_HEADER  # noqa: E402
-from ticket_guard_qa.domain.enums import TargetKind  # noqa: E402
+from ticket_guard_qa.domain.enums import ActorType, TargetKind  # noqa: E402
+from ticket_guard_qa.macro_bots.behavior_fields import behavior_to_dict  # noqa: E402
+from ticket_guard_qa.macro_bots.bot_profiles import DEFAULT_BEHAVIOR_BY_ACTOR_TYPE  # noqa: E402
 from ticket_guard_qa.domain.models import RunConfig  # noqa: E402
 
 ADMIN_HEADERS = {ADMIN_USER_HEADER: "qa-admin"}  # 팀 입구(nginx)가 붙이는 헤더 흉내
@@ -53,10 +55,16 @@ def test_bot_screens_need_admin(qa_settings):
     assert client.post("/bots/bot_a/versions", data={}).status_code == 403
 
 
-BOT_B_FORM = {
-    "entry_delay_after_open_ms": "200", "entry_delay_deviation_ms": "150",
-    "click_interval_mean_ms": "400", "click_interval_deviation_ms": "200", "sessions_per_device": "1",
-}
+BOT_B_FORM = {  # 기본 위장 매크로 값 + 간격 편차만 키움
+    name: str(value) for name, value in behavior_to_dict(DEFAULT_BEHAVIOR_BY_ACTOR_TYPE[ActorType.BOT_B]).items()
+} | {"click_interval_deviation_ms": "200"}
+
+
+def test_bot_list_groups_bots_by_role_with_plain_behavior(dashboard_client):
+    page = dashboard_client.get("/bots").text
+    assert page.index("기준 트래픽") < page.index("탐지 대상 봇") < page.index("평가 전용 봇")
+    assert "예매 오픈과 동시에 예매하기 버튼 클릭" in page  # 봇 A 기본값
+    assert "탐지 시스템이 잡아야 할 흔적" in page and "탐지 결과 없음" in page
 
 
 def test_bot_trial_shows_score_without_saving(dashboard_client):

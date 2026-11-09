@@ -67,7 +67,13 @@ class SessionBehavior:
     entry_delay_deviation_ms: int
     click_interval_mean_ms: int
     click_interval_deviation_ms: int
+    browse_page_count: int  # 예매 전 목록 · 상세 화면 조회 수 · 0 = 바로 예매
+    page_dwell_mean_ms: int
+    page_dwell_deviation_ms: int
     sessions_per_device: int
+    sold_out_retry_count: int  # 먼저 팔린 좌석 → 다른 좌석 재시도 · 0 = 바로 포기
+    sold_out_retry_delay_ms: int
+    browser_trace_level: int  # 0 = API 요청만 · 1 = 화면 조회 · 화면 이벤트 · 브라우저 정보 전송
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,7 @@ class VirtualUserSessionPlan:
     entry_delay_ms: float  # 오픈(T0) → 예매 시작
     click_intervals_ms: tuple[float, ...]  # 좌석 클릭 간격 · 마지막 = 클릭 → 확정 · 재시도 때 반복 사용
     preferred_seat_ids: tuple[str, ...]  # 고를 좌석 순서 · 팔린 좌석은 건너뜀
+    page_dwell_ms: tuple[float, ...] = ()  # 예매 전 화면마다 머무는 시간 · 길이 = 조회 화면 수
 
 
 @dataclass(frozen=True)
@@ -110,7 +117,13 @@ FEATURE_FIELD_BY_BEHAVIOR_FIELD: dict[str, str | None] = {
     "entry_delay_deviation_ms": None,
     "click_interval_mean_ms": "click_interval_mean_ms",
     "click_interval_deviation_ms": "click_interval_std_ms",
+    "browse_page_count": None,
+    "page_dwell_mean_ms": None,
+    "page_dwell_deviation_ms": None,
     "sessions_per_device": "sessions_per_device",
+    "sold_out_retry_count": None,
+    "sold_out_retry_delay_ms": None,
+    "browser_trace_level": None,
 }
 
 

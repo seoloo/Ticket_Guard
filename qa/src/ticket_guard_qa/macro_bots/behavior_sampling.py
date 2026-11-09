@@ -16,6 +16,11 @@ def pick_click_interval_ms(behavior: SessionBehavior, random_source: random.Rand
     return max(interval_ms, 0.0)  # 음수 간격 금지
 
 
+def pick_page_dwell_ms(behavior: SessionBehavior, random_source: random.Random) -> float:
+    dwell_ms = random_source.gauss(behavior.page_dwell_mean_ms, behavior.page_dwell_deviation_ms)
+    return max(dwell_ms, 0.0)
+
+
 def build_entry_histogram(
     planned_users: list[PlannedUser], registry: BotProfileRegistry, random_seed: int, bucket_ms: int, bucket_count: int
 ) -> dict[ActorType, list[int]]:

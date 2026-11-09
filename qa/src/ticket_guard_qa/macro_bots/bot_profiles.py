@@ -12,27 +12,39 @@ DEFAULT_VERSION_NUMBER = 1
 DEFAULT_BEHAVIOR_BY_ACTOR_TYPE: dict[ActorType, SessionBehavior] = {
     ActorType.HUMAN: SessionBehavior(
         entry_delay_after_open_ms=3_000, entry_delay_deviation_ms=2_000,
-        click_interval_mean_ms=1_200, click_interval_deviation_ms=600, sessions_per_device=1,
+        click_interval_mean_ms=1_200, click_interval_deviation_ms=600,
+        browse_page_count=3, page_dwell_mean_ms=4_000, page_dwell_deviation_ms=2_500, sessions_per_device=1,
+        sold_out_retry_count=2, sold_out_retry_delay_ms=1_500, browser_trace_level=1,
     ),
     ActorType.BOT_A: SessionBehavior(
         entry_delay_after_open_ms=0, entry_delay_deviation_ms=20,
-        click_interval_mean_ms=80, click_interval_deviation_ms=5, sessions_per_device=1,
+        click_interval_mean_ms=80, click_interval_deviation_ms=5,
+        browse_page_count=0, page_dwell_mean_ms=0, page_dwell_deviation_ms=0, sessions_per_device=1,
+        sold_out_retry_count=10, sold_out_retry_delay_ms=0, browser_trace_level=0,
     ),
     ActorType.BOT_B: SessionBehavior(
         entry_delay_after_open_ms=200, entry_delay_deviation_ms=150,
-        click_interval_mean_ms=400, click_interval_deviation_ms=30, sessions_per_device=1,
+        click_interval_mean_ms=400, click_interval_deviation_ms=30,
+        browse_page_count=1, page_dwell_mean_ms=1_500, page_dwell_deviation_ms=100, sessions_per_device=1,
+        sold_out_retry_count=3, sold_out_retry_delay_ms=400, browser_trace_level=1,
     ),
     ActorType.BOT_C: SessionBehavior(
         entry_delay_after_open_ms=500, entry_delay_deviation_ms=300,
-        click_interval_mean_ms=600, click_interval_deviation_ms=150, sessions_per_device=1,
+        click_interval_mean_ms=600, click_interval_deviation_ms=150,
+        browse_page_count=1, page_dwell_mean_ms=2_000, page_dwell_deviation_ms=200, sessions_per_device=1,
+        sold_out_retry_count=1, sold_out_retry_delay_ms=600, browser_trace_level=1,
     ),
     ActorType.BOT_D: SessionBehavior(
         entry_delay_after_open_ms=0, entry_delay_deviation_ms=50,
-        click_interval_mean_ms=150, click_interval_deviation_ms=20, sessions_per_device=8,
+        click_interval_mean_ms=150, click_interval_deviation_ms=20,
+        browse_page_count=0, page_dwell_mean_ms=0, page_dwell_deviation_ms=0, sessions_per_device=8,
+        sold_out_retry_count=3, sold_out_retry_delay_ms=150, browser_trace_level=0,
     ),
     ActorType.BOT_NEW: SessionBehavior(
         entry_delay_after_open_ms=1_000, entry_delay_deviation_ms=500,
-        click_interval_mean_ms=900, click_interval_deviation_ms=300, sessions_per_device=1,
+        click_interval_mean_ms=900, click_interval_deviation_ms=300,
+        browse_page_count=2, page_dwell_mean_ms=2_500, page_dwell_deviation_ms=800, sessions_per_device=1,
+        sold_out_retry_count=2, sold_out_retry_delay_ms=900, browser_trace_level=1,
     ),
 }
 
