@@ -25,12 +25,12 @@
   .switch input:checked + span { background: var(--qa-blue); }
   .switch input:checked + span::before { transform: translateX(24px); }
   .criteria-chip { background: var(--gray-chip-background); border-radius: 8px; padding: 5px 11px; font-size: 13px; font-weight: 700; color: var(--strong-text-color); }
-  .summary-panel { padding: 26px; position: sticky; top: 96px; }
+  .summary-panel { padding: 26px; position: sticky; top: 96px; }  /* 고정 카드는 칸 맨 아래 · 아래에 다른 카드를 두면 덮음 */
   .summary-row { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; font-size: 14.5px; color: var(--sub-text-color); }
   .summary-row span { white-space: nowrap; }
   .summary-row b { color: var(--text-color); text-align: right; }
   .summary-box { background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 14px; padding: 10px 18px; margin: 14px 0 20px; }
-  .busy-card { margin-top: 18px; padding: 20px 22px; border-style: dashed; }
+  .busy-card { margin-bottom: 18px; padding: 20px 22px; border-style: dashed; }
   .busy-timer { display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--db-orange-light); color: var(--db-orange-text); border: 1px solid #F8C9A6; border-radius: 12px; padding: 12px; font-weight: 800; margin: 12px 0; }
   .busy-timer b { font-size: 24px; letter-spacing: .02em; }
 </style>
@@ -133,6 +133,13 @@
   </form>
 
   <aside>
+    {% if active_run_id %}
+    <section class="card busy-card">
+      <b>다른 Run 실행 중</b>
+      <div class="busy-timer"><i data-lucide="clock"></i>{{ active_run_id[-11:] }} 종료까지 <b id="busy-remaining" data-remaining-sec="{{ active_run_remaining_sec or 0 }}">--:--</b></div>
+      <a class="button is-outline" style="width:100%" href="{{ base_path }}/runs/{{ active_run_id }}/live">Run 모니터</a>
+    </section>
+    {% endif %}
     <section class="card summary-panel">
       <h2 class="section-heading" style="font-size:24px">Run 요약</h2>
       <div style="margin-top:14px">
@@ -150,13 +157,6 @@
       <div style="text-align:center;margin-top:14px"><a class="muted" href="{{ base_path }}/runs/new?from_run_id={{ latest_run_id }}">이전 Run 조건 불러오기 · {{ latest_run_id[-11:] }}</a></div>
       {% endif %}
     </section>
-    {% if active_run_id %}
-    <section class="card busy-card">
-      <b>다른 Run 실행 중</b>
-      <div class="busy-timer"><i data-lucide="clock"></i>{{ active_run_id[-11:] }} 종료까지 <b id="busy-remaining" data-remaining-sec="{{ active_run_remaining_sec or 0 }}">--:--</b></div>
-      <a class="button is-outline" style="width:100%" href="{{ base_path }}/runs/{{ active_run_id }}/live">Run 모니터</a>
-    </section>
-    {% endif %}
   </aside>
 </div>
 {% endblock %}

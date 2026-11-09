@@ -39,3 +39,22 @@ def test_progress_ends_with_finished_message(qa_settings, qa_database):
     progress_stream = RunProgressStream()
     summary = RunService(qa_settings, qa_database, progress_stream).run_now(RunConfig(TargetKind.FAKE, ("self_check",)))
     assert progress_stream.read_after(summary.run_id, 0)[-1].is_finished
+
+
+def test_live_elapsed_time_keeps_counting_past_window_until_suites_finish(qa_settings, qa_database, monkeypatch):
+    import threading
+
+    from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
+    from ticket_guard_qa.test_runs import run_service as run_service_module
+
+    monkeypatch.setattr(run_service_module, "PROGRESS_TICK_SEC", 0.05)
+    progress_stream = RunProgressStream()
+    run_service = RunService(qa_settings, qa_database, progress_stream)
+    suites_finished = threading.Event()
+    threading.Timer(0.4, suites_finished.set).start()  # Suite가 예상(0.1초)보다 늦게 끝남
+    run_service._watch_measurement_window("run-over", build_fake_system_target(), 0.1, suites_finished, True)
+
+    messages = progress_stream.read_after("run-over", 0)
+    assert max(message.elapsed_sec for message in messages) > 0.1  # 121 / 120초처럼 초과 표시
+    assert messages[-1].text.startswith("예상 시간 초과")
+    assert suites_finished.is_set()  # Suite 종료 = 표시 멈춤

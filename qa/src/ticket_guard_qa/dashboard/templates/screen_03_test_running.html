@@ -14,6 +14,7 @@
   .elapsed-total { font-size: 30px; font-weight: 800; color: var(--sub-text-color); }
   .remaining-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--qa-blue-light); color: var(--qa-blue-text); border-radius: 999px; padding: 14px 28px; font-size: 30px; font-weight: 800; margin-top: 14px; }
   .remaining-pill svg { width: 30px; height: 30px; }
+  .remaining-pill.is-over { background: var(--fail-red-light); color: var(--fail-red-text); }  /* 예상 시간 지남 */
   .connection-line { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 16px 0 20px; color: var(--sub-text-color); font-size: 16px; }
   .connection-line b { color: var(--pass-green); }
   .connection-line.is-down b { color: var(--fail-red-text); }
@@ -58,7 +59,7 @@
       {% if run_config.target_kind.value == 'fake' %}<span class="pill is-skipped">Mock · 예시 수치</span>{% endif %}</div>
     <div class="time-box">
       <div><div class="time-label">경과 시간</div><span class="elapsed-number" id="elapsed-number">0</span><span class="elapsed-total"> / {{ measurement_window_sec | int }}초</span></div>
-      <div><div class="time-label">남은 시간(예상)</div><span class="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
+      <div><div class="time-label">남은 시간(예상)</div><span class="remaining-pill" id="remaining-pill"><i data-lucide="clock"></i><span id="remaining-text">{{ measurement_window_sec | rough_duration }}</span></span></div>
     </div>
     <div class="progress-bar"><i id="progress-fill"></i></div>
     <div class="connection-line" id="connection-line"><span class="status-dot" id="connection-dot"></span><b id="connection-text">연결 정상</b><span class="muted">|</span>종료 시 Run 리포트 자동 이동</div>
@@ -132,7 +133,11 @@
   const pageOpenedAt = Date.now();
 
   function formatRemaining(seconds) {
-    return seconds < 60 ? `약 ${Math.max(Math.round(seconds), 0)}초` : `약 ${Math.round(seconds / 60)}분`;
+    if (seconds < 0) {  // 예상 시간 지남 · Suite 아직 진행 중
+      const overSec = Math.round(-seconds);
+      return overSec < 60 ? `${overSec}초 초과` : `${Math.round(overSec / 60)}분 초과`;
+    }
+    return seconds < 60 ? `약 ${Math.round(seconds)}초` : `약 ${Math.round(seconds / 60)}분`;
   }
 
   function drawSparkline(card, values) {
@@ -196,6 +201,7 @@
       const ratio = message.total_sec ? message.elapsed_sec / message.total_sec : 1;
       document.getElementById("progress-fill").style.width = `${Math.min(ratio, 1) * 100}%`;
       document.getElementById("remaining-text").textContent = formatRemaining(message.total_sec - message.elapsed_sec);
+      document.getElementById("remaining-pill").classList.toggle("is-over", message.elapsed_sec > message.total_sec);
     } else {
       addLog(message.text);
     }

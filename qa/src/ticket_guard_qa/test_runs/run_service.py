@@ -177,7 +177,7 @@ class RunService:
             else:  # 실제 대상 · 트래픽과 함께 경과 시간 표시
                 threading.Thread(
                     target=self._watch_measurement_window,
-                    args=(run_id, context.system_target, window_sec, suites_finished), daemon=True,
+                    args=(run_id, context.system_target, window_sec, suites_finished, True), daemon=True,
                 ).start()
             try:
                 for suite_name in run_config.suite_names:
@@ -212,21 +212,27 @@ class RunService:
         return summary
 
     def _watch_measurement_window(
-        self, run_id: str, system_target: SystemTarget, window_sec: float, stop_event: threading.Event
+        self, run_id: str, system_target: SystemTarget, window_sec: float, stop_event: threading.Event,
+        keeps_counting_after_window: bool = False,
     ) -> None:
-        """측정 시간 동안 1초마다 03 화면에 진행 · 실시간 수치 전달 · 시험이 먼저 끝나면 멈춤"""
+        """1초마다 03 화면에 경과 시간 · 실시간 수치 전달 · 시험이 먼저 끝나면 멈춤
+        Mock = 측정 시간에서 끝 · Live = Suite가 끝날 때까지 계속 (121 / 120초처럼 초과 표시)"""
         started_at = time.monotonic()
         while run_id not in self._cancel_requested_run_ids and not stop_event.is_set():
-            elapsed_sec = min(time.monotonic() - started_at, window_sec)
+            elapsed_sec = time.monotonic() - started_at
+            if not keeps_counting_after_window:
+                elapsed_sec = min(elapsed_sec, window_sec)
+            is_over_window = elapsed_sec > window_sec
             self.progress_stream.publish(
-                run_id, "측정 중",
+                run_id, "예상 시간 초과 · Suite 진행 중" if is_over_window else "측정 중",
                 elapsed_sec=round(elapsed_sec, 1),
                 total_sec=window_sec,
-                live_metrics=read_live_metrics_or_none(system_target, run_id, elapsed_sec),
+                live_metrics=read_live_metrics_or_none(system_target, run_id, min(elapsed_sec, window_sec)),
             )
-            if elapsed_sec >= window_sec:
+            if elapsed_sec >= window_sec and not keeps_counting_after_window:
                 return
-            stop_event.wait(min(PROGRESS_TICK_SEC, window_sec - elapsed_sec))
+            remaining_in_window = window_sec - elapsed_sec
+            stop_event.wait(PROGRESS_TICK_SEC if remaining_in_window <= 0 else min(PROGRESS_TICK_SEC, remaining_in_window))
 
 
 def read_live_metrics_or_none(system_target: SystemTarget, run_id: str, elapsed_sec: float) -> LiveMetrics | None:
