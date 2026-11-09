@@ -17,7 +17,7 @@ from ticket_guard_qa.system_targets.target_interfaces import (
     PipelineReader,
     StoredOutcome,
 )
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 
 EVENT_CONTRACTS_FOLDER_NAME = "event_contracts"
 BROWSER_EVENTS_ENDPOINT = "events"
@@ -137,6 +137,11 @@ class EventContractSuite:
     suite_name = "event_contract"
     title = "이벤트 계약 테스트"
     related_codes: tuple[str, ...] = ("E20",)  # 오래된 순번 재전송
+    guide = SuiteGuide(
+        "예매 화면이 서버로 보내는 기록의 형식 약속 준수",
+        "올바른 기록 · 일부러 틀린 기록 전송 후 받기 · 거절 확인",
+        "사례 전부 약속대로 처리",
+    )
 
     def __init__(self, storage_wait_sec: float = STORAGE_WAIT_SEC, poll_interval_sec: float = STORAGE_POLL_INTERVAL_SEC) -> None:
         self.storage_wait_sec = storage_wait_sec

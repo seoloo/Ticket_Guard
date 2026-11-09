@@ -25,7 +25,6 @@ from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_
 PROGRESS_POLL_INTERVAL_SEC = 0.5
 VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)
-DEFAULT_SUITE_NAMES = ("self_check", "event_contract", "verdict_accuracy", "pipeline_latency")
 TRAFFIC_FIELD_NAMES = ("human_percent", "bot_a_percent", "bot_b_percent", "bot_c_percent", "bot_d_percent")
 ALERT_POLICY_TITLES = {AlertPolicy.NEVER: "알림 없음", AlertPolicy.ON_FAILURE: "FAIL 시 알림", AlertPolicy.ALWAYS: "항상 알림"}
 NEXT_ACTION_BY_CRITERION_ID = {
@@ -85,7 +84,7 @@ def show_test_setup(request: Request, from_run_id: str | None = None, run_servic
     previous_summary = run_service.run_repository.get_summary(from_run_id) if from_run_id else None
     run_config = previous_summary.run_config if previous_summary else RunConfig(
         target_kind=run_service.settings.target_kind,
-        suite_names=DEFAULT_SUITE_NAMES,
+        suite_names=(),  # 처음 화면 · 선택 없음
         random_seed=run_service.settings.random_seed,
     )
     return _render_test_setup(request, run_service, run_config)
@@ -108,7 +107,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
             alert_policy=AlertPolicy(form.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
         )
     except ValueError as error:
-        fallback_config = RunConfig(run_service.settings.target_kind, suite_names or DEFAULT_SUITE_NAMES)
+        fallback_config = RunConfig(run_service.settings.target_kind, suite_names)
         return _render_test_setup(request, run_service, fallback_config, str(error), status_code=400)
     if not suite_names:
         return _render_test_setup(request, run_service, run_config, "Suite 미선택 · 1개 이상 선택 필요", status_code=400)

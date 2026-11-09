@@ -6,7 +6,7 @@ from ticket_guard_qa.domain.enums import BookingOutcome, SuiteOutcome
 from ticket_guard_qa.domain.models import SuiteResult, VirtualUserSessionResult
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_session_plans,
     reset_before_traffic,
@@ -60,6 +60,11 @@ class BookingFlowSuite:
     suite_name = BOOKING_FLOW_SUITE_NAME
     title = "예매 흐름 테스트"
     related_codes: tuple[str, ...] = ("E05", "E12")
+    guide = SuiteGuide(
+        "많은 사람이 동시에 예매할 때 끝까지 정상 진행",
+        "가상 사용자가 로그인 → 대기열 → 보안문자 → 좌석 선택 → 예매 확정 진행",
+        "오류 0 · 같은 좌석 두 번 판매 0",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config

@@ -6,7 +6,7 @@ from ticket_guard_qa.domain.enums import SuiteOutcome
 from ticket_guard_qa.domain.models import FAIL_LINE_PREFIX, MESSAGE_LINE_SEPARATOR, REFERENCE_LINE_PREFIX, SuiteResult
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, AdmissionSample, BookingApi
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import reset_before_traffic
 
 LOAD_SHOW_ID = "blue-hour"
@@ -105,6 +105,11 @@ class LoadCapacitySuite:
     suite_name = "load_capacity"
     title = "부하 테스트"
     related_codes: tuple[str, ...] = ("E08", "T1", "T2")
+    guide = SuiteGuide(
+        "오픈 순간 몰림에서 입장 인원 제한 · 과도한 요청 차단",
+        "많은 사용자 동시 진입 · 한 사용자의 쉬지 않는 연속 요청",
+        "동시 입장 제한 유지 · 연속 요청 차단 · 일반 속도 허용 · 서버 오류 0",
+    )
 
     def __init__(self, admission_hold_sec: float = ADMISSION_HOLD_SEC) -> None:
         self.admission_hold_sec = admission_hold_sec

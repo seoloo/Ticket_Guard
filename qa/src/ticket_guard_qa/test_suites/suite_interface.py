@@ -21,9 +21,18 @@ class SuiteContext:
     bot_profile_registry: BotProfileRegistry = field(default_factory=BotProfileRegistry)
 
 
+@dataclass(frozen=True)
+class SuiteGuide:
+    """02 Suite 말풍선 · 비전공자 기준 쉬운 말 · 명사형"""
+    purpose: str  # 무엇
+    method: str  # 방법
+    pass_condition: str  # 통과 기준
+
+
 class QaSuite(Protocol):
     suite_name: str
     title: str
     related_codes: tuple[str, ...]  # E · T 코드
+    guide: SuiteGuide
 
     def run(self, context: SuiteContext) -> SuiteResult: ...

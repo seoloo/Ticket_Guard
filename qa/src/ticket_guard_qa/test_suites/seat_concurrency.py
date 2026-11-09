@@ -14,7 +14,7 @@ from ticket_guard_qa.system_targets.target_interfaces import (
     ConfirmResponse,
     SeatContender,
 )
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import ALL_SEAT_IDS, reset_before_traffic
 
 RESERVED_SHOW_ID = "blue-hour"  # 지정석 · 지정석 공연끼리 판매 좌석 공유
@@ -232,6 +232,11 @@ class SeatConcurrencySuite:
     suite_name = "seat_concurrency"
     title = "좌석 동시성"
     related_codes: tuple[str, ...] = ("E12", "E14", "E20")
+    guide = SuiteGuide(
+        "같은 좌석 동시 결제 시 중복 판매 여부",
+        "20명 같은 좌석 동시 확정 · 남은 수량 초과 확정 · 확정 버튼 두 번 클릭",
+        "예매 1건 · 초과 판매 0 · 예매 번호 1개",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         booking_api = context.system_target.booking_api

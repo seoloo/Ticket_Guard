@@ -8,7 +8,7 @@ from ticket_guard_qa.domain.enums import SuiteOutcome
 from ticket_guard_qa.domain.models import FAIL_LINE_PREFIX, MESSAGE_LINE_SEPARATOR, SuiteResult
 from ticket_guard_qa.system_targets.target_interfaces import PIPELINE_SERVICE_NAME, BookingApi, PipelineReader
 from ticket_guard_qa.test_suites.event_contract import build_placeholder_values, fill_placeholders, load_contract_cases
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 
 EVENT_TEMPLATE_CASE_NAME = "valid_browser_event"
 EVENT_COUNT_PER_PHASE = 20  # 중지 전 · 중지 중 각각
@@ -45,6 +45,11 @@ class FailureRecoverySuite:
     suite_name = "failure_recovery"
     title = "장애 복구 테스트"
     related_codes: tuple[str, ...] = ()
+    guide = SuiteGuide(
+        "데이터 처리 프로그램이 멈췄다 다시 켜졌을 때 회복",
+        "처리 중지 → 그동안 기록 전송 → 재시작 → 전부 저장까지 시간 측정",
+        "60초 이내 회복 · 누락 · 중복 0",
+    )
 
     def __init__(self, timeout_sec: float = PROCESS_WAIT_TIMEOUT_SEC, poll_interval_sec: float = POLL_INTERVAL_SEC) -> None:
         self.timeout_sec = timeout_sec

@@ -20,3 +20,11 @@ def test_suite_related_codes_point_to_known_cases():
 def test_load_suite_covers_queue_policies():
     covering_names = {suite.suite_name for suite in find_covering_suites("T1", list_suites())}
     assert covering_names == {"load_capacity"}
+
+
+def test_every_suite_has_plain_guide():
+    for suite in list_suites():
+        guide = suite.guide
+        assert guide.purpose and guide.method and guide.pass_condition, suite.suite_name
+        for text in (guide.purpose, guide.method, guide.pass_condition):
+            assert not text.endswith(("요", "다", ".")), (suite.suite_name, text)  # 명사형 종결

@@ -1,3 +1,4 @@
+import re
 import time
 
 import pytest
@@ -157,3 +158,11 @@ def test_booking_flow_suite_button_and_result(dashboard_client):
 def test_capture_image_route_rejects_other_files(dashboard_client):
     assert dashboard_client.get("/runs/run-1/captures/..%2Fsecret.png").status_code == 404
     assert dashboard_client.get("/runs/run-1/captures/frame.txt").status_code == 404
+
+
+def test_run_setup_starts_without_suites_and_shows_guides(dashboard_client):
+    page = dashboard_client.get("/runs/new").text
+    suite_inputs = re.findall(r'<input[^>]*name="suite_names"[^>]*>', page)
+    assert len(suite_inputs) == 10 and not any("checked" in tag for tag in suite_inputs)
+    assert page.count('role="tooltip"') == 10
+    assert "같은 좌석 동시 결제 시 중복 판매 여부" in page

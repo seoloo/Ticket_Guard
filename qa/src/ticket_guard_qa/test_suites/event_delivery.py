@@ -14,7 +14,7 @@ from ticket_guard_qa.domain.models import (
 )
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, EventStreamReader, StreamRecord
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_session_plans,
     reset_before_traffic,
@@ -180,6 +180,11 @@ class EventDeliverySuite:
     suite_name = EVENT_DELIVERY_SUITE_NAME
     title = "이벤트 전달 검증"
     related_codes: tuple[str, ...] = ()
+    guide = SuiteGuide(
+        "화면 · 서버 기록이 데이터 통로까지 빠짐없이 도착",
+        "남긴 기록과 도착한 기록을 하나씩 대조",
+        "누락 0 · 중복 0",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         stream_reader = context.system_target.event_stream_reader

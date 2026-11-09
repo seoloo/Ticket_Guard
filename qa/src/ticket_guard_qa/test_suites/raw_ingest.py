@@ -15,7 +15,7 @@ from ticket_guard_qa.system_targets.target_interfaces import (
     StreamRecord,
 )
 from ticket_guard_qa.test_suites.event_delivery import select_qa_records, send_traffic_and_read_stream
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 
 RAW_INGEST_SUITE_NAME = "raw_ingest"
 RAW_INGEST_WAIT_SEC = 30.0  # 원본 적재 배치 1초 · 재시도 여유
@@ -118,6 +118,11 @@ class RawIngestSuite:
     suite_name = RAW_INGEST_SUITE_NAME
     title = "원본 적재 검증"
     related_codes: tuple[str, ...] = ()
+    guide = SuiteGuide(
+        "도착한 기록이 원본 보관 DB에 그대로 저장",
+        "기록 위치 번호로 보관 DB 조회 후 내용 · 보관함 비교",
+        "누락 · 중복 · 잘못된 보관함 · 내용 변경 0",
+    )
 
     def __init__(self, wait_sec: float = RAW_INGEST_WAIT_SEC, poll_interval_sec: float = RAW_INGEST_POLL_INTERVAL_SEC) -> None:
         self.wait_sec = wait_sec

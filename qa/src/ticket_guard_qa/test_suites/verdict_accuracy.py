@@ -16,7 +16,7 @@ from ticket_guard_qa.scoring.confusion_matrix import build_confusion_matrix
 from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.scoring.detection_metrics import calculate_detection_metrics, find_false_positives, find_missed_bots
 from ticket_guard_qa.scoring.latency_metrics import calculate_error_rate_percent, calculate_p95
-from ticket_guard_qa.test_suites.suite_interface import SuiteContext
+from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_session_plans,
     reset_before_traffic,
@@ -108,6 +108,11 @@ class VerdictAccuracySuite:
     suite_name = VERDICT_ACCURACY_SUITE_NAME
     title = "판정 정확도"
     related_codes: tuple[str, ...] = ("E22",)  # 보류 판정
+    guide = SuiteGuide(
+        "시스템이 매크로는 매크로로, 사람은 사람으로 판정",
+        "누가 봇인지 적은 정답표와 시스템 판정 비교",
+        "매크로 탐지 90% 이상(브라우저 자동화 70%) · 사람 오판 1% 이하",
+    )
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config
