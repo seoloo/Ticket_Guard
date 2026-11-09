@@ -47,6 +47,24 @@
   </main>
   <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
   <script>window.lucide && lucide.createIcons();</script>
+  <script>
+    // Suite 말풍선 · 화면 오른쪽 밖으로 나가면 칩 오른쪽 끝 기준으로 펼침 · 숨은 말풍선도 가로 스크롤을 만들지 않게 처음부터 정렬
+    const alignSuiteTooltip = (chip) => {
+      const tooltip = chip.querySelector(".suite-tooltip");
+      if (!tooltip) return;
+      tooltip.classList.remove("is-right-aligned");
+      if (chip.getBoundingClientRect().left + tooltip.offsetWidth > document.documentElement.clientWidth - 16) {
+        tooltip.classList.add("is-right-aligned");
+      }
+    };
+    const alignAllSuiteTooltips = () => document.querySelectorAll(".suite-chip").forEach(alignSuiteTooltip);
+    document.querySelectorAll(".suite-chip").forEach((chip) => {
+      chip.addEventListener("mouseenter", () => alignSuiteTooltip(chip));
+      chip.addEventListener("focusin", () => alignSuiteTooltip(chip));
+    });
+    alignAllSuiteTooltips();
+    window.addEventListener("resize", alignAllSuiteTooltips);
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

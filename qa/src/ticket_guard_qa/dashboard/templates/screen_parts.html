@@ -37,3 +37,12 @@
   {% if link_url %}<a class="button" style="margin-top:16px" href="{{ link_url }}">{{ link_title }}</a>{% endif %}
 </section>
 {% endmacro %}
+
+{% macro suite_tooltip(suite) %}
+<span class="suite-tooltip" id="suite-guide-{{ suite.suite_name }}" role="tooltip">
+  <span class="suite-tooltip-title">{{ suite.title }}{% for code in suite.related_codes %}<span class="suite-tooltip-code">{{ code }}</span>{% endfor %}</span>
+  <span class="suite-tooltip-row"><b>검증 대상</b><span>{{ suite.guide.purpose }}</span></span>
+  <span class="suite-tooltip-row"><b>검증 방법</b><span>{{ suite.guide.method }}</span></span>
+  <span class="suite-tooltip-row"><b>통과 기준</b><span>{{ suite.guide.pass_condition }}</span></span>
+</span>
+{% endmacro %}

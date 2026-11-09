@@ -19,7 +19,7 @@ from ticket_guard_qa.domain.models import CriterionResult, RunConfig, RunSummary
 from ticket_guard_qa.domain.pass_criteria import PASS_CRITERIA, PassCriterion
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_service import RunAlreadyActiveError, RunService
-from ticket_guard_qa.test_suites.suite_registry import list_suites
+from ticket_guard_qa.test_suites.suite_registry import get_suite, list_suites
 from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
 
 PROGRESS_POLL_INTERVAL_SEC = 0.5
@@ -128,7 +128,7 @@ def show_test_running(request: Request, run_id: str, run_service: RunService = D
     return render_screen(request, "screen_03_test_running.html", {
         "active_tab": "qa",
         "summary": summary,
-        "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
+        "run_suites": [get_suite(suite_name) for suite_name in summary.run_config.suite_names],  # 실행 순서
         "measurement_window_sec": run_service.measurement_window_sec(summary.run_config),
         "threshold_by_metric_name": {criterion.metric_name: criterion.threshold for criterion in PASS_CRITERIA},
     })

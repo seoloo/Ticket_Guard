@@ -1,5 +1,6 @@
 import re
 import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -9,6 +10,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from ticket_guard_qa.dashboard.dashboard_app import create_dashboard_app  # noqa: E402
 from ticket_guard_qa.dashboard.dependencies import ADMIN_USER_HEADER  # noqa: E402
+from ticket_guard_qa.domain.enums import TargetKind  # noqa: E402
+from ticket_guard_qa.domain.models import RunConfig  # noqa: E402
 
 ADMIN_HEADERS = {ADMIN_USER_HEADER: "qa-admin"}  # 팀 입구(nginx)가 붙이는 헤더 흉내
 
@@ -167,3 +170,13 @@ def test_run_setup_starts_without_suites_and_shows_guides(dashboard_client):
     assert page.count('role="tooltip"') == 10
     assert "같은 좌석 동시 결제 시 중복 판매 여부" in page
     assert page.count("<b>검증 대상</b>") == 10 and page.count("<b>검증 방법</b>") == 10
+
+
+def test_run_monitor_shows_suites_in_run_order_with_guides(dashboard_client):
+    run_config = RunConfig(TargetKind.FAKE, ("seat_concurrency", "self_check"), virtual_user_count=50)
+    dashboard_client.app.state.run_service.run_repository.create_run("run-20261109-032919-8d25", run_config, datetime.now(timezone.utc))
+    page = dashboard_client.get("/runs/run-20261109-032919-8d25/live").text
+    assert "Run 032919-8d25" in page and "VU 50" in page
+    assert "Suite 진행 <b id=\"suite-progress-count\">0 / 2</b>" in page
+    assert page.index('data-suite-name="seat_concurrency" tabindex') < page.index('data-suite-name="self_check" tabindex')
+    assert page.count('role="tooltip"') == 2
