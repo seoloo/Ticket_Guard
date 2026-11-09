@@ -31,6 +31,19 @@ services:
       web:
         condition: service_healthy
 
+  admin-dashboard:
+    image: ticket-guard-qa:dev
+    build: ${TICKET_GUARD_QA_DIR:-./qa}
+    command: ["ticket-guard-qa", "admin-dashboard"]
+    environment:
+      TICKET_GUARD_QA_ADMIN_DASHBOARD_BASE_PATH: /admin-dashboard
+      TICKET_GUARD_QA_SYSTEM_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_MONGO_URI:-}
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - mongo-backend
+
   gateway:
     image: nginx:1.27-alpine
     ports:
@@ -41,6 +54,8 @@ services:
       web:
         condition: service_healthy
       qa-dashboard:
+        condition: service_started
+      admin-dashboard:
         condition: service_started
 
 volumes:

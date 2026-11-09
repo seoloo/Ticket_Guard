@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>TicketGuard 관리자 운영 대시보드</title>
+<style>body{font-family:system-ui,sans-serif;max-width:1200px;margin:40px auto;padding:0 24px;color:#172033;background:#f6f8fb}.top{display:flex;justify-content:space-between;align-items:center}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:24px 0}.card{background:#fff;border:1px solid #dfe5ee;border-radius:12px;padding:20px}.metric{font-size:32px;font-weight:700;margin:8px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid #e8edf3;padding:10px}.notice{padding:14px;background:#fff1d6;border:1px solid #f0d08a;border-radius:8px}</style></head>
+<body><div class="top"><div><p>관리자 전용</p><h1>운영 데이터 대시보드</h1></div><span>{{ admin_user }}</span></div>
+{% if error %}<p class="notice">{{ error }}</p>{% endif %}
+{% if summary %}<div class="grid"><div class="card">정제 이벤트<div class="metric">{{ summary.clean_events }}</div></div><div class="card">격리 이벤트<div class="metric">{{ summary.quarantine_events }}</div></div><div class="card">예매 전환율<div class="metric">{{ '%.1f'|format(summary.flow.conversionRate * 100) }}%</div></div><div class="card">검토 대상<div class="metric">{{ summary.suspicious|length }}</div></div></div>
+<section class="card"><h2>예매 퍼널</h2><table><tr><th>단계</th><th>건수</th></tr>{% for item in summary.funnel.stages %}<tr><td>{{ item.stage }}</td><td>{{ item.count }}</td></tr>{% endfor %}</table></section>
+<section class="card"><h2>실패 원인</h2><table><tr><th>이벤트</th><th>오류 코드</th><th>건수</th></tr>{% for item in summary.failures %}<tr><td>{{ item.eventType }}</td><td>{{ item.errorCode }}</td><td>{{ item.count }}</td></tr>{% endfor %}</table></section>{% endif %}
+</body></html>
