@@ -39,27 +39,86 @@ docker compose logs --tail 50 web
 
 `compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. 기본 Compose는 Kafka와 토픽 초기화를 함께 실행합니다. MongoDB는 별도 mongo 프로필로 추가했습니다. 같은 이름을 쓰는 이전 폴더 자원과 충돌하지 않도록 MongoDB 명령에는 `-p ticket-guard-workspace-db`를 반드시 사용합니다. 실행·초기화·검증은 [MongoDB 문서](docs/mongodb.md)를 따릅니다. Spark는 별도 `ticket-guard-workspace-pipeline` 프로젝트와 spark 프로필로 빌드·점검합니다. 실제 적재 명령은 [Spark 문서](docs/spark.md)를 먼저 확인하세요. 기존 `.env`를 복사 명령으로 덮어쓰지 마세요.
 
-### QA 대시보드 접속 (관리자)
+### QA 대시보드 실행 (관리자 · Live Run 포함)
 
-관리자 로그인과 QA 대시보드(`/qa/`)는 팀 입구 `compose.gateway.yml`과 QA DB `qa/compose.qa-db.yml`을 함께 붙여 실행할 때만 켜집니다. `docker compose up -d`만으로 띄우면 관리자 로그인이 꺼져 있어 "아이디 또는 비밀번호를 확인해 주세요"가 표시됩니다.
+관리자 로그인과 QA 대시보드(`/qa/`)는 팀 입구 `compose.gateway.yml`과 QA 파일 두 개(`qa/compose.qa-db.yml` · `qa/compose.qa-live.yml`)를 함께 붙여 실행할 때만 켜집니다. `docker compose up -d`만으로 띄우면 관리자 로그인이 꺼져 있어 "아이디 또는 비밀번호를 확인해 주세요"가 표시됩니다. 모든 명령은 저장소 맨 위 폴더에서 실행합니다.
 
-1. 기존 `.env`에 두 묶음을 직접 추가합니다. `.env`는 Git에서 제외되므로 pull로 갱신되지 않습니다.
-   - 관리자 계정: `.env.example`의 `DEMO_ADMIN_USERNAME` · `DEMO_ADMIN_PASSWORD` 두 줄
-   - QA DB 계정: `QA_MONGO_*` 여섯 줄 · 형식은 [qa/README.md](qa/README.md)
-2. 세 파일을 붙여 실행합니다. 이후 `ps` · `logs` · `down`에도 같은 `-f`를 붙입니다.
+| 파일 | 역할 |
+|---|---|
+| `compose.gateway.yml` | 팀 입구(127.0.0.1:8000) · 관리자 로그인 · QA 대시보드 · DB 관리자 앱 |
+| `qa/compose.qa-db.yml` | QA DB(MongoDB QA 전용 인스턴스) · Run 기록 · Ground Truth · 봇 설정 |
+| `qa/compose.qa-live.yml` | Live Run 설정 · Run 전 시험 데이터 초기화(좌석 · 진행 중 예매) · Kafka 읽기 |
+
+**1. `.env` 준비 (처음 한 번)**
+
+`.env`가 없으면 `.env.example`을 `.env`로 복사합니다. `.env`는 Git에서 제외되므로 pull로 갱신되지 않습니다. 이미 `.env`가 있으면 덮어쓰지 말고 아래 줄 중 없는 것만 추가합니다.
 
 ```powershell
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml ps
+Copy-Item .env.example .env
 ```
 
-3. http://localhost:8000/login/ 에서 관리자 계정으로 로그인하면 QA 대시보드로 이동합니다.
-
-| 증상 | 원인 | 확인 명령 |
+| 묶음 | 줄 | 없으면 |
 |---|---|---|
+| 관리자 계정 | `DEMO_ADMIN_USERNAME` · `DEMO_ADMIN_PASSWORD` (`.env.example`에 있음) | 관리자 로그인 실패 |
+| 시스템 MongoDB 계정 | `MONGO_ROOT_*` · `MONGO_WRITER_*` 네 줄 · `CHANGE_ME_…`를 영문 · 숫자 값으로 교체 | 2단계 MongoDB 시작 실패 |
+| QA DB 계정 | `QA_MONGO_*` 여섯 줄 (아래 예시) | `Set QA_MONGO_… in .env` 오류로 실행 중단 |
+| Live Run 시험 계정 · 초기화 | `QA_TEST_ACCOUNT_*` · `QA_CAPTCHA_FIXED_ANSWER` · `QA_RESET_ENABLED` 네 줄 (아래 예시) | Live Run "시험 계정 부족" · "초기화 건너뜀" |
+
+```text
+QA_MONGO_DATABASE=ticketguard_qa
+QA_MONGO_ROOT_USERNAME=qa_admin
+QA_MONGO_ROOT_PASSWORD=영문숫자비밀번호1
+QA_MONGO_USERNAME=qa_writer
+QA_MONGO_PASSWORD=영문숫자비밀번호2
+QA_MONGO_HOST_PORT=27021
+
+QA_TEST_ACCOUNT_COUNT=500
+QA_TEST_ACCOUNT_PASSWORD=영문숫자비밀번호3
+QA_CAPTCHA_FIXED_ANSWER=QA123
+QA_RESET_ENABLED=1
+```
+
+- 비밀번호는 영문 · 숫자만 씁니다. 관리자 계정과 QA 계정은 이름 · 비밀번호를 다르게 합니다.
+- `QA_MONGO_*`는 QA DB를 처음 띄울 때(빈 볼륨) 계정이 만들어집니다. 나중에 바꾸면 볼륨을 새로 만들어야 하므로 처음에 정해 두고 바꾸지 않습니다.
+- `QA_TEST_ACCOUNT_COUNT`는 Live Run 가상 사용자(VU) 수 이상으로 둡니다. 시험 계정 · 고정 보안문자 · 초기화는 예매 웹 `DJANGO_DEBUG=1`(기본 compose)에서만 켜지는 시험 환경 장치입니다.
+
+**2. 시스템 MongoDB 먼저 시작 (처음 한 번 · PC를 다시 켠 뒤)**
+
+팀 입구의 DB 관리자 앱이 시스템 MongoDB 네트워크(`ticket-guard-workspace-db_mongo-backend`)에 붙습니다. MongoDB를 먼저 띄우지 않으면 3단계가 `network … declared as external, but could not be found`로 실패합니다.
+
+```powershell
+docker compose -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo up -d --no-deps mongo
+```
+
+**3. 전체 실행 (처음 · 예매 웹 등 다른 서비스가 꺼져 있을 때)**
+
+```powershell
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build
+```
+
+**4. QA 대시보드만 다시 빌드 (QA 코드를 받거나 고친 뒤)**
+
+QA 대시보드는 코드를 이미지 안에 복사해서 실행합니다. `git pull`로 QA 코드가 바뀌면 다시 빌드해야 반영됩니다. `--no-deps`는 예매 웹 · Kafka를 다시 만들지 않아 예매 웹 메모리 데이터가 유지됩니다. 3단계로 다른 서비스가 이미 떠 있을 때 사용합니다.
+
+```powershell
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build --no-deps qa-dashboard
+```
+
+**5. 접속**
+
+http://localhost:8000/login/ 에서 관리자 계정으로 로그인하면 QA 대시보드로 이동합니다. `ps` · `logs` · `down`에도 3단계와 같은 `-f` 네 개를 붙입니다. `down -v`는 QA DB 볼륨까지 지우므로 사용하지 않습니다.
+
+| 증상 | 원인 | 확인 · 해결 |
+|---|---|---|
+| `network ticket-guard-workspace-db_mongo-backend … could not be found` | 시스템 MongoDB 미기동 | 2단계 실행 후 3단계 다시 실행 |
+| `Set QA_MONGO_… in .env` | `.env` QA DB 여섯 줄 누락 | 1단계 예시 추가 |
 | 관리자 로그인 실패 | `.env` 관리자 두 줄 누락 · `compose.gateway.yml` 누락 | `docker compose -f compose.yml -f compose.gateway.yml exec web printenv DEMO_ADMIN_USERNAME` · 출력 없으면 누락 |
-| 로그인 후 `/qa/` 502 | QA 대시보드 미기동 · `qa/compose.qa-db.yml` 누락 · `QA_MONGO_*` 누락 | `docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml logs --tail 50 qa-dashboard qa-mongo` |
+| 로그인 후 `/qa/` 502 | QA 대시보드 미기동 · QA 파일 누락 · `QA_MONGO_*` 누락 | `docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml logs --tail 50 qa-dashboard qa-mongo` |
 | `/qa/` 접속 시 로그인 화면으로 이동 | 고객 계정 또는 로그아웃 상태 · 관리자 전용이라 정상 차단 | 관리자 계정으로 다시 로그인 |
+| Live Run "시험 계정 부족" | `QA_TEST_ACCOUNT_*` 누락 · VU 수보다 계정 수가 적음 | 1단계 네 줄 확인 · `QA_TEST_ACCOUNT_COUNT` 늘린 뒤 3단계 다시 실행 |
+| Live Run 진행 기록 "초기화 건너뜀 · 관리자 계정 미설정" | `qa/compose.qa-live.yml` 누락 · `QA_RESET_ENABLED=0` | 3단계 또는 4단계 명령의 `-f` 네 개 확인 |
+| Live Run 결과가 전부 "매진" | 초기화 꺼진 상태에서 이전 Run이 좌석을 모두 판매 | 위 초기화 설정 확인 · 당장은 `docker restart ticket-guard-web-1` |
+| 브라우저 봇(봇 C · D) 세션 `browser · 실행 환경 없음` | QA 대시보드 이미지가 Chromium 추가 전 버전 | 4단계로 다시 빌드 |
 
 ## 사용 흐름
 
