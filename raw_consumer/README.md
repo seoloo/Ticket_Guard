@@ -64,123 +64,71 @@ Kafka offset이 다르면 payload/eventId가 같아도 별도 문서다.
 
 ## 설치·기존 DB 적용
 
-저장소 루트에서 실행한다. 기존 .env는 복사/덮어쓰지 않는다.
-새 설치만 `Copy-Item raw_consumer/.env.example raw_consumer/.env`로 준비하고
-계정 placeholder를 바꾼다. 루트 `.env`와 별개이며 아래 모든 명령은
-`--env-file raw_consumer/.env`를 사용한다. 기존 파일은 덮어쓰지 않는다.
-root·writer·reader의 사용자명을 서로 다르게 지정하고 비밀번호도 용도별로 설정한다.
-`RAW_MONGO_READER_USERNAME`, `RAW_MONGO_READER_PASSWORD`도 필수다. 시작 스크립트가
-누락·placeholder·계정명 중복을 먼저 검사하므로 잘못된 설정으로 DB를 초기화하지 않는다.
-적재기는 writer(`readWrite`), Compass와 QA는 reader(`read`)를 사용한다.
+Docker 환경 설정은 저장소 루트 `.env` 하나로 통합한다. 예시는 루트 `.env.example`이다.
+새 설치에서만 `Copy-Item .env.example .env`로 만들고 기존 값은 덮어쓰지 않는다.
+기존 `raw_consumer/.env`는 보관 파일이며 아래 명령에서는 사용하지 않는다.
+계정·DB·토픽·출처 값은 유지한다. 환경 파일 통합 때문에 DB를 재생성하지 않는다.
 
-먼저 공용 Kafka와 토픽을 준비한다. 아래 명령은 루트 `.env`를 사용한다.
-웹 이미지의 토픽 초기화 명령을 사용하며 예매 웹 자체를 시작하지 않는다.
+최초 설치 순서·명령·성공 기준은 [루트 DB 매뉴얼](../README.md#db별-포트-번호)을 따른다.
+모든 명령은 저장소 루트에서 `--env-file .env`를 사용한다.
 
-```powershell
-docker compose -f compose.yml build web
-docker compose -f compose.yml up -d --wait kafka
-docker compose -f compose.yml run --rm --no-deps kafka-init
-```
+| 설정 | 용도 |
+|---|---|
+| `RAW_MONGO_ROOT_USERNAME/PASSWORD` | 관리자 생성, 인증 DB `admin` |
+| `RAW_MONGO_WRITER_USERNAME/PASSWORD` | 기존 적재·Compass 계정, 인증 DB `RAW_MONGO_DATABASE`, `readWrite` |
+| `RAW_MONGO_READER_USERNAME/PASSWORD` | 선택 사항, 둘 다 없으면 생성 생략 |
+| `RAW_SOURCE_ID` | 출처 세대, 재시작 시 유지 |
+| `RAW_KAFKA_TOPIC` | `KAFKA_EVENTS_TOPIC`과 일치 |
+| `RAW_KAFKA_NETWORK` | Kafka 네트워크, 기본 `ticket-guard_default` |
 
-기본 공용 네트워크는 `ticket-guard_default`다. 다른 Compose 프로젝트라면
-`RAW_KAFKA_NETWORK`를 실제 네트워크로 변경한다. `RAW_KAFKA_TOPIC`은 생성한
-`KAFKA_EVENTS_TOPIC`과 같아야 한다. 토픽 자동 생성은 비활성화되어 있다.
+빈 볼륨에서 root·writer와 기존 컬렉션·인덱스가 생성된다. reader는 선택 설정이며
+기본 실행·writer 검사·Compass를 위해 필수로 추가하지 않는다. 원본 DB는 내부·PC
+포트 `27020`, 공식 초기화 임시 서버는 `27017`을 사용한다.
+Kafka·토픽·공용 네트워크는 적재기를 실행하기 전에 준비한다.
 
-```powershell
-docker compose --env-file raw_consumer/.env -f compose.raw.yml config --quiet
-docker compose --env-file raw_consumer/.env -f compose.raw.yml build raw-consumer
-docker compose --env-file raw_consumer/.env -f compose.raw.yml -f compose.raw.local.yml up -d --wait mongo-raw
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T -e RAW_MONGO_VERIFY_ROLE=reader mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml up -d --no-deps raw-consumer
-```
+### 기존 볼륨
 
-신규 DB는 공식 진입점이 root를 만들고 init.js가 writer와 reader를 함께 생성한다.
-두 일반 계정의 인증 DB는 `RAW_MONGO_DATABASE`이며 reader의 권한은 해당 DB의
-`read` 하나다. 기존 raw_events, 라우팅 컬렉션·인덱스 생성 동작은 유지한다.
-기존 볼륨은 init.js가 다시 실행되지 않으므로 setup.js를 명시적으로 실행한다.
-setup은 기존 데이터·사용자를 변경하지 않고 9개 컬렉션과 비고유 인덱스
-raw_kafka_position_v1 {source:1,topic:1,partition:1,offset:1}을 멱등 생성한다.
-raw_events 인덱스는 변경하지 않는다. TTL/업무 validator는 없다.
-`setup.js`는 계정을 생성하거나 인증 실패를 복구하지 않는다.
-기존 볼륨의 계정은 `.env`를 바꾸거나 컨테이너를 다시 만들어도 변경되지 않는다.
-
-기존 DB에는 실제 사용 중인 root·writer 정보와 새 reader 정보를 `raw_consumer/.env`에
-설정한 후 아래 명령을 직접 실행한다. `up --no-deps`는 기존 볼륨을 유지하면서
-현재 환경 변수와 스크립트 마운트를 반영한다. 기존 계정이 있으면 비밀번호와
-권한을 검증하고, 다르면 변경 없이 실패한다. root 인증이 안 되면 중단한다.
-볼륨 삭제, 인증 해제, 자동 비밀번호 재설정은 수행하지 않는다.
+초기화는 기존 볼륨에서 다시 실행되지 않는다. `setup.js`는 유효한 writer로 인증해
+없는 컬렉션·인덱스를 적용한다. 기존 계정·문서·raw_events 인덱스는 변경하지 않는다.
 
 ```powershell
-docker compose --env-file raw_consumer/.env -f compose.raw.yml -f compose.raw.local.yml up -d --no-deps --wait mongo-raw
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup-writer.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup-reader.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T -e RAW_MONGO_VERIFY_ROLE=reader mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
+docker compose --env-file .env -f compose.raw.yml -f compose.raw.local.yml up -d --no-deps --wait mongo-raw
+docker compose --env-file .env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup.js
+docker compose --env-file .env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
 ```
 
-`setup-reader.js`는 최초 설치와 같은 생성 함수를 사용한다. root로 인증한 뒤
-없는 조회 계정만 추가하며 기존 root·writer·문서를 변경하지 않는다.
-writer가 이미 정상이라면 `setup-writer.js`는 생략하고 조회 계정 설정만 실행해도 된다.
+writer가 없을 때만 유효한 관리자 인증으로 `/opt/raw/setup-writer.js`를 실행한다.
+기존 계정의 비밀번호·권한이 다르면 덮어쓰지 않고 실패한다. `setup.js`는 계정 복구 도구가
+아니며 환경 파일 변경만으로 기존 비밀번호가 바뀌지 않는다.
 
-현재 실행 중인 DB를 재생성하지 않고 setup만 적용하려면 다음도 가능하다.
+### 선택적 reader
+
+필요할 때만 루트 `.env`의 `RAW_MONGO_READER_USERNAME/PASSWORD`를 둘 다 설정한다.
+root·writer와 다른 이름을 사용한다. 기존 DB에는 위 `up` 명령으로 환경 변수를 반영한 뒤
+관리자 인증으로 적용한다. 기본 writer 설치에서는 아래 두 명령을 실행하지 않는다.
 
 ```powershell
-Get-Content -Raw raw_consumer/mongo/setup.js | docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 --file /dev/stdin
+docker compose --env-file .env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/setup-reader.js
+docker compose --env-file .env -f compose.raw.yml exec -T -e RAW_MONGO_VERIFY_ROLE=reader mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
 ```
 
-공식 Mongo 초기화 임시 서버는 27017을 쓰지만 운영 실행·인증·healthcheck·조회는 27020이다.
-DB 호스트 공개가 필요 없으면 compose.raw.local.yml을 생략한다.
+QA 자체 DB와 외부 원본 DB 검증은 별개다. QA 전용 원본 DB를 만들지 않는다.
+[선택적 연결](../README.md#4-선택-별도-읽기-계정과-qa-외부-db-검증)을 참고한다.
+출처는 같은 루트 `.env`의 `RAW_SOURCE_ID`와 `TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID`를 맞춘다.
 
 ## 실행·조회
 
 ```powershell
-docker compose --env-file raw_consumer/.env -f compose.raw.yml ps -a
-docker compose --env-file raw_consumer/.env -f compose.raw.yml logs --tail 30 raw-consumer
-docker compose --env-file raw_consumer/.env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
-docker compose --env-file raw_consumer/.env -f compose.raw.yml stop raw-consumer
+docker compose --env-file .env -f compose.raw.yml ps -a
+docker compose --env-file .env -f compose.raw.yml logs --since 2m raw-consumer
+docker compose --env-file .env -f compose.raw.yml exec -T mongo-raw mongosh --quiet --norc --port 27020 /opt/raw/verify.js
+docker compose --env-file .env -f compose.raw.yml stop raw-consumer
 ```
 
-Compass: `mongodb://127.0.0.1:27020/`에 연결한다.
-고급 연결 옵션의 인증 탭에서 `raw_consumer/.env`의 `RAW_MONGO_READER_USERNAME`,
-`RAW_MONGO_READER_PASSWORD`를 입력하고 인증 DB를 `RAW_MONGO_DATABASE`
-(기본 `ticketguard_raw`)로 지정한다. root 계정의 인증 DB는 `admin`이다.
-`verify.js`가 출력한 컬렉션/건수를 확인한 뒤 Compass에서도 같은 컬렉션을 확인한다.
-명령이 실행됐다는 사실만으로 인증 성공이라고 판단하지 않는다. 종료 코드 0과
-컬렉션 목록 출력을 확인한다. 27018 시스템 DB 계정과 혼용하지 않는다.
-새로고침 후 각 컬렉션 Documents에서 다음 Filter와 Sort 사용:
-
-```javascript
-// Filter
-{topic: "ticketguard.events.v1"}
-// Sort
-{ingestedAt: -1}
-// 인증된 mongosh
-db.getSiblingDB('ticketguard_raw').http_events.countDocuments({topic:'ticketguard.events.v1'})
-db.getSiblingDB('ticketguard_raw').unclassified_events.aggregate([
-  {$group:{_id:'$routing.reason',count:{$sum:1}}}
-])
-```
-
-## QA의 원본 DB 조회 연결
-
-QA 프로그램은 원본 DB의 reader 계정으로 조회한다. 원본 DB 설정은
-`raw_consumer/.env`, QA의 Compose 설정은 루트 `.env`이므로 자동 공유되지 않는다.
-루트 `.env`에 조회용 URI와 출처 값만 설정한다. 원본 root·writer 비밀번호는
-QA에 전달하지 않는다.
-
-```dotenv
-TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI=mongodb://raw_reader:ENCODED_READER_PASSWORD@ticket-guard-raw-mongo-raw-1:27020/ticketguard_raw?authSource=ticketguard_raw
-TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID=원본_환경파일의_RAW_SOURCE_ID와_같은_값
-TICKET_GUARD_QA_RAW_MONGO_NETWORK=ticket-guard-raw_raw-backend
-```
-
-URI에는 실제 reader 사용자명을 사용하고 사용자명·비밀번호는 URL 인코딩한다.
-프로젝트 이름을 바꾸었다면 호스트명과 네트워크도 변경한다. 시스템 DB 조회 설정과
-전체 QA 실행·검사 명령은 [DB 연결 안내](../docs/mongodb.md#qa-실제-db-연결)를 따른다.
-원본과 QA가 같은 토픽·출처를 사용해야 위치 기반 검증 결과가 올바르다.
+Compass는 `127.0.0.1:27020`, 루트 `.env`의 `RAW_MONGO_WRITER_*`, 인증 DB
+`RAW_MONGO_DATABASE`를 사용한다. PC 포트는 local override 적용 시에만 공개된다.
+[루트 Compass 안내](../README.md#3-mongodb-compass-접속)에 따라 웹 동작 후
+최신 `batch_saved`와 실제 문서 증가를 함께 확인한다.
 
 ## 실패·소유권·종료
 
@@ -221,8 +169,8 @@ SHA-256이며 현재 Compose 기본값과 실제 .env에 고정한다. 매핑을
 ## 검증
 
 ```powershell
-docker compose --env-file raw_consumer/.env -f compose.raw.yml run --rm --no-deps raw-consumer python -m unittest discover -s tests -v
-docker compose --env-file raw_consumer/.env -f compose.raw.yml run --rm --no-deps raw-consumer python integration.py
+docker compose --env-file .env -f compose.raw.yml run --rm --no-deps raw-consumer python -m unittest discover -s tests -v
+docker compose --env-file .env -f compose.raw.yml run --rm --no-deps raw-consumer python integration.py
 ```
 
 integration은 독립 UUID 테스트 토픽/그룹만 사용하고 테스트 source로 문서를 남긴다.
@@ -231,7 +179,7 @@ integration은 독립 UUID 테스트 토픽/그룹만 사용하고 테스트 sou
 종단 간 exactly-once나 여러 컬렉션의 원자 트랜잭션을 보장하지 않는다.
 
 AWS: 네트워크/advertised listener/인증 연결을 실제 환경에 맞춰야 한다.
-단일 EC2의 Docker Compose에서도 `raw_consumer/.env` 또는 동등한 환경 변수 주입이
+단일 EC2의 Docker Compose에서도 루트 `.env` 또는 동등한 환경 변수 주입이
 필요하다. 같은 Docker 호스트의 네트워크 이름만 `RAW_KAFKA_NETWORK`로 지정할 수
 있으며 서로 다른 EC2의 Docker 네트워크는 자동 연결되지 않는다. 현재 MongoDB
 호스트와 포트는 Compose의 `mongo-raw:27020`에 맞춰져 있어 외부 관리형 DB 연결이나
