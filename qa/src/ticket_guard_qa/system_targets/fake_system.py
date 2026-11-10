@@ -549,6 +549,9 @@ class FakeProcessControl:
         self.state = state
         self.stopped_services: set[str] = set()
 
+    def can_control(self, service_name: str) -> bool:
+        return True
+
     def stop_service(self, service_name: str) -> None:
         self.stopped_services.add(service_name)
         if self.state and service_name == PIPELINE_SERVICE_NAME:

@@ -59,6 +59,8 @@ class FailureRecoverySuite:
         booking_api = context.system_target.booking_api
         pipeline_reader = context.system_target.pipeline_reader
         process_control = context.system_target.process_control
+        if not process_control.can_control(PIPELINE_SERVICE_NAME):  # 이벤트 전송 · 저장소 조회 전에 건너뜀
+            raise NotImplementedError(f"장애 복구 · {PIPELINE_SERVICE_NAME} 중지 · 시작 제어 미설정 · TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME")
         template = next(case.requests[0] for case in load_contract_cases(context.case_data_dir)
                         if case.case_name == EVENT_TEMPLATE_CASE_NAME)
 

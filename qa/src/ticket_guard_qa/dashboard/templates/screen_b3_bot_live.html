@@ -40,7 +40,7 @@
 {% if not has_traffic_suite %}
 <div class="notice is-db" style="margin-bottom:18px"><i data-lucide="info"></i>봇 트래픽 미발생 · 계획 분포만 표시</div>
 {% endif %}
-<div class="notice is-qa" id="finished-notice" style="margin-bottom:18px" {{ 'hidden' if is_running }}><i data-lucide="circle-check"></i>Run 종료 · 탐지 리포트 생성 완료</div>
+<div class="notice is-qa" id="finished-notice" style="margin-bottom:18px" {{ 'hidden' if is_running }}><i data-lucide="circle-check"></i>Run 종료 · {{ '탐지 리포트 생성 완료' if has_detection_report else '결과는 Run 리포트' }}</div>
 
 <div class="bot-live-grid">
   <div>
@@ -151,7 +151,7 @@
         cell.querySelector(".progress-bar i").style.width = `${Math.min(count / plannedCount, 1) * 100}%`;
       });
     });
-    document.getElementById("progress-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    document.getElementById("progress-updated").textContent = `갱신 ${new Date().toLocaleTimeString("ko-KR", { hour12: false })}`;
   }
 
   function addLog(text) {

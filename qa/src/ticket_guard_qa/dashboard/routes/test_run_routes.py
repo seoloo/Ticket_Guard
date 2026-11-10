@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from ticket_guard_qa.dashboard.criterion_status import STATUS_TITLES, build_criterion_rows, count_statuses
-from ticket_guard_qa.dashboard.suite_result_view import build_suite_result_view
+from ticket_guard_qa.dashboard.suite_result_view import build_suite_result_view, describe_missing_verdict
 from ticket_guard_qa.dashboard.dependencies import (
     get_progress_stream,
     get_run_service,
@@ -301,6 +301,7 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
         "first_failed_card": failed_cards[0] if failed_cards else None,
         "next_actions": [NEXT_ACTION_BY_CRITERION_ID[card.criterion.criterion_id] for card in failed_cards],
         "verdict_details": verdict_result.details if verdict_result else {},
+        "missing_verdict_reason": describe_missing_verdict(summary),
         "comparisons": build_criterion_comparisons(summary, run_service.run_repository.find_previous_same_config_summary(summary)),
         "suite_title_by_name": suite_title_by_name,
         "suite_views": [(result, build_suite_result_view(result)) for result in summary.suite_results],

@@ -1,7 +1,9 @@
 """04 Suite 자체 검증 · 결론 한 줄 · 핵심 수치 타일 · 상세 접기 · 지난 Live Run 실제 문구 기준"""
-from ticket_guard_qa.dashboard.suite_result_view import build_suite_result_view, humanize_text
-from ticket_guard_qa.domain.enums import SuiteOutcome
-from ticket_guard_qa.domain.models import SuiteResult
+from datetime import datetime, timezone
+
+from ticket_guard_qa.dashboard.suite_result_view import build_suite_result_view, describe_missing_verdict, humanize_text
+from ticket_guard_qa.domain.enums import RunStatus, SuiteOutcome, TargetKind
+from ticket_guard_qa.domain.models import RunConfig, RunSummary, SuiteResult
 
 OLD_BOOKING_MESSAGE = (  # 이전 기록 · 실패 원인과 결과가 한 줄
     "FAIL: connection · ReadTimeout 15건, time_limit · TIMEOUT 7건, browser · Error 2건 · 예매 완료 37 · 매진 139 · 오류 24 / VU 200"
@@ -71,3 +73,14 @@ def test_list_only_message_stays_as_lines_and_empty_message_is_empty():
 def test_browser_error_step_is_shown_in_words():
     assert humanize_text("browser seat · Error · Timeout 15000ms exceeded. 2건") == "브라우저 좌석 선택 오류 · Timeout 15000ms exceeded. 2건"
     assert humanize_text("browser · Error 2건") == "브라우저 오류 2건"  # 이전 기록
+
+
+def build_summary(*suite_results: SuiteResult) -> RunSummary:
+    started_at = datetime(2026, 11, 10, tzinfo=timezone.utc)
+    return RunSummary("run-1", RunConfig(TargetKind.LIVE, ("booking_flow",)), RunStatus.PASSED, started_at, started_at, list(suite_results))
+
+
+def test_missing_verdict_reason_tells_skip_apart_from_not_run():
+    assert describe_missing_verdict(build_summary()) == "판정 정확도 Suite 미실행"
+    skipped = SuiteResult("verdict_accuracy", SuiteOutcome.SKIPPED, message="판정 저장 위치 미정")
+    assert describe_missing_verdict(build_summary(skipped)) == "판정 정확도 건너뜀 · 판정 저장 위치 미정"

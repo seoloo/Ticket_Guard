@@ -31,6 +31,19 @@ def failure_lines(message: str) -> list[str]:
     return [line for line in message.split(MESSAGE_LINE_SEPARATOR) if line.startswith(FAIL_LINE_PREFIX)]
 
 
+class UnreachablePipelineReader:
+    def find_processed_event_ids(self, event_ids):
+        raise AssertionError("제어 미설정이면 저장소를 조회하지 않음")
+
+
+def test_missing_pipeline_container_skips_before_traffic():
+    from dataclasses import replace
+    system_target = replace(build_fake_system_target(), pipeline_reader=UnreachablePipelineReader(),
+                            process_control=LiveDockerProcessControl({PIPELINE_SERVICE_NAME: ""}, "/var/run/docker.sock"))
+    with pytest.raises(NotImplementedError, match="TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME"):
+        run_suite(system_target)
+
+
 def test_pipeline_restart_without_loss_passes():
     system_target = build_fake_system_target()
     result = run_suite(system_target)

@@ -5,6 +5,8 @@
 services:
   qa-dashboard:
     environment:
+      # 기본 시험 대상 · 헤더 연결 상태 · 02 Run 설정 기본값 · Mock은 Run 설정에서 선택
+      TICKET_GUARD_QA_TARGET_KIND: ${TICKET_GUARD_QA_TARGET_KIND:-live}
       # Run 전 시험 데이터 초기화(/api/qa/reset/) · 시스템 관리자 계정 · 시스템 QA_RESET_ENABLED=1일 때만 동작
       TICKET_GUARD_QA_SYSTEM_ADMIN_USERNAME: ${DEMO_ADMIN_USERNAME:-}
       TICKET_GUARD_QA_SYSTEM_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}

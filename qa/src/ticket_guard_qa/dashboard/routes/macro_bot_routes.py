@@ -39,6 +39,7 @@ from ticket_guard_qa.macro_bots.browser_capture import (
     load_capture_frames,
 )
 from ticket_guard_qa.dashboard.bot_list_view import BotListItem, build_bot_list_view
+from ticket_guard_qa.dashboard.suite_result_view import describe_missing_verdict
 from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, BotTypeInfo, find_bot_type_by_slug, list_bot_types
 from ticket_guard_qa.macro_bots.bot_profile_store import BotProfileLockedError, BotProfileStore
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfile, BotProfileRegistry
@@ -226,6 +227,7 @@ def show_bot_live(
         "summary": summary,
         "is_running": summary.status is RunStatus.RUNNING,
         "has_traffic_suite": any(suite_name in TRAFFIC_SUITE_NAMES for suite_name in run_config.suite_names),
+        "has_detection_report": bool(read_verdict_details(summary)),
         "actor_progress": build_initial_actor_progress(summary, read_verdict_details(summary)),
         "planned_progress_key": PLANNED_PROGRESS_KEY,
         "session_step_titles": SESSION_STEP_TITLES,
@@ -293,6 +295,7 @@ def show_detection_result(
         **BOT_SCREEN_CONTEXT,
         "summary": summary,
         "verdict_details": verdict_details,
+        "missing_verdict_reason": describe_missing_verdict(summary),
         "rows": build_actor_detection_rows_from_details(verdict_details) if verdict_details else {},
         "target_cards": [
             DetectionTargetCard(target, result_by_criterion_id.get(target.criterion_id, CriterionResult(target.criterion_id, None, None)))
