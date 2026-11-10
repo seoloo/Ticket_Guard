@@ -34,78 +34,41 @@ QA 패키지, Kafka 클라이언트, QA 데이터베이스는 관리자 앱 설�
 
 ## DB 연결 설정
 
-웹 로그인 계정과 DB 서비스 계정은 역할이 다르다. 웹 관리자로 로그인한 후 서버가 별도의 읽기 전용 계정으로 조회한다.
+Docker 설정은 루트 `.env` 하나이며 예시는 루트 `.env.example`이다.
+웹 관리자 로그인과 DB 계정은 다르다. 앱은 `TICKET_GUARD_ADMIN_MONGO_URI`를 사용하며
+URI 설정만으로 DB에 사용자를 생성하지 않는다.
 
-- `TICKET_GUARD_ADMIN_MONGO_URI`: 관리자 앱 전용 URI. 대상 DB와 계정이 생성된 `authSource`를 명시한다.
-- `TICKET_GUARD_ADMIN_MONGO_NETWORK`: MongoDB가 실행 중인 외부 Docker 네트워크 이름.
-- QA의 `TICKET_GUARD_QA_SYSTEM_MONGO_URI`는 관리자 앱에서 사용하지 않는다.
-- URI와 비밀번호는 무시된 루트 `.env`에만 보관한다.
+기본 설치는 기존 `MONGO_WRITER_USERNAME/PASSWORD`, `MONGO_DATABASE`에 맞춰
+관리자 URI를 작성한다. writer로 조회할 수 있고 관리자 앱 코드는 조회만 수행한다.
+URI 자격 증명은 URL 인코딩하고 `authSource`는 계정이 생성된 `MONGO_DATABASE`로 지정한다.
+reader가 없는 설치에서는 reader 검사를 실행하지 않는다.
 
-### 최초 설치 · 빈 DB
+- 내부 주소: `ticket-guard-workspace-db-mongo-1:27017`
+- 네트워크: `TICKET_GUARD_ADMIN_MONGO_NETWORK`, 기본 `ticket-guard-workspace-db_mongo-backend`
+- PC 포트: `mongo/compose.local.yml`의 `MONGO_HOST_PORT`
+- QA의 `TICKET_GUARD_QA_SYSTEM_MONGO_URI`는 관리자 앱과 별도 설정이다.
 
-모든 명령은 저장소 루트에서 실행한다. `.env`가 없을 때만
-`Copy-Item .env.example .env`로 만들고 placeholder를 실제 값으로 교체한다.
-기존 `.env`는 덮어쓰지 않는다.
+최초 설치·writer 검사·게이트웨이 실행·Compass·재시작·오류 해결은
+[루트 DB 매뉴얼](../README.md#db별-포트-번호)을 기준으로 한다.
+환경 파일 통합만을 이유로 계정이나 볼륨을 변경하지 않는다.
 
-| 환경 변수 | 용도 / 인증 DB |
-|---|---|
-| `MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD` | 최초 관리자 생성 / `admin` |
-| `MONGO_WRITER_USERNAME`, `MONGO_WRITER_PASSWORD` | 적재 계정 생성 / `MONGO_DATABASE` |
-| `MONGO_ADMIN_READER_USERNAME`, `MONGO_ADMIN_READER_PASSWORD` | 대시보드 조회 계정 생성 / `MONGO_DATABASE`, `read` 하나 |
-| `MONGO_DATABASE` | 시스템 DB 이름, 기본 `ticketguard` |
-| `MONGO_HOST_PORT` | 컴퍼스용 PC 포트, 컨테이너 내부는 항상 `27017` |
-| `TICKET_GUARD_ADMIN_MONGO_URI` | 위 조회 계정과 같은 비밀번호·DB·`authSource` |
-| `TICKET_GUARD_ADMIN_MONGO_NETWORK` | DB 프로젝트의 외부 네트워크, 기본 `ticket-guard-workspace-db_mongo-backend` |
+### 관리자 서비스만 갱신
 
-조회 계정 설정은 기존 설치 호환을 위해 두 값이 모두 비어 있으면 생략된다.
-대시보드를 사용할 새 환경에서는 반드시 둘 다 설정한다. 관리자·쓰기·조회 계정은
-서로 다른 사용자명과 비밀번호를 사용한다. URI 사용자명·비밀번호의 특수문자는
-URL 인코딩하고, 계정 생성 변수에는 인코딩 전 값을 사용한다.
-예시 URI는 `.env.example`에 있다. 내부 주소는
-`ticket-guard-workspace-db-mongo-1:27017`이며 PC의 공개 포트와 다르다.
-
-먼저 시스템 DB만 실행한다. 아래 고정 프로젝트 이름을 사용해야 기본 네트워크와
-URI의 컨테이너 이름이 일치한다. DB만 실행할 때 Kafka는 필요하지 않다.
+웹·QA·게이트웨이가 이미 실행 중인 경우만 사용한다.
+`--no-deps`는 중지된 의존 서비스를 시작하지 않는다.
 
 ```powershell
-docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo config --quiet
-docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo up -d --wait mongo
-docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml --profile mongo exec -T mongo mongosh --quiet --norc /opt/mongo/verify.js
-docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml --profile mongo exec -T -e MONGO_VERIFY_ROLE=writer mongo mongosh --quiet --norc /opt/mongo/verify.js
-docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml --profile mongo exec -T -e MONGO_VERIFY_ROLE=reader mongo mongosh --quiet --norc /opt/mongo/verify.js
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml build admin-dashboard
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --no-deps admin-dashboard
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml exec -T gateway nginx -t
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml exec -T gateway nginx -s reload
 ```
 
-각 명령의 종료 코드 0과 검증 성공 출력을 확인한다. 빈 볼륨에서는 공식 MongoDB
-진입점이 root를 만들고, `mongo/init.js`가 writer와 조회 계정, 기존 `raw_events`를
-만든다. 대시보드는 존재하는 업무 컬렉션을 읽으며 임의의 판정 데이터나 샘플을
-DB에 생성하지 않는다. `ticketguard_results`가 자동 생성된다고 가정하지 않는다.
+### 선택적 읽기 계정
 
-그다음 웹·Kafka·게이트웨이를 실행한다. 현재 팀 게이트웨이는 QA 서비스도 함께
-사용하므로 먼저 [QA 설치 문서](../qa/README.md)의 `QA_MONGO_*`를 루트 `.env`에
-준비한다. QA 계정·구조는 이 관리자 초기화에서 생성하거나 변경하지 않는다.
-
-```powershell
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml build web qa-dashboard admin-dashboard
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --wait
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml exec -T gateway nginx -t
-```
-
-관리자로 로그인하고 `/admin/`에서 DB 조회를 확인한다.
-관리자 서비스만 갱신하는 아래 명령은 웹·QA·게이트웨이가 이미 실행 중일 때 사용한다.
-`--no-deps`는 중지된 다른 서비스를 시작하지 않는다.
-
-```powershell
-docker compose -f compose.yml -f compose.gateway.yml build admin-dashboard
-docker compose -f compose.yml -f compose.gateway.yml up -d --no-deps admin-dashboard
-docker exec ticket-guard-gateway-1 nginx -t
-docker exec ticket-guard-gateway-1 nginx -s reload
-```
-
-### 기존 DB · 조회 계정 추가
-
-공식 이미지의 초기화는 빈 볼륨에서만 실행된다. `.env` 수정이나 컨테이너 재생성은
-기존 DB 계정을 변경하지 않는다. DB 관리자가 보유한 유효한 기존 root 정보와
-추가할 조회 계정을 `.env`에 설정한 뒤 직접 실행한다.
+필요한 경우만 `MONGO_ADMIN_READER_USERNAME/PASSWORD`를 둘 다 설정한다.
+둘 다 없으면 생성이 생략된다. root·writer와 다른 사용자명을 사용한다.
+빈 볼륨에서 자동 생성하며 기존 DB에는 유효한 관리자 인증으로 적용한다.
 
 ```powershell
 docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo up -d --no-deps --wait mongo
@@ -113,40 +76,10 @@ docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml --pro
 docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml --profile mongo exec -T -e MONGO_VERIFY_ROLE=reader mongo mongosh --quiet --norc /opt/mongo/verify.js
 ```
 
-첫 명령은 같은 볼륨을 유지하고 환경 변수·스크립트 마운트를 반영한다.
-조회 계정이 없을 때만 생성한다. 이미 있으면 비밀번호와 `read` 하나의 권한을
-검증하며, 다르면 기존 계정을 수정하지 않고 실패한다. 기존 writer/root를
-변경하거나 복구하는 명령은 아니다. 관리자 인증이 안 되면 중단하고 기존 DB
-관리자에게 확인한다. `down -v`, 볼륨 초기화, 인증 해제는 사용하지 않는다.
-
-### 컴퍼스와 AWS
-
-QA에서 시스템 DB를 조회할 때도 이미 생성한 대시보드 reader를 사용할 수 있다.
-별도 계정을 수동으로 만들 필요 없이 QA URI를 같은 조회 계정으로 설정하고,
-루트의 선택적 `compose.qa-db-access.yml`로 DB 네트워크를 연결한다.
-원본 DB reader·출처 값·파일 조합·접속 검사 명령은
-[QA 실제 DB 연결](../docs/mongodb.md#qa-실제-db-연결)을 따른다. QA 파일은 수정하지 않는다.
-
-컴퍼스 주소는 `mongodb://127.0.0.1:<MONGO_HOST_PORT>/`다.
-고급 연결 옵션에서 조회 계정의 사용자명·비밀번호를 입력하고 인증 DB를
-`MONGO_DATABASE`로 지정한다. writer도 같은 인증 DB이며 root만 `admin`이다.
-원본 DB `27020/ticketguard_raw`와 다른 서버다. 로컬 포트는
-`mongo/compose.local.yml`을 붙인 경우에만 열리며 기본값은 `27017`이다.
-다른 PC에서 이 PC의 DB를 조회하려면 그 PC의 `localhost`가 아니라 SSH 터널 등
-별도의 접근 경로가 필요하다.
-
-단일 EC2의 Docker Compose도 같은 초기화 코드를 사용한다. 비밀값은 배포 환경에서
-주입하고 새 저장소라면 초기 계정을 생성한다. 기존 디스크라면 위 기존 DB 절차를
-사용한다. DB 프로젝트 이름을 변경하면 URI의 호스트와 네트워크도 함께 바꾼다.
-DB 포트를 인터넷에 공개하지 않는다. 원격 Compass는 승인된 SSH 터널/VPC 경로로
-연결한다. 현재 웹·Kafka 실행 구성은 개발용이며 AWS 운영 설정, 인증서·TLS,
-여러 EC2 간 네트워크 및 실제 AWS 배포는 별도 검증이 필요하다.
-팀 내부망에는 기존 `mongo/compose.lan.yml`을 선택적으로 사용할 수 있다.
-같은 PC·팀 내부망·AWS 주소의 차이는 [DB 접속 경로](../docs/mongodb.md#같은-pc--팀-내부망--aws)를 따른다.
-이 문서의 로컬 명령 성공을 AWS 검증 완료로 간주하지 않는다.
-
-참고: [MongoDB 공식 이미지의 최초 초기화 규칙](https://hub.docker.com/_/mongo),
-[MongoDB 계정 생성](https://www.mongodb.com/docs/manual/reference/method/db.createUser/).
+기존 계정의 비밀번호·권한이 다르면 덮어쓰지 않는다. 원하는 경우 관리자 URI를
+조회 계정으로 지정한다. QA의 외부 DB 검증은 별도의 읽기 전용 연결이며
+[선택적 QA 연결](../README.md#4-선택-별도-읽기-계정과-qa-외부-db-검증)을 따른다.
+팀 내부망·AWS 접속과 미검증 범위는 [DB 연결 문서](../docs/mongodb.md)를 참고한다.
 
 ## 표시 데이터와 한계
 

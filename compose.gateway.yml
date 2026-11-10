@@ -1,5 +1,5 @@
 # 팀 입구 · 관리자 로그인 → QA 대시보드 · compose.yml에 덧붙여 실행
-# docker compose -f compose.yml -f compose.gateway.yml up -d --build
+# docker compose --env-file .env -f compose.yml -f compose.gateway.yml up -d --build
 # 밖으로 열린 포트는 gateway의 127.0.0.1:8000 하나 · web · qa-dashboard는 안쪽 네트워크로만
 services:
   web:

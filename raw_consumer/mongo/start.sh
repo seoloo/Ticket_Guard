@@ -1,15 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
-for name in MONGO_INITDB_ROOT_USERNAME MONGO_INITDB_ROOT_PASSWORD MONGO_INITDB_DATABASE RAW_MONGO_WRITER_USERNAME RAW_MONGO_WRITER_PASSWORD RAW_MONGO_READER_USERNAME RAW_MONGO_READER_PASSWORD; do
+for name in MONGO_INITDB_ROOT_USERNAME MONGO_INITDB_ROOT_PASSWORD MONGO_INITDB_DATABASE RAW_MONGO_WRITER_USERNAME RAW_MONGO_WRITER_PASSWORD; do
   value="${!name:-}"
   if [[ -z "$value" || "$value" == CHANGE_ME* ]]; then
     echo "Raw MongoDB configuration required: $name (see raw_consumer/README.md)" >&2
     exit 1
   fi
 done
-if [[ "$MONGO_INITDB_ROOT_USERNAME" == "$RAW_MONGO_WRITER_USERNAME" || "$MONGO_INITDB_ROOT_USERNAME" == "$RAW_MONGO_READER_USERNAME" || "$RAW_MONGO_WRITER_USERNAME" == "$RAW_MONGO_READER_USERNAME" ]]; then
+if [[ "$MONGO_INITDB_ROOT_USERNAME" == "$RAW_MONGO_WRITER_USERNAME" ]]; then
   echo 'Raw MongoDB root, writer and reader usernames must differ.' >&2
   exit 1
+fi
+if [[ -n "${RAW_MONGO_READER_USERNAME:-}${RAW_MONGO_READER_PASSWORD:-}" ]]; then
+  for name in RAW_MONGO_READER_USERNAME RAW_MONGO_READER_PASSWORD; do
+    value="${!name:-}"
+    if [[ -z "$value" || "$value" == CHANGE_ME* ]]; then
+      echo "Raw MongoDB configuration required: $name" >&2
+      exit 1
+    fi
+  done
+  if [[ "$MONGO_INITDB_ROOT_USERNAME" == "$RAW_MONGO_READER_USERNAME" || "$RAW_MONGO_WRITER_USERNAME" == "$RAW_MONGO_READER_USERNAME" ]]; then
+    echo 'Raw MongoDB root, writer and reader usernames must differ.' >&2
+    exit 1
+  fi
 fi
 if [[ ! "$MONGO_INITDB_DATABASE" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ || "$MONGO_INITDB_DATABASE" =~ ^(admin|local|config)$ ]]; then
   echo 'Raw MongoDB application database name is invalid or reserved.' >&2

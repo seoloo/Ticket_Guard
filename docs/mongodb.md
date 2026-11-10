@@ -1,86 +1,61 @@
-# MongoDB 설치와 계정
+# MongoDB 구성과 연결
 
-시스템 DB와 원본 DB는 별도 서버·계정·볼륨을 사용한다.
+최초 설치·인증 검사·Compass·재시작과 오류 해결은
+[루트 README DB 매뉴얼](../README.md#db별-포트-번호)을 기준으로 한다.
+모든 Docker 운영 명령은 저장소 루트에서 `--env-file .env`를 사용한다.
+기존 `raw_consumer/.env`는 보관 파일이며 실행에 사용하지 않는다.
 
-| 항목 | 시스템 DB | 원본 DB |
-|---|---|---|
-| 환경 파일 | 루트 `.env` | `raw_consumer/.env` |
-| Compose | `compose.yml`, `mongo` 프로필 | `compose.raw.yml` |
-| 프로젝트 | `ticket-guard-workspace-db` | `ticket-guard-raw` |
-| 내부 주소 | `ticket-guard-workspace-db-mongo-1:27017` | `mongo-raw:27020` |
-| 기본 DB / 일반 계정의 인증 DB | `ticketguard` | `ticketguard_raw` |
-| root 인증 DB | `admin` | `admin` |
-| PC 포트 공개 | `mongo/compose.local.yml`의 `MONGO_HOST_PORT` | `compose.raw.local.yml`의 `27020` |
+| 항목 | 시스템 DB | 원본 DB | QA 자체 DB |
+|---|---|---|---|
+| 환경 파일 | 루트 `.env` | 루트 `.env` | 루트 `.env` |
+| 프로젝트 | `ticket-guard-workspace-db` | `ticket-guard-raw` | `ticket-guard` |
+| 서비스 | `mongo` | `mongo-raw` | `qa-mongo` |
+| 내부 포트 | `27017` | `27020` | `27017` |
+| PC 포트 | `MONGO_HOST_PORT`, 기본 `27017` | `27020` | `QA_MONGO_HOST_PORT`, 기본 `27021` |
+| 기본 DB / 일반 계정 인증 DB | `ticketguard` | `ticketguard_raw` | `ticketguard_qa` |
+| 기본 계정 | `MONGO_WRITER_*` | `RAW_MONGO_WRITER_*` | `QA_MONGO_USERNAME/PASSWORD` |
 
-시스템 DB의 최초 설치, 조회 계정 생성, 기존 DB 적용, Compass와 AWS 설정은
-[관리자 대시보드 설치 문서](../admin_dashboard/README.md#db-연결-설정)를 따른다.
-원본 DB는 [원본 적재 설치 문서](../raw_consumer/README.md#설치기존-db-적용)를 따른다.
+PC 포트는 각 local override를 적용한 경우에만 공개된다. root 인증 DB는 `admin`이다.
+reader는 선택 사항이다. 기본 관리자 앱과 Compass는 writer 계정으로 조회할 수 있다.
+QA 자체 DB 저장과 외부 시스템·원본 DB 검증은 구분한다.
 
-빈 볼륨에서만 초기화 스크립트가 실행된다. 기존 볼륨의 비밀번호는 환경 파일을
-바꾸거나 컨테이너를 다시 만들어도 변경되지 않는다. 기존 DB의 계정 추가에는
-유효한 관리자 인증이 필요하며, 기존 계정과 설정이 다르면 변경 없이 중단한다.
-데이터를 보존하려면 `down -v`나 볼륨 삭제로 인증 문제를 해결하지 않는다.
+## 초기화와 기존 데이터
 
-검증 명령은 저장소 루트에서 `python -m unittest discover -s mongo/tests -v`다.
-Docker, `mongo:8.0.34` 이미지, Python의 `pymongo==4.10.1`이 필요하다.
-검사는 별도의 빈 볼륨을 사용하며 기존 DB와 실제 환경 파일을 변경하지 않는다.
-실제 AWS 배포는 별도 검증 대상이다.
+빈 볼륨에서만 초기화 스크립트가 계정을 생성한다. 환경 파일 통합은 기존 계정·DB·포트를
+바꾸지 않으며 DB 재생성이 필요 없다. `.env` 수정만으로 기존 비밀번호가 바뀌지 않는다.
+계정 추가 도구는 유효한 관리자 인증을 요구하고 기존 비밀번호·권한이 다르면 변경 없이
+중단한다. 인증 해제나 볼륨 삭제를 복구 수단으로 사용하지 않는다.
 
-## QA 실제 DB 연결
+## 선택적 QA 외부 DB 검증
 
-시스템 DB는 기존 대시보드 조회 계정을 함께 사용한다. 원본 DB는 최초 실행에
-writer와 reader를 함께 생성한다. QA 자체 DB의 계정과 구조는 변경하지 않는다.
+기존 DB를 읽어 적재 결과를 대조하는 기능이며 QA 전용 원본 DB를 만들지 않는다.
+읽기 전용 계정·URI·네트워크를 준비한 경우에만
+[선택적 연결 명령](../README.md#4-선택-별도-읽기-계정과-qa-외부-db-검증)을 사용한다.
+기본 `$teamArgs`에는 연결 파일과 검사 명령을 포함하지 않는다.
 
-루트 `.env`에서 아래 설정을 준비한다. URI의 비밀번호는 URL 인코딩하며 실제
-비밀번호는 커밋하지 않는다. 시스템 DB의 DB 이름·조회 계정을 변경했다면 두
-URI에도 그 값을 반영한다.
+- 시스템 reader: `MONGO_ADMIN_READER_USERNAME/PASSWORD`, 인증 DB `MONGO_DATABASE`
+- 원본 reader: `RAW_MONGO_READER_USERNAME/PASSWORD`, 인증 DB `RAW_MONGO_DATABASE`
+- URI: `TICKET_GUARD_QA_SYSTEM_MONGO_URI`, `TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI`
+- 출처: 같은 루트 `.env`의 `TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID`와 `RAW_SOURCE_ID` 일치
+- 토픽: `KAFKA_EVENTS_TOPIC`과 `RAW_KAFKA_TOPIC` 일치
+- 네트워크: `TICKET_GUARD_ADMIN_MONGO_NETWORK`, `TICKET_GUARD_QA_RAW_MONGO_NETWORK`
 
-```dotenv
-TICKET_GUARD_QA_SYSTEM_MONGO_URI=mongodb://ticketguard_admin_reader:ENCODED_SYSTEM_READER_PASSWORD@ticket-guard-workspace-db-mongo-1:27017/ticketguard?authSource=ticketguard
-TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI=mongodb://raw_reader:ENCODED_RAW_READER_PASSWORD@ticket-guard-raw-mongo-raw-1:27020/ticketguard_raw?authSource=ticketguard_raw
-TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID=원본_환경파일의_RAW_SOURCE_ID와_같은_값
-TICKET_GUARD_ADMIN_MONGO_NETWORK=ticket-guard-workspace-db_mongo-backend
-TICKET_GUARD_QA_RAW_MONGO_NETWORK=ticket-guard-raw_raw-backend
-```
-
-`TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID`에는 `raw_consumer/.env`의 `RAW_SOURCE_ID`를
-그대로 복사한다. 루트의 `RAW_SOURCE_ID`에 의존하지 않도록 연결 파일이 명시적
-QA 값을 전달한다. `KAFKA_EVENTS_TOPIC`과 `RAW_KAFKA_TOPIC`도 일치해야 한다.
-`qa/compose.qa-live.yml`을 쓰더라도 **compose.qa-db-access.yml을 마지막에** 붙인다.
-
-먼저 두 DB의 최초 설치 또는 기존 계정 설정을 완료하고 Kafka·웹·QA 자체 DB를
-[관리자 설치 문서](../admin_dashboard/README.md)에 따라 준비한다.
-읽기 전용 접속 검사는 다음과 같다. 서버 주소 해석·인증·조회 권한을 실제 확인하며
-QA 시험이나 정답표·실행 기록 처리를 시작하지 않는다.
-
-```powershell
-docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml -f compose.qa-db-access.yml config --quiet
-docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml -f compose.qa-db-access.yml build qa-dashboard
-docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml -f compose.qa-db-access.yml run --rm --no-deps --entrypoint python qa-dashboard /opt/ticketguard/verify-qa-connections.py
-```
-
-두 DB 모두 조회 검사에 성공하면 실행한다. 기존 웹·Kafka·DB를 재생성하지 않는다.
-
-```powershell
-docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml -f compose.qa-db-access.yml up -d --no-deps qa-dashboard
-```
-
-연결 파일은 기존 `default`, `qa-backend`에 두 DB의 외부 네트워크만 추가한다.
-QA DB 서버는 `qa-backend`에만 남는다. 새 공개 포트·Docker 소켓을 추가하거나
-토픽 주입·장애 복구를 활성화하지 않는다. QA 이미지는 최신 Dockerfile로 빌드해야
-브라우저 실행 환경도 포함된다. 실제 시험 실행 여부는 QA 화면에서 별도로 선택한다.
-
-출처 조회 결과가 없으면 빈 DB이거나 설정이 다른 경우일 수 있다. 접속 검사 성공만으로
-출처 값의 일치까지 보장하지 않는다. 적재기 설정과 대조하고 실제 적재 후 다시 검사한다.
+URI의 자격 증명은 URL 인코딩하고 DB별 내부 호스트·포트를 명확히 지정한다.
+`qa/compose.qa-live.yml` 뒤에 `compose.qa-db-access.yml`을 마지막에 추가해야 검사
+스크립트도 마운트된다. 연결 파일 없이 검사 경로를 실행하면 파일 없음 오류가 발생한다.
+출처 문서가 없다는 안내는 빈 DB와 출처 불일치를 별도로 확인해야 한다는 뜻이다.
 
 ## 같은 PC · 팀 내부망 · AWS
 
-- 같은 PC: 각 `*.local.yml`로 연 `127.0.0.1` 포트에 Compass를 연결한다.
-- 팀 내부망: 팀원 PC에서 `localhost`는 팀원 자신의 PC다. 시스템 DB는 기존
-  `mongo/compose.lan.yml`과 `MONGO_LAN_BIND_IP`로 지정한 서버의 LAN IP에
-  연결할 수 있다. 접근 가능한 내부망·방화벽 범위를 확인하고 승인된 환경에서만
-  사용한다. 원본 DB에는 LAN 포트 구성을 새로 추가하지 않았다. 필요하면 SSH 터널을 사용한다.
-- AWS: 도커 네트워크는 같은 호스트에서만 공유된다. 단일 EC2에서는 실제 프로젝트
-  이름에 맞게 위 네트워크·호스트를 설정한다. 서로 다른 EC2, 관리형 DB, TLS·인증,
-  SSH 터널 설정과 실제 AWS 배포는 별도 검증 대상이다. LAN override를 AWS에서
-  그대로 사용해 DB를 인터넷에 공개하지 않는다.
+- 같은 PC: local override의 `127.0.0.1:<공개포트>`를 사용한다.
+- Docker 내부: 연결된 네트워크의 서비스·컨테이너 호스트명과 내부 포트를 사용한다.
+- 팀 내부망: 다른 PC의 localhost는 그 PC 자신이다. 시스템 DB는 기존
+  `mongo/compose.lan.yml`과 `MONGO_LAN_BIND_IP`로 서버의 LAN IP를 공개할 수 있다.
+  허용된 내부망·방화벽 범위를 확인한다. 원본 DB에는 새 LAN 포트를 추가하지 않았다.
+- AWS: VPC·SSH 터널 등 허용된 접근 경로를 준비하고 DB 포트를 인터넷에 공개하지 않는다.
+  Docker 네트워크 공유는 같은 호스트에서만 가능하며 여러 EC2·관리형 DB·TLS와 실제
+  AWS 배포는 별도 검증 대상이다.
+
+환경 파일 통합·복원 시에는 값 보존과 Compose 문법만 확인하며 실제 서비스를 재설치하지
+않는다. 별도 DB 통합 검사는 `python -m unittest discover -s mongo/tests -v`이며
+테스트 프로젝트·볼륨을 생성하므로 운영 환경 설정 복원 검증과 구분한다.
