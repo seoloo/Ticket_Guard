@@ -28,6 +28,12 @@ FAILED_STEP_TITLES = {  # 세션 오류 코드 → 화면 문구 · 원문은 �
     "browser confirm · BROWSER_CONFIRM_TIMEOUT": "브라우저 확정 응답 없음",
     "heartbeat · QUEUE_TIMEOUT": "대기열 시간 초과",
 }
+BROWSER_STEP_TITLES = {  # 브라우저 세션 오류 단계 · live_browser_client.current_step
+    "window": "창 열기", "device": "기기 연결", "login": "로그인", "browse": "화면 조회", "start": "예매하기",
+    "queue": "대기열", "captcha": "보안문자", "seat": "좌석 선택", "confirm": "예매 확정",
+}
+BROWSER_ERROR_PATTERN = re.compile(r"browser (\w+) · (Error|TimeoutError)\b")
+BROWSER_ERROR_TITLES = {"Error": "오류", "TimeoutError": "응답 시간 초과"}
 UUID_PATTERN = re.compile(r"\b([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
 TILE_PATTERN = re.compile(r"^(?P<label>\D.*?)\s+(?P<value>\d[\d,.]*(?:ms|초|건|명|석|%|개|회)?(?:\s*/\s*\d[\d,.]*)?)$")
 MILLISECONDS_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)ms$")
@@ -63,6 +69,8 @@ def humanize_text(text: str) -> str:
     """오류 코드 → 화면 문구 · 세션 번호 앞 8자리 · 같은 항목 반복 제거"""
     for code, title in FAILED_STEP_TITLES.items():
         text = text.replace(code, title)
+    text = BROWSER_ERROR_PATTERN.sub(  # browser seat · Error → 브라우저 좌석 선택 오류
+        lambda match: f"브라우저 {BROWSER_STEP_TITLES.get(match.group(1), match.group(1))} {BROWSER_ERROR_TITLES[match.group(2)]}", text)
     text = UUID_PATTERN.sub(lambda match: f"{match.group(1)}…", text)
     return REPEATED_ITEM_PATTERN.sub(r"\1", text)
 

@@ -66,3 +66,8 @@ def test_list_only_message_stays_as_lines_and_empty_message_is_empty():
     view = build_suite_result_view(SuiteResult("event_contract", SuiteOutcome.PASSED, message="SKIP: kafka_malformed_json(토픽 주입 미설정)"))
     assert not view.headline and not view.tiles and view.detail_lines == [("info", "SKIP: kafka_malformed_json(토픽 주입 미설정)")]
     assert build_suite_result_view(SuiteResult("self_check", SuiteOutcome.PASSED)).is_empty
+
+
+def test_browser_error_step_is_shown_in_words():
+    assert humanize_text("browser seat · Error · Timeout 15000ms exceeded. 2건") == "브라우저 좌석 선택 오류 · Timeout 15000ms exceeded. 2건"
+    assert humanize_text("browser · Error 2건") == "브라우저 오류 2건"  # 이전 기록

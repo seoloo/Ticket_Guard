@@ -78,10 +78,11 @@ class RunRepository:
     def list_recent_run_ids(self, limit: int = 10) -> list[str]:
         return [document["_id"] for document in self.runs.find({}, {"_id": 1}).sort("started_at", DESCENDING).limit(limit)]
 
-    def list_recent_suite_durations(self, target_kind_value: str, limit: int) -> list[tuple[str, int, float]]:
-        """예상 시간 보정 · 끝난 Run의 (Suite 이름, VU 수, 실제 소요 초) · 최신 Run부터 · 중지된 Run 제외"""
+    def list_recent_suite_durations(self, target_kind_value: str, limit: int, wave_size: int = 0) -> list[tuple[str, int, float]]:
+        """예상 시간 보정 · 끝난 Run의 (Suite 이름, VU 수, 실제 소요 초) · 최신 Run부터 · 중지된 Run 제외 · 같은 접속 방식만"""
+        same_entry = {"$in": [0, None]} if not wave_size else wave_size  # 이전 기록 = 한 번에 전원 진입
         documents = self.runs.find(
-            {"run_config.target_kind": target_kind_value, "finished_at": {"$ne": None},
+            {"run_config.target_kind": target_kind_value, "finished_at": {"$ne": None}, "run_config.wave_size": same_entry,
              "status": {"$ne": RunStatus.CANCELLED.value}, "suite_results.duration_sec": {"$ne": None}},
             {"run_config.virtual_user_count": 1, "suite_results.suite_name": 1, "suite_results.duration_sec": 1},
         ).sort("started_at", DESCENDING).limit(limit)
@@ -107,7 +108,10 @@ class RunRepository:
         candidates = self.runs.find(
             {"started_at": {"$lt": summary.started_at}, "finished_at": {"$ne": None}},
         ).sort("started_at", DESCENDING).limit(PREVIOUS_RUN_SEARCH_LIMIT)
-        document = next((candidate for candidate in candidates if candidate["run_config"] == target_config), None)
+        document = next((  # 이전 기록에 없는 필드는 기본값으로 맞춰 비교
+            candidate for candidate in candidates
+            if run_config_to_dict(run_config_from_dict(candidate["run_config"])) == target_config
+        ), None)
         return summary_from_document(document) if document else None
 
     def mark_unfinished_runs_as_error(self, finished_at: datetime) -> None:

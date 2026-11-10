@@ -88,8 +88,9 @@ class BookingFlowSuite:
 
         try:
             session_results = send_virtual_user_traffic(
-                booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed),
-                context.traffic_time_limit_sec, report_traffic_progress,
+                booking_api,
+                build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed, run_config.wave_size),
+                context.traffic_time_limit_sec, report_traffic_progress, run_config.wave_size,
             )
             save_browser_captures(context.report_output_dir, context.run_id, planned_users, session_results)  # B3 브라우저 화면
         except AccountPoolExhaustedError as error:

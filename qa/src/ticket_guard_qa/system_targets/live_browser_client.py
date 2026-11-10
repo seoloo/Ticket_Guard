@@ -43,13 +43,21 @@ SELECTION_ERROR = "#selection-error"
 CANCEL_BOOKING = "#cancel-booking"
 COMPLETE_PATH = "/complete/"
 READ_ATTEMPT_ID = "document.body.dataset.attempt || ''"
+READ_CHOSEN_SEATS = "[...document.querySelectorAll('[data-seat][aria-pressed=\"true\"]')].map((seat) => seat.dataset.seat)"  # 화면이 선택 표시한 좌석
 READ_SOLD_SEATS = "[...document.querySelectorAll('[data-seat].sold, [data-seat]:disabled')].map((seat) => seat.dataset.seat)"
 IS_CAPTCHA_IMAGE_LOADED = "(() => { const image = document.querySelector('#captcha-image'); return !!image && image.complete && image.naturalWidth > 0; })()"
 IS_SELECTION_ERROR_SHOWN ="(() => { const box = document.querySelector('#selection-error'); return !!box && !box.hidden; })()"
-PAGE_TRACE_PATHS = ("/api/events/", "/api/capture/")  # 화면 이벤트 · 브라우저 정보 전송 · 흔적 없음 봇은 차단
+NAVIGATION_ERROR_MARKERS = ("Execution context was destroyed", "because of a navigation", "Target page, context or browser has been closed")
+PAGE_TRACE_PATHS =("/api/events/", "/api/capture/")  # 화면 이벤트 · 브라우저 정보 전송 · 흔적 없음 봇은 차단
 
 # B3 캡처 단계 · macro_bots/browser_capture.CAPTURE_STEPS와 같은 이름
 STEP_DETAIL, STEP_QUEUE, STEP_CAPTCHA, STEP_SEAT, STEP_CONFIRM = "공연 상세", "대기열", "보안문자", "좌석 선택", "예매 확정"
+
+
+def summarize_browser_error(error: Exception) -> str:
+    """오류 첫 줄 · 주소 · 호출 기록 제외 · 화면 · 리포트 한 줄용"""
+    first_line = (str(error).strip().splitlines() or [""])[0]
+    return first_line.split(" at http")[0].split(": ", 1)[-1].strip()[:80]
 
 
 class BrowserUnavailableError(RuntimeError):
@@ -116,7 +124,13 @@ class PlaywrightBrowserPage:
         return True
 
     async def evaluate(self, expression: str) -> Any:
-        return await self.page.evaluate(expression)
+        """화면 이동 중이면 None · 확정 클릭 직후 완료 화면으로 넘어가는 순간 · 호출한 쪽이 다시 읽음"""
+        try:
+            return await self.page.evaluate(expression)
+        except Exception as error:  # noqa: BLE001 · Playwright 오류 종류는 Error 하나
+            if any(marker in str(error) for marker in NAVIGATION_ERROR_MARKERS):
+                return None
+            raise
 
     async def screenshot(self) -> bytes:
         return await self.page.screenshot(type="png")
@@ -203,6 +217,7 @@ class LiveBrowserBookingClient:
         self.show_id = show_id
         self.open_at_monotonic = 0.0
         self.booking_attempt_id = ""
+        self.current_step = "login"  # 오류 기록용 · 지금 진행 중인 단계
         self.capture_frames: list[BrowserCaptureFrame] = []
 
     async def capture(self, step: str, click_point: tuple[float, float] | None) -> None:
@@ -277,25 +292,30 @@ class LiveBrowserBookingClient:
         behavior = session_plan.behavior
         self.open_at_monotonic = open_at_monotonic
         login_started_at = time.perf_counter()
+        self.current_step = "login"
         await self.login(username, password)
         step_latency_ms = {"login": (time.perf_counter() - login_started_at) * 1000}
 
         browse_at = open_at_monotonic - sum(session_plan.page_dwell_ms) / 1000  # 화면 조회는 오픈 전에 끝나도록
         await asyncio.sleep(max(browse_at - time.monotonic(), 0.0))
+        self.current_step = "browse"
         await self.browse_pages(session_plan.page_dwell_ms)
         await asyncio.sleep(max(open_at_monotonic + session_plan.entry_delay_ms / 1000 - time.monotonic(), 0.0))
 
+        self.current_step = "start"
         start_started_at = time.perf_counter()
         await self.click_and_capture(STEP_DETAIL, START_BOOKING)
         step_latency_ms["start"] = (time.perf_counter() - start_started_at) * 1000
+        self.current_step = "queue"
         queue_started_at = time.perf_counter()
         if await self.page.wait_for(QUEUE_READY, PAGE_TIMEOUT_MS):
             await self.capture(STEP_QUEUE, None)
         if not await self.page.wait_for(CAPTCHA_INPUT, QUEUE_TIMEOUT_MS):
             raise BookingFlowError("heartbeat", 0, "QUEUE_TIMEOUT")
         step_latency_ms["queue"] = (time.perf_counter() - queue_started_at) * 1000
-        self.booking_attempt_id = str(await self.page.evaluate(READ_ATTEMPT_ID))
+        self.booking_attempt_id = str(await self.page.evaluate(READ_ATTEMPT_ID) or "")
 
+        self.current_step = "captcha"
         captcha_started_at = time.perf_counter()
         await self.wait_for_captcha_image()
         await self.page.fill(CAPTCHA_INPUT, captcha_answer)
@@ -307,14 +327,18 @@ class LiveBrowserBookingClient:
         intervals_ms = session_plan.click_intervals_ms or (0.0,)
         step_latency_ms["seat_select"] = step_latency_ms["confirm"] = 0.0
         for attempt_index in range(1 + behavior.sold_out_retry_count):
+            self.current_step = "seat"
             sold_seat_ids = set(await self.page.evaluate(READ_SOLD_SEATS) or ())
-            seat_ids = [seat for seat in session_plan.preferred_seat_ids if seat not in sold_seat_ids][:SEATS_PER_BOOKING]
-            if not seat_ids:
+            # 먼저 팔림 안내 뒤 화면은 남은 선택 좌석을 유지 · 다시 누르면 선택 해제 → 새 좌석만 클릭
+            kept_seat_ids = [seat for seat in (await self.page.evaluate(READ_CHOSEN_SEATS) or ()) if seat not in sold_seat_ids]
+            new_seat_ids = [seat for seat in session_plan.preferred_seat_ids
+                            if seat not in sold_seat_ids and seat not in kept_seat_ids][:max(SEATS_PER_BOOKING - len(kept_seat_ids), 0)]
+            if not new_seat_ids and not kept_seat_ids:
                 break
             if attempt_index:
                 await asyncio.sleep(behavior.sold_out_retry_delay_ms / 1000)
             click_started_at = time.perf_counter()
-            for index, seat_id in enumerate(seat_ids):
+            for index, seat_id in enumerate(new_seat_ids):
                 await asyncio.sleep(intervals_ms[index % len(intervals_ms)] / 1000)
                 selector = f'[data-seat="{seat_id}"]'
                 if index == 0 and not attempt_index:
@@ -323,6 +347,8 @@ class LiveBrowserBookingClient:
                     await self.page.click(selector)
             await asyncio.sleep(intervals_ms[-1] / 1000)
             step_latency_ms["seat_select"] += (time.perf_counter() - click_started_at) * 1000
+            chosen_seat_ids = tuple(await self.page.evaluate(READ_CHOSEN_SEATS) or (*kept_seat_ids, *new_seat_ids))  # 서버로 보내는 좌석
+            self.current_step = "confirm"
             confirm_started_at = time.perf_counter()
             if attempt_index:
                 await self.page.click(CONFIRM_BOOKING)
@@ -331,7 +357,7 @@ class LiveBrowserBookingClient:
             is_booked = await self.wait_for_confirm_result()
             step_latency_ms["confirm"] += (time.perf_counter() - confirm_started_at) * 1000
             if is_booked:
-                return BrowserFlowResult(self.booking_attempt_id, BookingOutcome.BOOKED, tuple(seat_ids), step_latency_ms,
+                return BrowserFlowResult(self.booking_attempt_id, BookingOutcome.BOOKED, chosen_seat_ids, step_latency_ms,
                                          self.capture_frames)
         await self.cancel_booking()
         return BrowserFlowResult(self.booking_attempt_id, BookingOutcome.SOLD_OUT, (), step_latency_ms, self.capture_frames)

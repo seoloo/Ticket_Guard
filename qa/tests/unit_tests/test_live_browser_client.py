@@ -14,7 +14,7 @@ from ticket_guard_qa.macro_bots.browser_capture import CAPTURE_FOLDER_NAME, CAPT
 from ticket_guard_qa.system_targets import live_browser_client as browser
 from ticket_guard_qa.system_targets.live_browser_client import BrowserUnavailableError, LiveBrowserBookingClient
 from ticket_guard_qa.system_targets.live_booking_client import DEVICE_COOKIE_NAME
-from ticket_guard_qa.system_targets.live_django_system import LiveDjangoBookingApi, VirtualUserAccountPool
+from ticket_guard_qa.system_targets.live_django_system import LiveDjangoBookingApi, SystemAdminAccount, VirtualUserAccountPool
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     assign_devices,
     build_planned_user_session_plans,
@@ -56,17 +56,22 @@ class FakeBrowserPage:
             self.url = f"{BASE_URL}/queue/attempt-77/"
         elif selector == browser.CAPTCHA_SUBMIT:
             self.url = f"{BASE_URL}/select/attempt-77/"
-        elif selector.startswith("[data-seat="):
-            self.chosen_seat_ids.append(selector.split('"')[1])
+        elif selector.startswith("[data-seat="):  # 예매 화면처럼 · 다시 누르면 선택 해제
+            seat_id = selector.split('"')[1]
+            if seat_id in self.chosen_seat_ids:
+                self.chosen_seat_ids.remove(seat_id)
+            else:
+                self.chosen_seat_ids.append(seat_id)
             self.is_selection_error_shown = False
         elif selector == browser.CONFIRM_BOOKING:
             sold = self.hidden_sold_seat_ids.intersection(self.chosen_seat_ids)
-            if sold:
+            if sold:  # 예매 화면처럼 · 팔린 좌석만 선택 해제 · 나머지 선택 유지
                 self.shown_sold_seat_ids |= sold
                 self.is_selection_error_shown = True
+                self.chosen_seat_ids = [seat for seat in self.chosen_seat_ids if seat not in sold]
             else:
+                self.booked_seat_ids = list(self.chosen_seat_ids)
                 self.url = f"{BASE_URL}/complete/TG-1/"
-            self.chosen_seat_ids = []
         return CLICK_POINT
 
     async def fill(self, selector: str, value: str) -> None:
@@ -78,6 +83,8 @@ class FakeBrowserPage:
     async def evaluate(self, expression: str):
         if expression == browser.READ_ATTEMPT_ID:
             return "attempt-77"
+        if expression == browser.READ_CHOSEN_SEATS:
+            return list(self.chosen_seat_ids)
         if expression == browser.READ_SOLD_SEATS:
             return sorted(self.shown_sold_seat_ids)
         if expression == browser.IS_SELECTION_ERROR_SHOWN:
@@ -147,6 +154,8 @@ def test_browser_flow_retries_other_seats_after_sold_notice():
 
     assert (result.booking_outcome, result.booked_seat_ids) == (BookingOutcome.BOOKED, ("C4", "C5"))
     assert page.clicks.count(browser.CONFIRM_BOOKING) == 2
+    assert page.clicks.count('[data-seat="C4"]') == 1  # 남은 선택 좌석은 다시 누르지 않음 · 누르면 선택 해제
+    assert page.booked_seat_ids == list(result.booked_seat_ids)  # QA 기록 = 서버로 보낸 좌석
 
 
 def test_browser_flow_gives_up_when_retry_count_is_zero():
@@ -292,3 +301,76 @@ def test_login_reports_page_script_failure_separately():
     api, _ = build_live_api(ScriptBrokenPage)
     result = send_virtual_user_traffic(api, [build_plan()], 10)[0]
     assert result.is_error and result.failed_step == "browser login · BROWSER_SCRIPT_NOT_RUNNING"
+
+
+class Error(Exception):
+    """Playwright 일반 오류와 같은 이름"""
+
+
+class SeatClickBrokenPage(FakeBrowserPage):
+    async def click(self, selector: str):
+        if selector.startswith("[data-seat="):
+            raise Error("Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator")
+        return await super().click(selector)
+
+
+def test_unexpected_browser_error_records_step_and_first_line():
+    api, _ = build_live_api(SeatClickBrokenPage)
+    result = send_virtual_user_traffic(api, [build_plan()], 10)[0]
+    assert result.is_error and result.failed_step == "browser seat · Error · Timeout 15000ms exceeded."
+    assert result.session_key == "attempt-77"  # 대기열 통과 뒤 · 예매 시도 번호 유지
+
+
+class NavigatingPlaywrightPage:
+    """확정 클릭 직후 · 완료 화면으로 넘어가는 순간의 Playwright 페이지"""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    async def evaluate(self, expression):
+        raise Error(self.message)
+
+
+def test_page_read_during_navigation_is_retried_not_failed():
+    navigating = browser.PlaywrightBrowserPage(NavigatingPlaywrightPage(
+        "Page.evaluate: Execution context was destroyed, most likely because of a navigation"))
+    assert asyncio.run(navigating.evaluate(browser.IS_SELECTION_ERROR_SHOWN)) is None  # 다시 읽음 · 오류 아님
+
+    broken = browser.PlaywrightBrowserPage(NavigatingPlaywrightPage("Page.evaluate: SyntaxError"))
+    try:
+        asyncio.run(broken.evaluate("1 +"))
+    except Error:
+        pass
+    else:
+        raise AssertionError("다른 오류는 그대로 올라가야 함")
+
+
+def test_browser_cap_comes_from_setting():
+    api = LiveDjangoBookingApi(BASE_URL, "ticketguard", "unused", VirtualUserAccountPool(1, "pw", "QA123"), max_concurrent_browsers=6)
+
+    async def read_slots():
+        return api.find_browser_slots()
+
+    browser_slots, window_slots = asyncio.run(read_slots())
+    assert (browser_slots._value, window_slots._value) == (6, 18)  # 창 = 브라우저 × 3
+
+
+def test_accounts_prefer_unused_and_restart_after_reset(monkeypatch):
+    api = LiveDjangoBookingApi(BASE_URL, "ticketguard", "unused", VirtualUserAccountPool(3, "pw", "QA123"),
+                               SystemAdminAccount("manager", "manager"))
+    first = api.acquire_account_number()
+    api.free_account_numbers.append(first)
+    assert api.acquire_account_number() == 2  # 반환된 1번보다 새 계정 먼저 · 회차 사이 재사용 최소화
+
+    async def fake_reset():
+        return None
+
+    monkeypatch.setattr(api, "_reset_as_admin", fake_reset)
+    assert api.reset_test_data() and api.virtual_user_capacity() == 3  # 초기화 = 진행 중 예매 없음 · 계정 처음부터
+
+
+def test_sold_out_browser_account_is_not_reused():
+    api, _ = build_live_api(lambda: FakeBrowserPage(hidden_sold_seat_ids={"C3", "C4", "C5", "C6"}))
+    result = send_virtual_user_traffic(api, [build_plan(behavior=replace(BOT_C_BEHAVIOR, sold_out_retry_count=0))], 10)[0]
+    assert result.booking_outcome is BookingOutcome.SOLD_OUT
+    assert api.free_account_numbers == []  # 취소가 서버에 닿았는지 모름 · 다른 VU에 주지 않음

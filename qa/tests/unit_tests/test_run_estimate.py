@@ -98,3 +98,10 @@ def test_estimate_api_returns_suite_breakdown_for_live(qa_settings):
 
     mock = client.post("/runs/estimate", data={**form, "target_kind": "fake"}).json()
     assert (mock["total_sec"], mock["suites"]) == (qa_settings.fake_run_duration_sec, [])
+
+
+def test_unconnected_verdict_suite_counts_as_instant_skip():
+    config = build_live_config(suite_names=("booking_flow", "verdict_accuracy"))
+    estimate = estimate_live_run(config, BotProfileRegistry(), 0, [], skipped_suite_names=frozenset({"verdict_accuracy"}))
+    by_suite = {suite.suite_name: suite.seconds for suite in estimate.suites}
+    assert by_suite["verdict_accuracy"] == run_estimate.SKIPPED_SUITE_SEC and by_suite["booking_flow"] > 60

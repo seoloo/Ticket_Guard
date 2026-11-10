@@ -55,7 +55,7 @@
 <section class="card running-grid">
   <div class="running-left">
     <h1>Run 진행 중</h1>
-    <div class="sub-text" style="font-size:17px">VU {{ run_config.virtual_user_count }} · {{ '예매 오픈 버스트 재현' if run_config.is_open_burst else '예매 시나리오 재현' }}
+    <div class="sub-text" style="font-size:17px">VU {{ run_config.virtual_user_count }} · {{ run_config.entry_title }}
       {% if run_config.target_kind.value == 'fake' %}<span class="pill is-skipped">Mock · 예시 수치</span>{% endif %}</div>
     <div class="time-box">
       <div><div class="time-label">경과 시간</div><span class="elapsed-number" id="elapsed-number">0</span><span class="elapsed-total"> / {{ measurement_window_sec | int }}초</span></div>

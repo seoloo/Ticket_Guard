@@ -1,4 +1,5 @@
 """시험 입력 · 결과의 데이터 모양"""
+import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, NewType
@@ -59,9 +60,23 @@ class RunConfig:
     duration_sec: int = 300  # Live = 트래픽 Suite 1개 최대 시간 · 0 = 자동(예상 시간 기준) · Mock = 영향 없음
     traffic_mix: TrafficMix = field(default_factory=TrafficMix)
     random_seed: int = 20261103
-    is_open_burst: bool = True  # 오픈 시각에 한꺼번에 진입 · T1
+    is_open_burst: bool = True  # 한 번에 전원 진입 · 이전 기록 호환 · wave_size와 함께 정해짐
     alert_policy: AlertPolicy = AlertPolicy.ON_FAILURE
     bot_version_numbers: dict[str, int] = field(default_factory=dict)  # 종류 → 봇 버전 · 실행 시작 때 채움
+    wave_size: int = 0  # 접속 방식 · 회차당 인원 · 0 = 한 번에 전원 진입 · 앞 회차 종료 후 다음 회차
+
+    @property
+    def wave_count(self) -> int:
+        return math.ceil(self.virtual_user_count / self.wave_size) if self.wave_size else 1
+
+    @property
+    def entry_title(self) -> str:
+        """화면 표시 · 40명씩 5회 · 45명씩 4회 + 마지막 20명"""
+        if not self.wave_size:
+            return "한 번에 전원 진입"
+        full_wave_count, last_wave_size = divmod(self.virtual_user_count, self.wave_size)
+        title = f"{self.wave_size}명씩 {full_wave_count}회"
+        return f"{title} + 마지막 {last_wave_size}명" if last_wave_size else title
 
 
 @dataclass(frozen=True)
@@ -263,6 +278,7 @@ def run_config_from_dict(raw: dict[str, Any]) -> RunConfig:
         is_open_burst=raw.get("is_open_burst", True),  # 이전 기록 호환
         alert_policy=AlertPolicy(raw.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
         bot_version_numbers=raw.get("bot_version_numbers", {}),
+        wave_size=raw.get("wave_size", 0),  # 이전 기록 = 한 번에 전원 진입
     )
 
 

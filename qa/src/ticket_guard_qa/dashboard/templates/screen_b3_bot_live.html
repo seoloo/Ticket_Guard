@@ -30,7 +30,7 @@
 
 <section class="card run-strip">
   {% if is_running %}<span class="live-badge" id="live-badge">LIVE</span>{% endif %}
-  <span>Run <b class="mono">{{ summary.run_id }}</b> · VU {{ run_config.virtual_user_count }} · {{ '버스트' if run_config.is_open_burst else '분산 진입' }}</span>
+  <span>Run <b class="mono">{{ summary.run_id }}</b> · VU {{ run_config.virtual_user_count }} · {{ run_config.entry_title }}</span>
   <span class="row" style="gap:6px">{% for actor_value, version_number in bot_versions.items() %}{{ actor_chip(actor_value | bot_type_info, version_number) }}{% endfor %}</span>
   <span class="spacer"></span>
   {% if is_running %}<a class="button is-outline is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/live"><i data-lucide="gauge"></i>Run 모니터</a>{% endif %}
