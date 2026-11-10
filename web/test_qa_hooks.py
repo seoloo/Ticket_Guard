@@ -44,11 +44,9 @@ class QaTestHookTests(SimpleTestCase):
         self.assertEqual(self.repo.verify('qa-user-0001', 'tab-one', a['id'], 'qa123')['stage'], 'select')
 
     @override_settings(**HOOKS_OFF)
-    def test_random_captcha_and_default_queue_wait_when_off(self):
+    def test_random_captcha_and_immediate_entry_when_hooks_off(self):
         a = self.repo.start('one', 'blue-hour', 'tab-one')
-        self.assertEqual(self.repo.tick('one', 'tab-one', a['id'])['stage'], 'queue')
-        a['entered'] -= 20
-        self.repo.tick('one', 'tab-one', a['id'])
+        self.assertEqual(self.repo.tick('one', 'tab-one', a['id'])['stage'], 'captcha')
         self.assertNotEqual(self.repo.challenge('one', 'tab-one', a['id']), 'QA123')
 
     @override_settings(**HOOKS_ON)
