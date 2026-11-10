@@ -292,3 +292,55 @@ def test_login_reports_page_script_failure_separately():
     api, _ = build_live_api(ScriptBrokenPage)
     result = send_virtual_user_traffic(api, [build_plan()], 10)[0]
     assert result.is_error and result.failed_step == "browser login · BROWSER_SCRIPT_NOT_RUNNING"
+
+
+class Error(Exception):
+    """Playwright 일반 오류와 같은 이름"""
+
+
+class SeatClickBrokenPage(FakeBrowserPage):
+    async def click(self, selector: str):
+        if selector.startswith("[data-seat="):
+            raise Error("Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator")
+        return await super().click(selector)
+
+
+def test_unexpected_browser_error_records_step_and_first_line():
+    api, _ = build_live_api(SeatClickBrokenPage)
+    result = send_virtual_user_traffic(api, [build_plan()], 10)[0]
+    assert result.is_error and result.failed_step == "browser seat · Error · Timeout 15000ms exceeded."
+    assert result.session_key == "attempt-77"  # 대기열 통과 뒤 · 예매 시도 번호 유지
+
+
+class NavigatingPlaywrightPage:
+    """확정 클릭 직후 · 완료 화면으로 넘어가는 순간의 Playwright 페이지"""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    async def evaluate(self, expression):
+        raise Error(self.message)
+
+
+def test_page_read_during_navigation_is_retried_not_failed():
+    navigating = browser.PlaywrightBrowserPage(NavigatingPlaywrightPage(
+        "Page.evaluate: Execution context was destroyed, most likely because of a navigation"))
+    assert asyncio.run(navigating.evaluate(browser.IS_SELECTION_ERROR_SHOWN)) is None  # 다시 읽음 · 오류 아님
+
+    broken = browser.PlaywrightBrowserPage(NavigatingPlaywrightPage("Page.evaluate: SyntaxError"))
+    try:
+        asyncio.run(broken.evaluate("1 +"))
+    except Error:
+        pass
+    else:
+        raise AssertionError("다른 오류는 그대로 올라가야 함")
+
+
+def test_browser_cap_comes_from_setting():
+    api = LiveDjangoBookingApi(BASE_URL, "ticketguard", "unused", VirtualUserAccountPool(1, "pw", "QA123"), max_concurrent_browsers=6)
+
+    async def read_slots():
+        return api.find_browser_slots()
+
+    browser_slots, window_slots = asyncio.run(read_slots())
+    assert (browser_slots._value, window_slots._value) == (6, 18)  # 창 = 브라우저 × 3

@@ -9,7 +9,7 @@ from ticket_guard_qa.answer_key.expected_verdicts import plan_virtual_users
 from ticket_guard_qa.domain.models import PlannedUser, RunConfig
 from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, get_bot_type_info
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
-from ticket_guard_qa.system_targets.live_django_system import MAX_CONCURRENT_BROWSERS
+from ticket_guard_qa.system_targets.live_django_system import DEFAULT_MAX_CONCURRENT_BROWSERS
 from ticket_guard_qa.test_suites.booking_flow import BOOKING_FLOW_SUITE_NAME
 from ticket_guard_qa.test_suites.event_delivery import EVENT_DELIVERY_SUITE_NAME
 from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
@@ -21,10 +21,11 @@ DEFAULT_SUITE_SEC = {  # 트래픽 없는 Suite · 실측 전 초기값
     "seat_concurrency": 20.0, "load_capacity": 90.0, "failure_recovery": 60.0,
 }
 UNKNOWN_SUITE_SEC = 30.0
+SKIPPED_SUITE_SEC = 1.0  # 읽기 미연결로 바로 건너뛰는 Suite
 ASSUMED_ADMISSION_LIMIT = 25  # 시스템 동시 입장 상한 모를 때 · 지난 Live Run 최대 동시 입장 25 ~ 31
 QUEUE_WAIT_SEC = 12.0  # 시스템 기본 대기열 대기
 HTTP_ADMITTED_SEC = 6.0  # 입장 뒤 보안문자 → 좌석 → 확정 · HTTP VU 1명
-BROWSER_SESSION_SEC = 35.0  # 브라우저 VU 1명 · 로그인 → 확정 · 실측 30 ~ 40초
+BROWSER_SESSION_SEC = 50.0  # 브라우저 VU 1명 · 로그인 → 확정 · Live 실측 40 ~ 60초(로그인 p95 7.9초 포함)
 AUTO_TIME_LIMIT_FACTOR = 2.0  # 자동 최대 시간 = 트래픽 Suite 예상 × 2
 MIN_AUTO_TIME_LIMIT_SEC, MAX_AUTO_TIME_LIMIT_SEC = 120, 900
 HISTORY_RUN_LIMIT = 5  # 최근 Live Run 수
@@ -67,7 +68,8 @@ class RunEstimate:
         }
 
 
-def calculate_wave_sec(wave_users: list[PlannedUser], registry: BotProfileRegistry, admission_limit: int) -> float:
+def calculate_wave_sec(wave_users: list[PlannedUser], registry: BotProfileRegistry, admission_limit: int,
+                       browser_limit: int = DEFAULT_MAX_CONCURRENT_BROWSERS) -> float:
     """회차 1개 · 오픈 전 준비 + max(대기열 처리, 브라우저 차례 대기) · 같은 기기 창은 브라우저 1개"""
     count_by_actor = Counter(user.actor_type for user in wave_users)
     behavior_by_actor = {actor: registry.get_profile(actor).behavior for actor in count_by_actor}
@@ -79,15 +81,16 @@ def calculate_wave_sec(wave_users: list[PlannedUser], registry: BotProfileRegist
         math.ceil(count / max(behavior_by_actor[actor].sessions_per_device, 1))
         for actor, count in count_by_actor.items() if get_bot_type_info(actor).traffic_channel == BROWSER_TRAFFIC
     )
-    browser_sec = math.ceil(browser_count / MAX_CONCURRENT_BROWSERS) * BROWSER_SESSION_SEC if browser_count else 0.0
+    browser_sec = math.ceil(browser_count / max(browser_limit, 1)) * BROWSER_SESSION_SEC if browser_count else 0.0
     return pre_open_sec + max(queue_sec, browser_sec)
 
 
-def calculate_traffic_suite_sec(run_config: RunConfig, registry: BotProfileRegistry, admission_limit: int) -> float:
+def calculate_traffic_suite_sec(run_config: RunConfig, registry: BotProfileRegistry, admission_limit: int,
+                                browser_limit: int = DEFAULT_MAX_CONCURRENT_BROWSERS) -> float:
     """접속 방식 · 회차를 차례로 실행 · 한 번에 전원 = 회차 1개"""
     planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
     return sum(
-        calculate_wave_sec([planned_users[index] for index in wave], registry, admission_limit)
+        calculate_wave_sec([planned_users[index] for index in wave], registry, admission_limit, browser_limit)
         for wave in split_into_waves(len(planned_users), run_config.wave_size)
     )
 
@@ -110,13 +113,17 @@ def decide_traffic_time_limit(run_config: RunConfig, traffic_suite_sec: float) -
 
 def estimate_live_run(
     run_config: RunConfig, registry: BotProfileRegistry, admission_limit: int, samples: list[SuiteDurationSample],
+    browser_limit: int = DEFAULT_MAX_CONCURRENT_BROWSERS, skipped_suite_names: frozenset[str] = frozenset(),
 ) -> RunEstimate:
     admission_limit = admission_limit or ASSUMED_ADMISSION_LIMIT
-    formula_traffic_sec = calculate_traffic_suite_sec(run_config, registry, admission_limit)
+    formula_traffic_sec = calculate_traffic_suite_sec(run_config, registry, admission_limit, browser_limit)
     time_limit_sec, is_auto = decide_traffic_time_limit(run_config, formula_traffic_sec)
     estimates = []
     for suite_name in run_config.suite_names:
         recent_sec = estimate_from_history(suite_name, run_config.virtual_user_count, samples)
+        if suite_name in skipped_suite_names:  # 판정 미연결 등 · 트래픽 없이 바로 건너뜀
+            estimates.append(SuiteEstimate(suite_name, SKIPPED_SUITE_SEC, ESTIMATE_FROM_FORMULA))
+            continue
         if recent_sec is not None:
             seconds, source = recent_sec, ESTIMATE_FROM_HISTORY
         elif suite_name in TRAFFIC_SUITE_NAMES:

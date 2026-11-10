@@ -119,6 +119,8 @@ class VerdictAccuracySuite:
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config
+        # 판정 읽기 미연결(NotImplementedError)이면 트래픽 전에 건너뜀 · 연결되면 그대로 진행 · 약 5분 절약
+        context.system_target.verdict_reader.read_session_verdicts(context.run_id)
         planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
         context.report_progress(f"VU {len(planned_users)} 접속")
         session_key_by_label, session_results = send_planned_user_traffic(context, planned_users)

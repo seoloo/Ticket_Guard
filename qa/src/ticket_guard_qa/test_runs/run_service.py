@@ -26,6 +26,7 @@ from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_repository import RunRepository
 from ticket_guard_qa.test_suites.suite_interface import QaSuite, SuiteContext
 from ticket_guard_qa.test_suites.suite_registry import get_suite
+from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
 
 
 PROGRESS_TICK_SEC = 1.0
@@ -106,8 +107,19 @@ class RunService:
         if run_config.target_kind is TargetKind.FAKE:
             return None
         samples = self.run_repository.list_recent_suite_durations(TargetKind.LIVE.value, HISTORY_RUN_LIMIT, run_config.wave_size)
+        skipped = frozenset({VERDICT_ACCURACY_SUITE_NAME}) if not self.can_read_verdicts(run_config) else frozenset()
         return estimate_live_run(run_config, self.bot_profile_store.load_current_registry(),
-                                 self.settings.queue_admission_limit, samples)
+                                 self.settings.queue_admission_limit, samples, self.settings.max_concurrent_browsers, skipped)
+
+    def can_read_verdicts(self, run_config: RunConfig) -> bool:
+        """판정 읽기 연결 여부 · 미연결이면 판정 정확도는 트래픽 없이 건너뜀 · 대상 생성은 접속 없음"""
+        try:
+            self.system_target_builder(self.settings, run_config.target_kind).verdict_reader.read_session_verdicts("estimate")
+        except NotImplementedError:
+            return False
+        except Exception:  # noqa: BLE001 · 연결 오류 = 읽기는 연결됨 · 예상은 트래픽 포함
+            return True
+        return True
 
     def measurement_window_sec(self, run_config: RunConfig, run_id: str | None = None) -> float:
         """03 경과 시간 기준 · Mock = 흉내 시간 · Live = 예상 소요 합계 · 넘으면 N초 초과 표시"""
