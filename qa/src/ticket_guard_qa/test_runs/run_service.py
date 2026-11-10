@@ -21,6 +21,7 @@ from ticket_guard_qa.reports.json_report import write_json_report
 from ticket_guard_qa.settings import Settings
 from ticket_guard_qa.system_targets.target_factory import build_system_target
 from ticket_guard_qa.system_targets.target_interfaces import SystemTarget
+from ticket_guard_qa.test_runs.run_estimate import HISTORY_RUN_LIMIT, RunEstimate, estimate_live_run
 from ticket_guard_qa.test_runs.run_progress_stream import RunProgressStream
 from ticket_guard_qa.test_runs.run_repository import RunRepository
 from ticket_guard_qa.test_suites.suite_interface import QaSuite, SuiteContext
@@ -28,6 +29,7 @@ from ticket_guard_qa.test_suites.suite_registry import get_suite
 
 
 PROGRESS_TICK_SEC = 1.0
+MOCK_TRAFFIC_TIME_LIMIT_SEC = 300  # Mock · 시간 제한 선택 없음 · 가짜 대상은 바로 끝남
 
 
 REPORT_SUFFIXES = ("html", "json")  # 보고서 파일 · reports/
@@ -57,12 +59,15 @@ def decide_run_status(summary: RunSummary, is_cancelled: bool) -> RunStatus:
 
 
 def run_one_suite(suite: QaSuite, context: SuiteContext) -> SuiteResult:
+    """실제 소요 시간 기록 · 다음 Live Run 예상 시간 보정"""
+    started_at = time.monotonic()
     try:
-        return suite.run(context)
+        result = suite.run(context)
     except NotImplementedError as error:
-        return SuiteResult(suite.suite_name, SuiteOutcome.SKIPPED, message=str(error))  # 실패 아님
+        result = SuiteResult(suite.suite_name, SuiteOutcome.SKIPPED, message=str(error))  # 실패 아님
     except Exception as error:  # noqa: BLE001 · 한 묶음 오류가 실행 전체를 멈추지 않게
-        return SuiteResult(suite.suite_name, SuiteOutcome.ERROR, message=f"{type(error).__name__}: {error}")
+        result = SuiteResult(suite.suite_name, SuiteOutcome.ERROR, message=f"{type(error).__name__}: {error}")
+    return replace(result, duration_sec=round(time.monotonic() - started_at, 1))
 
 
 class RunService:
@@ -83,6 +88,7 @@ class RunService:
         self._lock = threading.Lock()
         self._active_run_id: str | None = None
         self._active_run_ends_at: datetime | None = None
+        self._active_estimate: RunEstimate | None = None  # Live · Run 시작 때 계산 · 03 남은 시간 기준
         self._cancel_requested_run_ids: set[str] = set()
 
     @property
@@ -95,10 +101,25 @@ class RunService:
             return None
         return max((self._active_run_ends_at - datetime.now(timezone.utc)).total_seconds(), 0.0)
 
-    def measurement_window_sec(self, run_config: RunConfig) -> float:
+    def estimate_run(self, run_config: RunConfig) -> RunEstimate | None:
+        """Live 예상 소요 · Suite별 · Mock = None (흉내 시간 고정)"""
+        if run_config.target_kind is TargetKind.FAKE:
+            return None
+        samples = self.run_repository.list_recent_suite_durations(TargetKind.LIVE.value, HISTORY_RUN_LIMIT)
+        return estimate_live_run(run_config, self.bot_profile_store.load_current_registry(),
+                                 self.settings.queue_admission_limit, samples)
+
+    def measurement_window_sec(self, run_config: RunConfig, run_id: str | None = None) -> float:
+        """03 경과 시간 기준 · Mock = 흉내 시간 · Live = 예상 소요 합계 · 넘으면 N초 초과 표시"""
         if run_config.target_kind is TargetKind.FAKE:
             return float(self.settings.fake_run_duration_sec)  # 가짜 실행 흉내 시간 · .env로 조정
-        return float(run_config.duration_sec)  # 실제 대상 · 트래픽 최대 시간 · 먼저 끝나면 04로
+        estimate = self._active_estimate if run_id and run_id == self._active_run_id else None
+        return float(round((estimate or self.estimate_run(run_config)).total_sec))
+
+    def traffic_time_limit_sec(self, run_config: RunConfig, estimate: RunEstimate | None) -> float:
+        if estimate is not None:
+            return float(estimate.traffic_time_limit_sec)
+        return float(run_config.duration_sec or MOCK_TRAFFIC_TIME_LIMIT_SEC)
 
     def run_now(self, run_config: RunConfig) -> RunSummary:
         run_id, run_config, started_at = self._reserve_run(run_config)
@@ -142,18 +163,21 @@ class RunService:
         # 지금 봇 버전을 기록 · 같은 버전끼리만 04 비교 · B3 · B4가 당시 설정을 다시 읽음
         current_versions = self.bot_profile_store.load_current_registry().version_number_by_actor_type()
         run_config = replace(run_config, bot_version_numbers=current_versions)
+        estimate = self.estimate_run(run_config)
         with self._lock:  # 동시 실행 금지 · 02 화면 시작 잠금
             if self._active_run_id is not None:
                 raise RunAlreadyActiveError(f"Run 실행 중: {self._active_run_id}")
             started_at = datetime.now(timezone.utc)
             run_id = create_run_id(started_at)
             self._active_run_id = run_id
-            self._active_run_ends_at = started_at + timedelta(seconds=self.measurement_window_sec(run_config))
+            self._active_estimate = estimate
+            self._active_run_ends_at = started_at + timedelta(seconds=self.measurement_window_sec(run_config, run_id))
         self.run_repository.create_run(run_id, run_config, started_at)
         return run_id, run_config, started_at
 
     def _execute(self, run_id: str, run_config: RunConfig, started_at: datetime) -> RunSummary:
         summary = RunSummary(run_id, run_config, RunStatus.RUNNING, started_at)
+        estimate = self._active_estimate
         try:
             context = SuiteContext(
                 run_id=run_id,
@@ -164,13 +188,19 @@ class RunService:
                 report_progress=lambda text, **fields: self.progress_stream.publish(run_id, text, **fields),
                 bot_profile_registry=self.bot_profile_store.load_registry_for_versions(run_config.bot_version_numbers),
                 report_output_dir=self.settings.report_output_dir,
+                traffic_time_limit_sec=self.traffic_time_limit_sec(run_config, estimate),
             )
+            if estimate is not None:
+                limit_title = "자동" if estimate.is_time_limit_auto else "설정"
+                self.progress_stream.publish(
+                    run_id, f"예상 소요 약 {format_minutes(estimate.low_sec)} ~ {format_minutes(estimate.high_sec)}"
+                            f" · 트래픽 Suite 최대 {estimate.traffic_time_limit_sec}초({limit_title})")
             published_in_use = find_published_versions_in_use(
                 find_published_bot_versions(self.qa_database), run_config.bot_version_numbers
             )
             if published_in_use:  # 보관본으로 내보낸 봇 버전 · 탐지율 신뢰 낮음
                 self.progress_stream.publish(run_id, f"주의: 공개된 봇 버전 사용 · {' · '.join(published_in_use)} · 새 버전 저장 필요")
-            window_sec = self.measurement_window_sec(run_config)
+            window_sec = self.measurement_window_sec(run_config, run_id)
             suites_finished = threading.Event()
             if run_config.target_kind is TargetKind.FAKE:
                 self._watch_measurement_window(run_id, context.system_target, window_sec, suites_finished)
@@ -208,6 +238,7 @@ class RunService:
             with self._lock:
                 self._active_run_id = None
                 self._active_run_ends_at = None
+                self._active_estimate = None
                 self._cancel_requested_run_ids.discard(run_id)
         return summary
 
@@ -233,6 +264,10 @@ class RunService:
                 return
             remaining_in_window = window_sec - elapsed_sec
             stop_event.wait(PROGRESS_TICK_SEC if remaining_in_window <= 0 else min(PROGRESS_TICK_SEC, remaining_in_window))
+
+
+def format_minutes(seconds: float) -> str:
+    return f"{round(seconds)}초" if seconds < 60 else f"{max(round(seconds / 60), 1)}분"
 
 
 def read_live_metrics_or_none(system_target: SystemTarget, run_id: str, elapsed_sec: float) -> LiveMetrics | None:

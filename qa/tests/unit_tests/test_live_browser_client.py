@@ -82,6 +82,8 @@ class FakeBrowserPage:
             return sorted(self.shown_sold_seat_ids)
         if expression == browser.IS_SELECTION_ERROR_SHOWN:
             return self.is_selection_error_shown
+        if expression == browser.IS_CAPTCHA_IMAGE_LOADED:
+            return True
         raise AssertionError(expression)
 
     async def screenshot(self) -> bytes:
@@ -265,3 +267,28 @@ def test_bot_d_browser_failure_marks_every_window_without_stopping_run():
     results = send_virtual_user_traffic(api, build_device_plans(3), 10)
     assert all(result.is_error and result.failed_step.startswith("browser · 실행 환경 없음") for result in results)
     assert api.virtual_user_capacity() == 3
+
+
+def test_system_address_is_trusted_like_https_except_localhost():
+    assert browser.build_trusted_origin("http://web:8000") == "http://web:8000"  # 컨테이너 안 시험 대상
+    assert browser.build_trusted_origin("http://127.0.0.1:8000/") == ""  # localhost = 이미 보안 컨텍스트
+    assert browser.build_trusted_origin("https://staging.example.com") == ""
+
+
+class ScriptBrokenPage(FakeBrowserPage):
+    """화면 스크립트 오류 · 로그인 폼이 주소로 제출됨"""
+
+    async def click(self, selector: str):
+        if selector == browser.LOGIN_SUBMIT:
+            self.url = f"{BASE_URL}/login/?username=qa-user-0001&password=pw"
+            return CLICK_POINT
+        return await super().click(selector)
+
+    async def wait_for(self, selector: str, timeout_ms: float) -> bool:
+        return selector != browser.SHOW_LIST_READY
+
+
+def test_login_reports_page_script_failure_separately():
+    api, _ = build_live_api(ScriptBrokenPage)
+    result = send_virtual_user_traffic(api, [build_plan()], 10)[0]
+    assert result.is_error and result.failed_step == "browser login · BROWSER_SCRIPT_NOT_RUNNING"

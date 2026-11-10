@@ -3,7 +3,7 @@ from collections import Counter
 
 from ticket_guard_qa.answer_key.expected_verdicts import plan_virtual_users
 from ticket_guard_qa.domain.enums import BookingOutcome, SuiteOutcome
-from ticket_guard_qa.domain.models import SuiteResult, VirtualUserSessionResult
+from ticket_guard_qa.domain.models import MESSAGE_LINE_SEPARATOR, SuiteResult, VirtualUserSessionResult
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
@@ -48,13 +48,14 @@ def build_message(session_results: list[VirtualUserSessionResult], planned_count
     if succeeded:
         parts.append(f"전체 p95 {calculate_p95([result.latency_ms for result in succeeded]):.0f}ms")
         parts.extend(f"{STEP_TITLES.get(step, step)} {value:.0f}ms" for step, value in summarize_step_p95(succeeded).items())
-    failure_counts = Counter(result.failed_step or "unknown" for result in session_results if result.is_error)
-    if failure_counts:
-        parts.insert(0, "FAIL: " + ", ".join(f"{step} {count}건" for step, count in failure_counts.most_common()))
+    fail_lines = []  # 실패 원인은 줄을 나눔 · 04 결론 · 원문 가독성
     double_sold = find_double_sold_seat_ids(session_results)
     if double_sold:
-        parts.insert(0, f"FAIL: 중복 판매 {len(double_sold)}석 ({', '.join(double_sold[:5])})")
-    return " · ".join(parts)
+        fail_lines.append(f"FAIL: 중복 판매 {len(double_sold)}석 ({', '.join(double_sold[:5])})")
+    failure_counts = Counter(result.failed_step or "unknown" for result in session_results if result.is_error)
+    if failure_counts:
+        fail_lines.append("FAIL: " + ", ".join(f"{step} {count}건" for step, count in failure_counts.most_common()))
+    return MESSAGE_LINE_SEPARATOR.join([*fail_lines, " · ".join(parts)])
 
 
 class BookingFlowSuite:
@@ -88,7 +89,7 @@ class BookingFlowSuite:
         try:
             session_results = send_virtual_user_traffic(
                 booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed),
-                run_config.duration_sec, report_traffic_progress,
+                context.traffic_time_limit_sec, report_traffic_progress,
             )
             save_browser_captures(context.report_output_dir, context.run_id, planned_users, session_results)  # B3 브라우저 화면
         except AccountPoolExhaustedError as error:

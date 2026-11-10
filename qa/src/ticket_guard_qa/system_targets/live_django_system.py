@@ -28,6 +28,7 @@ from ticket_guard_qa.system_targets.live_browser_client import (
     BrowserInstance,
     BrowserUnavailableError,
     LiveBrowserBookingClient,
+    build_trusted_origin,
     open_browser,
 )
 from ticket_guard_qa.system_targets.target_interfaces import (
@@ -125,7 +126,8 @@ class LiveDjangoBookingApi:
         self.browser_loop: asyncio.AbstractEventLoop | None = None
         self.browser_slots: asyncio.Semaphore | None = None
         self.window_slots: asyncio.Semaphore | None = None
-        self.browser_opener = partial(open_browser, executable_path=browser_executable_path)  # 시험에서 가짜 브라우저로 교체
+        self.browser_opener = partial(open_browser, executable_path=browser_executable_path,
+                                      trusted_origin=build_trusted_origin(self.base_url))  # 시험에서 가짜 브라우저로 교체
         self.issued_account_count = 0  # 처음 쓰는 계정 번호
         self.free_account_numbers: list[int] = []  # 정리 끝난 계정 · 다시 사용 · 계정당 진행 중 예매 1건
 

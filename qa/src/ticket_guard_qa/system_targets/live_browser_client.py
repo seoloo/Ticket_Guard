@@ -44,7 +44,8 @@ CANCEL_BOOKING = "#cancel-booking"
 COMPLETE_PATH = "/complete/"
 READ_ATTEMPT_ID = "document.body.dataset.attempt || ''"
 READ_SOLD_SEATS = "[...document.querySelectorAll('[data-seat].sold, [data-seat]:disabled')].map((seat) => seat.dataset.seat)"
-IS_SELECTION_ERROR_SHOWN = "(() => { const box = document.querySelector('#selection-error'); return !!box && !box.hidden; })()"
+IS_CAPTCHA_IMAGE_LOADED = "(() => { const image = document.querySelector('#captcha-image'); return !!image && image.complete && image.naturalWidth > 0; })()"
+IS_SELECTION_ERROR_SHOWN ="(() => { const box = document.querySelector('#selection-error'); return !!box && !box.hidden; })()"
 PAGE_TRACE_PATHS = ("/api/events/", "/api/capture/")  # 화면 이벤트 · 브라우저 정보 전송 · 흔적 없음 봇은 차단
 
 # B3 캡처 단계 · macro_bots/browser_capture.CAPTURE_STEPS와 같은 이름
@@ -152,19 +153,30 @@ class PlaywrightBrowser:
 
 
 CHROMIUM_LAUNCH_ARGS = ["--disable-dev-shm-usage"]  # 컨테이너 공유 메모리(/dev/shm) 작음 · 탭 비정상 종료 방지
+TRUSTED_ORIGIN_ARG = "--unsafely-treat-insecure-origin-as-secure="  # http://web:8000 = 보안 컨텍스트 아님 → 예매 화면 crypto.randomUUID 없음
+
+
+def build_trusted_origin(base_url: str) -> str:
+    """시험 대상 주소 · 운영 HTTPS처럼 보안 컨텍스트로 · localhost · https는 필요 없음"""
+    parsed = urlparse(base_url)
+    if parsed.scheme != "http" or parsed.hostname in ("localhost", "127.0.0.1"):
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 @asynccontextmanager
-async def open_browser(user_agent: str | None = None, executable_path: str = "") -> AsyncIterator[BrowserInstance]:
+async def open_browser(user_agent: str | None = None, executable_path: str = "",
+                       trusted_origin: str = "") -> AsyncIterator[BrowserInstance]:
     """화면 없는 Chromium 1개 · 다 쓰면 닫음 · executable_path = 설치된 Chromium(비면 Playwright 기본)"""
     try:
         from playwright.async_api import async_playwright
     except ImportError:
         raise BrowserUnavailableError(BROWSER_SETUP_HINT) from None
+    launch_args = [*CHROMIUM_LAUNCH_ARGS, *([f"{TRUSTED_ORIGIN_ARG}{trusted_origin}"] if trusted_origin else [])]
     async with async_playwright() as playwright:
         try:
             browser = await playwright.chromium.launch(headless=True, executable_path=executable_path or None,
-                                                       args=CHROMIUM_LAUNCH_ARGS)
+                                                       args=launch_args)
         except Exception as error:  # noqa: BLE001 · Chromium 미설치 · 실행 권한
             raise BrowserUnavailableError(f"Chromium 실행 불가 · {type(error).__name__} · {BROWSER_SETUP_HINT}") from None
         try:
@@ -220,6 +232,8 @@ class LiveBrowserBookingClient:
         await self.page.fill(LOGIN_PASSWORD, password)
         await self.page.click(LOGIN_SUBMIT)
         if not await self.page.wait_for(SHOW_LIST_READY, PAGE_TIMEOUT_MS):
+            if f"{LOGIN_USERNAME.removeprefix('#')}=" in self.page.url:  # 화면 스크립트 미동작 → 폼이 주소로 제출됨
+                raise BookingFlowError("login", 0, "BROWSER_SCRIPT_NOT_RUNNING")
             raise BookingFlowError("login", 0, "BROWSER_LOGIN_FAILED")
 
     async def browse_pages(self, page_dwell_ms: tuple[float, ...]) -> None:
@@ -230,6 +244,15 @@ class LiveBrowserBookingClient:
             await asyncio.sleep(dwell_ms / 1000)
         if not page_dwell_ms:  # 조회 없는 봇도 예매하기 버튼 화면은 열어야 함
             await self.page.goto(f"{self.base_url}/{SHOW_DETAIL_PAGE}/{self.show_id}/")
+
+    async def wait_for_captcha_image(self) -> None:
+        """보안문자 정답은 이미지 요청 때 생성 · 입력칸이 먼저 보여도 이미지가 뜬 뒤 입력"""
+        deadline = time.monotonic() + PAGE_TIMEOUT_MS / 1000
+        while time.monotonic() < deadline:
+            if await self.page.evaluate(IS_CAPTCHA_IMAGE_LOADED):
+                return
+            await asyncio.sleep(RESULT_POLL_INTERVAL_SEC)
+        raise BookingFlowError("captcha_image", 0, "BROWSER_CAPTCHA_IMAGE_NOT_LOADED")
 
     async def wait_for_confirm_result(self) -> bool:
         """True = 예매 완료 화면 · False = 먼저 팔림 안내"""
@@ -274,6 +297,7 @@ class LiveBrowserBookingClient:
         self.booking_attempt_id = str(await self.page.evaluate(READ_ATTEMPT_ID))
 
         captcha_started_at = time.perf_counter()
+        await self.wait_for_captcha_image()
         await self.page.fill(CAPTCHA_INPUT, captcha_answer)
         await self.click_and_capture(STEP_CAPTCHA, CAPTCHA_SUBMIT)
         if not await self.page.wait_for(SEAT_READY, PAGE_TIMEOUT_MS):

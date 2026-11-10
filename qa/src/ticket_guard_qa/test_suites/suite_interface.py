@@ -20,6 +20,7 @@ class SuiteContext:
     report_progress: Callable[..., None]  # (글, **ProgressMessage 필드) · 03 · B3 화면
     bot_profile_registry: BotProfileRegistry = field(default_factory=BotProfileRegistry)
     report_output_dir: Path | None = None  # 브라우저 세션 캡처 저장 · None = 저장 안 함
+    traffic_time_limit_sec: float = 300.0  # 트래픽 Suite 1개 최대 시간 · Live 자동 = 예상 시간 기준 · run_service가 채움
 
 
 @dataclass(frozen=True)
