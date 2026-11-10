@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from ticket_guard_qa.domain.enums import BookingOutcome
 from ticket_guard_qa.domain.models import (
     LiveMetrics,
     SessionKey,
@@ -153,14 +154,15 @@ class LiveDjangoBookingApi:
         return self.test_accounts.count - self.issued_account_count + len(self.free_account_numbers)
 
     def acquire_account_number(self) -> int:
+        """새 계정 먼저 · 다 쓰면 정리 끝난 계정 · 계정당 진행 중 예매 1건(DUPLICATE_PAGE) · 나눠서 진입 회차 사이 재사용 최소화"""
+        if self.issued_account_count < self.test_accounts.count:
+            self.issued_account_count += 1
+            return self.issued_account_count
         if self.free_account_numbers:
-            return self.free_account_numbers.pop()
-        if self.issued_account_count >= self.test_accounts.count:
-            raise AccountPoolExhaustedError(
-                f"시험 계정 부족 · {self.test_accounts.count}개 · 저장소 .env QA_TEST_ACCOUNT_COUNT 확인"
-            )
-        self.issued_account_count += 1
-        return self.issued_account_count
+            return self.free_account_numbers.pop(0)
+        raise AccountPoolExhaustedError(
+            f"시험 계정 부족 · {self.test_accounts.count}개 · 저장소 .env QA_TEST_ACCOUNT_COUNT 확인"
+        )
 
     async def release_client(self, client: LiveBookingClient, account_number: int) -> None:
         """예매 취소로 진행 중 예매 정리 → 계정 반환 · 정리 실패 계정은 이번 Run에서 다시 쓰지 않음"""
@@ -176,6 +178,8 @@ class LiveDjangoBookingApi:
         if not self.admin_account.username or not self.admin_account.password:
             return False
         asyncio.run(self._reset_as_admin())
+        self.issued_account_count = 0  # 진행 중 예매 전부 정리됨 · 계정 처음부터
+        self.free_account_numbers.clear()
         return True
 
     async def _reset_as_admin(self) -> None:
@@ -249,10 +253,12 @@ class LiveDjangoBookingApi:
     async def run_browser_session(
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
     ) -> VirtualUserSessionResult:
-        """브라우저 트래픽 유형 · 실제 화면으로 예매 · 실행 환경 없으면 세션 오류(browser)로 기록"""
+        """브라우저 트래픽 유형 · 실제 화면으로 예매 · 실행 환경 없으면 세션 오류(browser)로 기록
+        계정 반환 = 예매 완료 또는 예매 시도 전 · 매진 · 오류는 취소 미확인 → 반환 안 함(DUPLICATE_PAGE 방지 · 60초 뒤 시스템 만료)"""
         account_number = self.acquire_account_number()
         username = build_test_account_username(account_number)
         attempt_id = ""
+        is_booked = False
         current_step = "window"  # 창 열기 전 · 브라우저 실행 중 오류
         blocks_page_trace = not has_browser_trace(session_plan.behavior)
         try:
@@ -266,6 +272,7 @@ class LiveDjangoBookingApi:
                     flow_result = await client.run_booking_flow(
                         username, self.test_accounts.password, self.test_accounts.captcha_answer, session_plan, open_at_monotonic
                     )
+                    is_booked = flow_result.booking_outcome is BookingOutcome.BOOKED
                 finally:
                     current_step = client.current_step  # 오류 기록 · 멈춘 단계
                     attempt_id = client.booking_attempt_id
@@ -281,7 +288,8 @@ class LiveDjangoBookingApi:
                                             failed_step=f"browser {current_step} · {type(error).__name__} · {summarize_browser_error(error)}",
                                             device_key=session_plan.device_key)
         finally:
-            self.free_account_numbers.append(account_number)  # 취소는 화면에서 · 실패 시 60초 뒤 시스템 만료
+            if is_booked or not attempt_id:
+                self.free_account_numbers.append(account_number)
         return VirtualUserSessionResult(
             SessionKey(flow_result.booking_attempt_id), sum(flow_result.step_latency_ms.values()), is_error=False,
             step_latency_ms=flow_result.step_latency_ms, booking_outcome=flow_result.booking_outcome,

@@ -43,6 +43,7 @@ SELECTION_ERROR = "#selection-error"
 CANCEL_BOOKING = "#cancel-booking"
 COMPLETE_PATH = "/complete/"
 READ_ATTEMPT_ID = "document.body.dataset.attempt || ''"
+READ_CHOSEN_SEATS = "[...document.querySelectorAll('[data-seat][aria-pressed=\"true\"]')].map((seat) => seat.dataset.seat)"  # 화면이 선택 표시한 좌석
 READ_SOLD_SEATS = "[...document.querySelectorAll('[data-seat].sold, [data-seat]:disabled')].map((seat) => seat.dataset.seat)"
 IS_CAPTCHA_IMAGE_LOADED = "(() => { const image = document.querySelector('#captcha-image'); return !!image && image.complete && image.naturalWidth > 0; })()"
 IS_SELECTION_ERROR_SHOWN ="(() => { const box = document.querySelector('#selection-error'); return !!box && !box.hidden; })()"
@@ -328,13 +329,16 @@ class LiveBrowserBookingClient:
         for attempt_index in range(1 + behavior.sold_out_retry_count):
             self.current_step = "seat"
             sold_seat_ids = set(await self.page.evaluate(READ_SOLD_SEATS) or ())
-            seat_ids = [seat for seat in session_plan.preferred_seat_ids if seat not in sold_seat_ids][:SEATS_PER_BOOKING]
-            if not seat_ids:
+            # 먼저 팔림 안내 뒤 화면은 남은 선택 좌석을 유지 · 다시 누르면 선택 해제 → 새 좌석만 클릭
+            kept_seat_ids = [seat for seat in (await self.page.evaluate(READ_CHOSEN_SEATS) or ()) if seat not in sold_seat_ids]
+            new_seat_ids = [seat for seat in session_plan.preferred_seat_ids
+                            if seat not in sold_seat_ids and seat not in kept_seat_ids][:max(SEATS_PER_BOOKING - len(kept_seat_ids), 0)]
+            if not new_seat_ids and not kept_seat_ids:
                 break
             if attempt_index:
                 await asyncio.sleep(behavior.sold_out_retry_delay_ms / 1000)
             click_started_at = time.perf_counter()
-            for index, seat_id in enumerate(seat_ids):
+            for index, seat_id in enumerate(new_seat_ids):
                 await asyncio.sleep(intervals_ms[index % len(intervals_ms)] / 1000)
                 selector = f'[data-seat="{seat_id}"]'
                 if index == 0 and not attempt_index:
@@ -343,6 +347,7 @@ class LiveBrowserBookingClient:
                     await self.page.click(selector)
             await asyncio.sleep(intervals_ms[-1] / 1000)
             step_latency_ms["seat_select"] += (time.perf_counter() - click_started_at) * 1000
+            chosen_seat_ids = tuple(await self.page.evaluate(READ_CHOSEN_SEATS) or (*kept_seat_ids, *new_seat_ids))  # 서버로 보내는 좌석
             self.current_step = "confirm"
             confirm_started_at = time.perf_counter()
             if attempt_index:
@@ -352,7 +357,7 @@ class LiveBrowserBookingClient:
             is_booked = await self.wait_for_confirm_result()
             step_latency_ms["confirm"] += (time.perf_counter() - confirm_started_at) * 1000
             if is_booked:
-                return BrowserFlowResult(self.booking_attempt_id, BookingOutcome.BOOKED, tuple(seat_ids), step_latency_ms,
+                return BrowserFlowResult(self.booking_attempt_id, BookingOutcome.BOOKED, chosen_seat_ids, step_latency_ms,
                                          self.capture_frames)
         await self.cancel_booking()
         return BrowserFlowResult(self.booking_attempt_id, BookingOutcome.SOLD_OUT, (), step_latency_ms, self.capture_frames)
