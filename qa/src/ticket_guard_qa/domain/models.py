@@ -56,7 +56,7 @@ class RunConfig:
     target_kind: TargetKind
     suite_names: tuple[str, ...]
     virtual_user_count: int = 200
-    duration_sec: int = 300
+    duration_sec: int = 300  # Live = 트래픽 Suite 1개 최대 시간 · 0 = 자동(예상 시간 기준) · Mock = 영향 없음
     traffic_mix: TrafficMix = field(default_factory=TrafficMix)
     random_seed: int = 20261103
     is_open_burst: bool = True  # 오픈 시각에 한꺼번에 진입 · T1
@@ -200,6 +200,7 @@ class SuiteResult:
     metrics: dict[str, float] = field(default_factory=dict)
     message: str = ""  # 여러 항목은 MESSAGE_LINE_SEPARATOR로 구분
     details: dict[str, Any] = field(default_factory=dict)  # 화면용 · 놓친 세션 · 정답 × 판정 표
+    duration_sec: float | None = None  # 실제 소요 · 다음 Run 예상 시간 보정 · 이전 기록 = None
 
 
 @dataclass

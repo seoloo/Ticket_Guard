@@ -1,6 +1,8 @@
 """지금의 Django 시스템에 HTTP로 접속 · 시스템 코드 import 금지"""
 import asyncio
 import time
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from dataclasses import dataclass
 from typing import Any
@@ -20,11 +22,14 @@ from ticket_guard_qa.system_targets.live_booking_client import (
     LiveBookingClient,
     build_test_account_username,
     choose_user_agent,
+    has_browser_trace,
 )
 from ticket_guard_qa.system_targets.live_browser_client import (
+    BrowserInstance,
     BrowserUnavailableError,
     LiveBrowserBookingClient,
-    open_browser_page,
+    build_trusted_origin,
+    open_browser,
 )
 from ticket_guard_qa.system_targets.target_interfaces import (
     AccountPoolExhaustedError,
@@ -41,6 +46,7 @@ DOCKER_API_BASE_URL = "http://docker"  # 소켓 연결 · 호스트 이름 무�
 DOCKER_ACTION_TIMEOUT_SEC = 30.0
 DOCKER_ACTION_OK_STATUS_CODES = (204, 304)  # 304 = 이미 그 상태
 MAX_CONCURRENT_BROWSERS = 4  # 브라우저 1개 = 메모리 수백 MB · 나머지 브라우저 VU는 대기
+MAX_CONCURRENT_BROWSER_WINDOWS = 16  # 창 1개 = 화면 프로세스 1개 · 봇 D 기기 4대 × 창 4개 수준
 HEALTH_CHECK_TIMEOUT_SEC = 1.5  # 화면 헤더용 · 오래 기다리지 않음
 BOOKING_ID_PATH_PREFIX = "/complete/"  # 확정 200 응답 redirect · /complete/TG-…/
 
@@ -50,6 +56,11 @@ def read_booking_id(body: dict[str, Any]) -> str | None:
     if not redirect.startswith(BOOKING_ID_PATH_PREFIX):
         return None
     return redirect.removeprefix(BOOKING_ID_PATH_PREFIX).strip("/") or None
+
+
+def shares_device(session_plan: VirtualUserSessionPlan) -> bool:
+    """봇 D 등 · 기기 1대당 예매 창 2개 이상"""
+    return session_plan.behavior.sessions_per_device > 1 and bool(session_plan.device_key)
 
 
 def to_confirm_response(result: HttpResult) -> ConfirmResponse:
@@ -67,6 +78,14 @@ def to_confirm_response(result: HttpResult) -> ConfirmResponse:
 class LiveContenderHandle:
     client: LiveBookingClient
     account_number: int
+
+
+@dataclass
+class SharedDeviceBrowser:
+    """봇 D 기기 1대 · 브라우저 1개를 창들이 함께 사용 · 마지막 창이 닫을 때 브라우저 종료"""
+    browser: BrowserInstance
+    closer: AsyncExitStack
+    window_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -102,10 +121,13 @@ class LiveDjangoBookingApi:
         self.contract_client: LiveBookingClient | None = None
         self.device_cookie_by_key: dict[str, str] = {}  # 봇 D · 같은 기기 예매 창 쿠키 공유 · 실행마다 새로
         self.device_lock_by_key: dict[str, asyncio.Lock] = {}
+        self.device_browser_by_key: dict[str, SharedDeviceBrowser] = {}
         self.device_loop: asyncio.AbstractEventLoop | None = None
         self.browser_loop: asyncio.AbstractEventLoop | None = None
         self.browser_slots: asyncio.Semaphore | None = None
-        self.browser_page_opener = partial(open_browser_page, executable_path=browser_executable_path)  # 시험에서 가짜 페이지로 교체
+        self.window_slots: asyncio.Semaphore | None = None
+        self.browser_opener = partial(open_browser, executable_path=browser_executable_path,
+                                      trusted_origin=build_trusted_origin(self.base_url))  # 시험에서 가짜 브라우저로 교체
         self.issued_account_count = 0  # 처음 쓰는 계정 번호
         self.free_account_numbers: list[int] = []  # 정리 끝난 계정 · 다시 사용 · 계정당 진행 중 예매 1건
 
@@ -168,24 +190,58 @@ class LiveDjangoBookingApi:
             self.device_loop = running_loop
             self.device_cookie_by_key.clear()
             self.device_lock_by_key.clear()
+            self.device_browser_by_key.clear()
         return self.device_lock_by_key.setdefault(device_key, asyncio.Lock())
 
-    async def attach_device(self, client: LiveBookingClient, session_plan: VirtualUserSessionPlan) -> None:
+    async def attach_device(self, client: LiveBookingClient | LiveBrowserBookingClient,
+                            session_plan: VirtualUserSessionPlan) -> None:
         """기기 1대당 예매 창 2개 이상일 때만 · 첫 창이 받은 기기 쿠키를 나머지 창이 그대로 사용"""
-        if session_plan.behavior.sessions_per_device <= 1 or not session_plan.device_key:
+        if not shares_device(session_plan):
             return
         async with self.find_device_lock(session_plan.device_key):
             device_cookie = await client.join_device(self.device_cookie_by_key.get(session_plan.device_key))
             if device_cookie:
                 self.device_cookie_by_key[session_plan.device_key] = device_cookie
 
-    def find_browser_slots(self) -> asyncio.Semaphore:
-        """동시에 띄우는 브라우저 수 제한 · 실행(이벤트 루프)마다 새로"""
+    def find_browser_slots(self) -> tuple[asyncio.Semaphore, asyncio.Semaphore]:
+        """동시에 띄우는 브라우저 · 창 수 제한 · 실행(이벤트 루프)마다 새로"""
         running_loop = asyncio.get_running_loop()
         if self.browser_loop is not running_loop:
             self.browser_loop = running_loop
             self.browser_slots = asyncio.Semaphore(MAX_CONCURRENT_BROWSERS)
-        return self.browser_slots
+            self.window_slots = asyncio.Semaphore(MAX_CONCURRENT_BROWSER_WINDOWS)
+        return self.browser_slots, self.window_slots
+
+    @asynccontextmanager
+    async def use_browser(self, session_plan: VirtualUserSessionPlan) -> AsyncIterator[BrowserInstance]:
+        """봇 C 등 = 세션마다 브라우저 1개 · 봇 D = 기기 1대당 브라우저 1개를 그 기기 창들이 함께 사용"""
+        browser_slots, _ = self.find_browser_slots()
+        user_agent = choose_user_agent(session_plan.behavior)
+        if not shares_device(session_plan):
+            async with browser_slots, self.browser_opener(user_agent) as browser:
+                yield browser
+            return
+        device_key = session_plan.device_key
+        async with self.find_device_lock(device_key):
+            shared = self.device_browser_by_key.get(device_key)
+            if shared is None:
+                closer = AsyncExitStack()
+                try:
+                    await closer.enter_async_context(browser_slots)
+                    browser = await closer.enter_async_context(self.browser_opener(user_agent))
+                except BaseException:
+                    await closer.aclose()
+                    raise
+                shared = self.device_browser_by_key[device_key] = SharedDeviceBrowser(browser, closer)
+            shared.window_count += 1
+        try:
+            yield shared.browser
+        finally:
+            async with self.find_device_lock(device_key):
+                shared.window_count -= 1
+                if shared.window_count == 0:
+                    self.device_browser_by_key.pop(device_key, None)
+                    await shared.closer.aclose()
 
     async def run_browser_session(
         self, session_plan: VirtualUserSessionPlan, open_at_monotonic: float
@@ -194,10 +250,14 @@ class LiveDjangoBookingApi:
         account_number = self.acquire_account_number()
         username = build_test_account_username(account_number)
         attempt_id = ""
+        blocks_page_trace = not has_browser_trace(session_plan.behavior)
         try:
-            async with self.find_browser_slots(), self.browser_page_opener(choose_user_agent(session_plan.behavior)) as page:
+            _, window_slots = self.find_browser_slots()
+            async with self.use_browser(session_plan) as browser, window_slots, \
+                    browser.open_window(blocks_page_trace) as page:
                 client = LiveBrowserBookingClient(page, self.base_url)
                 try:
+                    await self.attach_device(client, session_plan)
                     flow_result = await client.run_booking_flow(
                         username, self.test_accounts.password, self.test_accounts.captcha_answer, session_plan, open_at_monotonic
                     )

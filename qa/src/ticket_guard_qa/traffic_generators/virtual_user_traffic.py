@@ -13,7 +13,7 @@ from ticket_guard_qa.domain.models import (
     VirtualUserSessionPlan,
     VirtualUserSessionResult,
 )
-from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, get_bot_type_info
+from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, get_bot_type_info, list_bot_types
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
 from ticket_guard_qa.macro_bots.browser_capture import save_browser_capture_frames
 from ticket_guard_qa.macro_bots.behavior_sampling import pick_click_interval_ms, pick_entry_delay_ms, pick_page_dwell_ms
@@ -59,9 +59,14 @@ def build_planned_user_session_plans(
     return build_session_plans(behaviors, random_seed, browser_flags)
 
 
-def save_browser_captures(report_output_dir: Path | None, run_id: str, results: list[VirtualUserSessionResult]) -> int:
-    """B3 화면 캡처 · 브라우저 세션 중 첫 번째 · 저장한 프레임 수"""
-    first_captured = next((result for result in results if result.capture_frames), None)
+def save_browser_captures(report_output_dir: Path | None, run_id: str, planned_users: list[PlannedUser],
+                          results: list[VirtualUserSessionResult]) -> int:
+    """B3 화면 캡처 · B3 제목과 같은 유형(목록 순서상 첫 브라우저 트래픽 유형)의 첫 세션 · 저장한 프레임 수"""
+    planned_types = {user.actor_type for user in planned_users}
+    captured_type = next((info.actor_type for info in list_bot_types()
+                          if info.traffic_channel == BROWSER_TRAFFIC and info.actor_type in planned_types), None)
+    first_captured = next((result for user, result in zip(planned_users, results)
+                           if user.actor_type == captured_type and result.capture_frames), None)
     if report_output_dir is None or first_captured is None:
         return 0
     save_browser_capture_frames(report_output_dir, run_id, list(first_captured.capture_frames))

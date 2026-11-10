@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from ticket_guard_qa.dashboard.criterion_status import STATUS_TITLES, build_criterion_rows, count_statuses
+from ticket_guard_qa.dashboard.suite_result_view import build_suite_result_view
 from ticket_guard_qa.dashboard.dependencies import (
     get_progress_stream,
     get_run_service,
@@ -28,7 +29,8 @@ PROGRESS_POLL_INTERVAL_SEC = 0.5
 RESULT_LIST_LIMIT = 50  # 테스트 결과 목록 · 최신 Run
 RUN_STATUS_FILTERS = {"PASSED": "PASS", "FAILED": "FAIL", "RUNNING": "진행 중", "ERROR": "ERROR", "CANCELLED": "중지"}
 VIRTUAL_USER_PRESETS = (50, 200, 500)
-DURATION_PRESETS_SEC = (120, 300, 600)
+DURATION_PRESETS_SEC = (120, 300, 600)  # Live · 트래픽 Suite 1개 최대 시간
+AUTO_TIME_LIMIT_VALUE = 0  # 자동 · 예상 시간 기준
 TRAFFIC_FIELD_PREFIX = "percent_"  # 폼 이름 · percent_HUMAN · percent_BOT_E
 
 
@@ -91,6 +93,8 @@ def _render_test_setup(
         "suites": list_suites(),
         "virtual_user_presets": VIRTUAL_USER_PRESETS,
         "duration_presets_sec": DURATION_PRESETS_SEC,
+        "auto_time_limit_value": AUTO_TIME_LIMIT_VALUE,
+        "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
         "alert_policy_titles": ALERT_POLICY_TITLES,
         "pass_criteria": PASS_CRITERIA,
         "fake_run_duration_sec": run_service.settings.fake_run_duration_sec,
@@ -107,9 +111,38 @@ def show_test_setup(request: Request, from_run_id: str | None = None, run_servic
     run_config = previous_summary.run_config if previous_summary else RunConfig(
         target_kind=run_service.settings.target_kind,
         suite_names=(),  # 처음 화면 · 선택 없음
+        duration_sec=AUTO_TIME_LIMIT_VALUE,
         random_seed=run_service.settings.random_seed,
     )
     return _render_test_setup(request, run_service, run_config)
+
+
+def parse_run_config(form, run_service: RunService) -> RunConfig:
+    """02 폼 → Run 설정 · 최대 시간 0 = 자동 · 잘못된 값 = ValueError"""
+    return RunConfig(
+        target_kind=TargetKind(form.get("target_kind", TargetKind.FAKE.value)),
+        suite_names=tuple(form.getlist("suite_names")),
+        virtual_user_count=int(form.get("virtual_user_count", 200)),
+        duration_sec=max(int(form.get("duration_sec", AUTO_TIME_LIMIT_VALUE) or AUTO_TIME_LIMIT_VALUE), 0),
+        traffic_mix=parse_traffic_mix(form, list_traffic_types(run_service)),
+        random_seed=run_service.settings.random_seed,
+        is_open_burst=form.get("is_open_burst") == "on",
+        alert_policy=AlertPolicy(form.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
+    )
+
+
+@router.post("/runs/estimate")
+async def estimate_test_run(request: Request, run_service: RunService = Depends(get_run_service)) -> JSONResponse:
+    """02 Run 요약 · Live 예상 소요 · 입력이 바뀔 때마다 · Mock = 흉내 시간"""
+    form = await request.form()
+    try:
+        run_config = parse_run_config(form, run_service)
+    except ValueError:
+        return JSONResponse({"error": "입력 값 오류"}, status_code=400)
+    estimate = run_service.estimate_run(run_config)
+    if estimate is None:
+        return JSONResponse({"total_sec": run_service.settings.fake_run_duration_sec, "suites": []})
+    return JSONResponse(estimate.to_payload())
 
 
 @router.post("/runs")
@@ -117,17 +150,7 @@ async def start_test_run(request: Request, run_service: RunService = Depends(get
     form = await request.form()
     suite_names = tuple(form.getlist("suite_names"))
     try:
-        traffic_mix = parse_traffic_mix(form, list_traffic_types(run_service))
-        run_config = RunConfig(
-            target_kind=TargetKind(form.get("target_kind", TargetKind.FAKE.value)),
-            suite_names=suite_names,
-            virtual_user_count=int(form.get("virtual_user_count", 200)),
-            duration_sec=int(form.get("duration_sec", 300)),
-            traffic_mix=traffic_mix,
-            random_seed=run_service.settings.random_seed,
-            is_open_burst=form.get("is_open_burst") == "on",
-            alert_policy=AlertPolicy(form.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
-        )
+        run_config = parse_run_config(form, run_service)
     except ValueError as error:
         fallback_config = RunConfig(run_service.settings.target_kind, suite_names)
         return _render_test_setup(request, run_service, fallback_config, str(error), status_code=400)
@@ -151,7 +174,7 @@ def show_test_running(request: Request, run_id: str, run_service: RunService = D
         "active_tab": "qa",
         "summary": summary,
         "run_suites": [get_suite(suite_name) for suite_name in summary.run_config.suite_names],  # 실행 순서
-        "measurement_window_sec": run_service.measurement_window_sec(summary.run_config),
+        "measurement_window_sec": run_service.measurement_window_sec(summary.run_config, run_id),
         "threshold_by_metric_name": {criterion.metric_name: criterion.threshold for criterion in PASS_CRITERIA},
     })
 
@@ -264,6 +287,7 @@ def show_test_result(request: Request, run_id: str, run_service: RunService = De
         "verdict_details": verdict_result.details if verdict_result else {},
         "comparisons": build_criterion_comparisons(summary, run_service.run_repository.find_previous_same_config_summary(summary)),
         "suite_title_by_name": suite_title_by_name,
+        "suite_views": [(result, build_suite_result_view(result)) for result in summary.suite_results],
         "alert_policy_titles": ALERT_POLICY_TITLES,
     })
 
