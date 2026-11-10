@@ -66,6 +66,7 @@
   .criteria-table td.criteria-number { width: 32px; text-align: center; font-weight: 800; color: var(--muted-text-color, #8A94A6); }
   .criteria-term { display: block; font-size: 12px; color: #8A94A6; margin-top: 2px; }
   .criteria-table td.strong { font-weight: 800; }
+  .criteria-table td.criteria-detail { white-space: normal; overflow-wrap: anywhere; min-width: 220px; }  /* 긴 오류 사유 · 표 밖으로 넘치지 않게 */
   .status-chip { display: inline-block; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
   .status-chip.is-pass { background: var(--pass-green-light); color: var(--pass-green); }
   .status-chip.is-fail { background: var(--fail-red-light); color: var(--fail-red-text); }
@@ -210,7 +211,7 @@
         <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots"><i data-lucide="bot"></i>탐지 리포트</a>
       </div>
       {% else %}
-      <div class="sub-text" style="margin-top:12px">판정 정확도 Suite 미실행</div>
+      <div class="sub-text" style="margin-top:12px">{{ missing_verdict_reason }}</div>
       {% endif %}
     </section>
   </aside>
@@ -228,7 +229,7 @@
       <td class="strong">{{ row.criterion | target_words }}</td>
       <td class="strong">{{ row.result.measured_value | metric(row.criterion.metric_name) if row.result.measured_value is not none else '-' }}</td>
       <td><span class="status-chip is-{{ row.status.value }}">{{ criterion_status_titles[row.status] }}</span></td>
-      <td class="muted">{{ row.detail }}</td>
+      <td class="muted criteria-detail">{{ row.detail }}</td>
     </tr>
     {% endfor %}
   </table>

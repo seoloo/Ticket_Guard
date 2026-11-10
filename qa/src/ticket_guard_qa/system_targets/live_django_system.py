@@ -437,6 +437,10 @@ class LiveDjangoLiveMetricsReader:
         raise NotImplementedError("실시간 수치 없음 · AGENTS.md 5장")
 
 
+def build_missing_container_message(service_name: str) -> str:
+    return f"{service_name} 컨테이너 이름 미설정 · TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME · Docker 소켓 연결"
+
+
 class LiveDockerProcessControl:
     """Docker Engine API · 소켓으로 컨테이너 중지 · 시작 · 이름 미설정 서비스 = 건너뜀"""
 
@@ -445,6 +449,9 @@ class LiveDockerProcessControl:
         self.container_name_by_service = {service: name for service, name in container_name_by_service.items() if name}
         self.socket_path = socket_path
         self.transport = transport
+
+    def can_control(self, service_name: str) -> bool:
+        return service_name in self.container_name_by_service
 
     def stop_service(self, service_name: str) -> None:
         self.send_container_action(service_name, "stop")
@@ -455,7 +462,7 @@ class LiveDockerProcessControl:
     def send_container_action(self, service_name: str, action: str) -> None:
         container_name = self.container_name_by_service.get(service_name)
         if not container_name:
-            raise NotImplementedError(f"{service_name} 컨테이너 이름 미설정 · TICKET_GUARD_QA_PIPELINE_CONTAINER_NAME · Docker 소켓 연결")
+            raise NotImplementedError(build_missing_container_message(service_name))
         transport = self.transport or httpx.HTTPTransport(uds=self.socket_path)
         with httpx.Client(base_url=DOCKER_API_BASE_URL, transport=transport, timeout=DOCKER_ACTION_TIMEOUT_SEC) as client:
             response = client.post(f"/containers/{container_name}/{action}")
