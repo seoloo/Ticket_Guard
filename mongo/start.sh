@@ -7,6 +7,19 @@ for name in MONGO_INITDB_ROOT_USERNAME MONGO_INITDB_ROOT_PASSWORD MONGO_WRITER_U
     exit 1
   fi
 done
+if [[ -n "${MONGO_ADMIN_READER_USERNAME:-}${MONGO_ADMIN_READER_PASSWORD:-}" ]]; then
+  for name in MONGO_ADMIN_READER_USERNAME MONGO_ADMIN_READER_PASSWORD; do
+    value="${!name:-}"
+    if [[ -z "$value" || "$value" == CHANGE_ME* ]]; then
+      echo "MongoDB configuration required: $name (see admin_dashboard/README.md)" >&2
+      exit 1
+    fi
+  done
+  if [[ "$MONGO_ADMIN_READER_USERNAME" == "$MONGO_INITDB_ROOT_USERNAME" || "$MONGO_ADMIN_READER_USERNAME" == "$MONGO_WRITER_USERNAME" ]]; then
+    echo 'MongoDB reader must have a separate username.' >&2
+    exit 1
+  fi
+fi
 if [[ "$MONGO_INITDB_ROOT_USERNAME" == "$MONGO_WRITER_USERNAME" || "$MONGO_INITDB_ROOT_PASSWORD" == "$MONGO_WRITER_PASSWORD" ]]; then
   echo 'MongoDB administrator and writer must have distinct usernames and passwords.' >&2
   exit 1

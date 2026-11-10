@@ -25,11 +25,14 @@ services:
     stop_grace_period: 60s
   mongo-raw:
     image: mongo:8.0.34
+    entrypoint: [bash, /opt/raw/start.sh]
     command: [mongod, --auth, --bind_ip_all, --port, '27020']
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${RAW_MONGO_ROOT_USERNAME:?Set admin}
       MONGO_INITDB_ROOT_PASSWORD: ${RAW_MONGO_ROOT_PASSWORD:?Set admin password}
       MONGO_INITDB_DATABASE: ${RAW_MONGO_DATABASE:-ticketguard_raw}
+      RAW_MONGO_READER_USERNAME: ${RAW_MONGO_READER_USERNAME:-}
+      RAW_MONGO_READER_PASSWORD: ${RAW_MONGO_READER_PASSWORD:-}
       RAW_MONGO_WRITER_USERNAME: ${RAW_MONGO_WRITER_USERNAME:?Set writer}
       RAW_MONGO_WRITER_PASSWORD: ${RAW_MONGO_WRITER_PASSWORD:?Set writer password}
     networks: [raw-backend]
@@ -40,6 +43,9 @@ services:
       - ./raw_consumer/mongo/healthcheck.js:/opt/raw/healthcheck.js:ro
       - ./raw_consumer/mongo/verify.js:/opt/raw/verify.js:ro
       - ./raw_consumer/mongo/setup.js:/opt/raw/setup.js:ro
+      - ./raw_consumer/mongo/setup-writer.js:/opt/raw/setup-writer.js:ro
+      - ./raw_consumer/mongo/setup-reader.js:/opt/raw/setup-reader.js:ro
+      - ./raw_consumer/mongo/start.sh:/opt/raw/start.sh:ro
     healthcheck:
       test: [CMD, mongosh, --quiet, --norc, --port, '27020', /opt/raw/healthcheck.js]
       interval: 10s
