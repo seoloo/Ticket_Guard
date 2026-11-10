@@ -51,11 +51,15 @@ from ticket_guard_qa.scoring.detection_breakdown import (
 )
 from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
 from ticket_guard_qa.test_runs.run_service import RunService
-from ticket_guard_qa.test_suites.verdict_accuracy import PLANNED_PROGRESS_KEY, VERDICT_ACCURACY_SUITE_NAME
+from ticket_guard_qa.test_runs.run_estimate import TRAFFIC_SUITE_NAMES
+from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
+from ticket_guard_qa.traffic_generators.session_funnel import ACTOR_PROGRESS_DETAIL_KEY, PLANNED_PROGRESS_KEY
 
 BOT_SCREEN_CONTEXT = {"active_tab": "qa", "active_subtab": "bots"}
 SESSION_STEP_TITLES = {
     SessionStep.ENTERED: "진입",
+    SessionStep.QUEUE_PASSED: "대기열",
+    SessionStep.CAPTCHA_PASSED: "보안문자",
     SessionStep.SEAT_SELECTED: "좌석",
     SessionStep.CONFIRMED: "확정",
     SessionStep.VERDICT_RECEIVED: "판정",
@@ -176,8 +180,17 @@ async def save_bot_version(request: Request, bot_id: str, store: BotProfileStore
     return redirect_to_page(request, f"/bots/{type_info.slug}/edit?saved_version={saved_profile.version_number}")
 
 
+def find_saved_funnel_progress(summary: RunSummary) -> ActorProgress:
+    """끝난 트래픽 Suite가 저장한 퍼널 · 예매 흐름 → 이벤트 전달 → 판정 정확도 순 · 이전 기록 = 없음"""
+    for suite_name in TRAFFIC_SUITE_NAMES:
+        result = summary.find_suite_result(suite_name)
+        if result and result.details.get(ACTOR_PROGRESS_DETAIL_KEY):
+            return result.details[ACTOR_PROGRESS_DETAIL_KEY]
+    return {}
+
+
 def build_initial_actor_progress(summary: RunSummary, verdict_details: dict[str, Any]) -> ActorProgress:
-    """화면 처음 그릴 때 · 실행 중 = 계획 인원만 · 끝남 = 저장된 표 기준"""
+    """화면 처음 그릴 때 · 실행 중 = 계획 인원만 · 끝남 = 저장된 퍼널 + 판정 수신"""
     planned_users = plan_virtual_users(
         summary.run_config.traffic_mix, summary.run_config.virtual_user_count, summary.run_config.random_seed
     )
@@ -186,9 +199,12 @@ def build_initial_actor_progress(summary: RunSummary, verdict_details: dict[str,
     for user in planned_users:
         actor_progress = progress.setdefault(user.actor_type.value, {PLANNED_PROGRESS_KEY: 0})
         actor_progress[PLANNED_PROGRESS_KEY] += 1
+    for actor_value, saved_counts in find_saved_funnel_progress(summary).items():
+        if actor_value in progress:
+            progress[actor_value].update({step: count for step, count in saved_counts.items() if step != PLANNED_PROGRESS_KEY})
     for actor_type, row in rows.items():
         if actor_type.value in progress:
-            progress[actor_type.value][SessionStep.ENTERED.value] = row.session_count
+            progress[actor_type.value].setdefault(SessionStep.ENTERED.value, row.session_count)
             progress[actor_type.value][SessionStep.VERDICT_RECEIVED.value] = row.session_count
     return progress
 
@@ -209,7 +225,7 @@ def show_bot_live(
         **BOT_SCREEN_CONTEXT,
         "summary": summary,
         "is_running": summary.status is RunStatus.RUNNING,
-        "has_verdict_suite": VERDICT_ACCURACY_SUITE_NAME in run_config.suite_names,
+        "has_traffic_suite": any(suite_name in TRAFFIC_SUITE_NAMES for suite_name in run_config.suite_names),
         "actor_progress": build_initial_actor_progress(summary, read_verdict_details(summary)),
         "planned_progress_key": PLANNED_PROGRESS_KEY,
         "session_step_titles": SESSION_STEP_TITLES,

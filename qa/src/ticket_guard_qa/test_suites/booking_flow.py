@@ -7,6 +7,7 @@ from ticket_guard_qa.domain.models import MESSAGE_LINE_SEPARATOR, SuiteResult, V
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
+from ticket_guard_qa.traffic_generators.session_funnel import ACTOR_PROGRESS_DETAIL_KEY, build_funnel_progress
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_planned_user_session_plans,
     save_browser_captures,
@@ -83,7 +84,8 @@ class BookingFlowSuite:
             finished_count = sum(result is not None for result in results)
             context.report_progress(
                 f"VU {finished_count}/{planned_count} 종료 · 예매 완료 {outcome_counts[BookingOutcome.BOOKED]}"
-                f" · 매진 {outcome_counts[BookingOutcome.SOLD_OUT]}"
+                f" · 매진 {outcome_counts[BookingOutcome.SOLD_OUT]}",
+                actor_progress=build_funnel_progress(planned_users, results),
             )
 
         try:
@@ -112,5 +114,6 @@ class BookingFlowSuite:
                 **({"booking_flow_p95_latency_ms": calculate_p95(succeeded_latencies)} if succeeded_latencies else {}),
             },
             message=f"{build_message(session_results, planned_count)} · {reset_message}",
-            details={"step_p95_latency_ms": summarize_step_p95(session_results), "double_sold_seat_ids": double_sold},
+            details={"step_p95_latency_ms": summarize_step_p95(session_results), "double_sold_seat_ids": double_sold,
+                     ACTOR_PROGRESS_DETAIL_KEY: build_funnel_progress(planned_users, session_results)},
         )

@@ -37,7 +37,7 @@
   <a class="button is-small" id="detection-link" href="{{ base_path }}/runs/{{ summary.run_id }}/bots" {{ 'hidden' if is_running }}><i data-lucide="grid-3x3"></i>탐지 리포트</a>
 </section>
 
-{% if not has_verdict_suite %}
+{% if not has_traffic_suite %}
 <div class="notice is-db" style="margin-bottom:18px"><i data-lucide="info"></i>봇 트래픽 미발생 · 계획 분포만 표시</div>
 {% endif %}
 <div class="notice is-qa" id="finished-notice" style="margin-bottom:18px" {{ 'hidden' if is_running }}><i data-lucide="circle-check"></i>Run 종료 · 탐지 리포트 생성 완료</div>

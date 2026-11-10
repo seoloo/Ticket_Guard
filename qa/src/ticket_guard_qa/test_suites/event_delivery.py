@@ -15,6 +15,7 @@ from ticket_guard_qa.domain.models import (
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError, EventStreamReader, StreamRecord
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
+from ticket_guard_qa.traffic_generators.session_funnel import ACTOR_PROGRESS_DETAIL_KEY, build_funnel_progress
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_planned_user_session_plans,
     reset_before_traffic,
@@ -35,10 +36,21 @@ SOLD_OUT_SERVER_EVENT_TYPES = frozenset({
     "queue_enter", "queue_register", "queue_admitted", "captcha_success", "booking_confirm_request", "booking_confirm_fail",
     "queue_cancel",
 })
+# 화면에서 원하는 좌석이 이미 전부 팔림 → 확정 없이 포기 · 확정 요청 · 실패 이벤트 없음이 정상
+SOLD_OUT_BEFORE_CONFIRM_SERVER_EVENT_TYPES = SOLD_OUT_SERVER_EVENT_TYPES - {"booking_confirm_request", "booking_confirm_fail"}
 REQUIRED_SERVER_EVENT_TYPES = {
     BookingOutcome.BOOKED: BOOKED_SERVER_EVENT_TYPES,
     BookingOutcome.SOLD_OUT: SOLD_OUT_SERVER_EVENT_TYPES,
 }
+
+
+def find_required_server_event_types(result: VirtualUserSessionResult) -> frozenset[str] | None:
+    """오류 세션 = 판정 안 함 · Live 확정 소요 0 = 확정 요청을 보내지 않음"""
+    if result.is_error:
+        return None
+    if result.booking_outcome is BookingOutcome.SOLD_OUT and result.step_latency_ms.get("confirm") == 0.0:
+        return SOLD_OUT_BEFORE_CONFIRM_SERVER_EVENT_TYPES
+    return REQUIRED_SERVER_EVENT_TYPES.get(result.booking_outcome)
 
 
 @dataclass
@@ -103,7 +115,8 @@ def send_traffic_and_read_stream(
         context.system_target.booking_api,
         build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed, run_config.wave_size),
         context.traffic_time_limit_sec,
-        lambda results: context.report_progress(f"VU {sum(r is not None for r in results)}/{len(planned_users)} 종료"),
+        lambda results: context.report_progress(f"VU {sum(r is not None for r in results)}/{len(planned_users)} 종료",
+                                                actor_progress=build_funnel_progress(planned_users, results)),
         run_config.wave_size,
     )
     context.report_progress("이벤트 수신 대기 · 토픽 조회")
@@ -141,7 +154,7 @@ def evaluate_delivery(session_results: list[VirtualUserSessionResult], records: 
             report.delivery_latency_ms.append(max(record.timestamp_ms - occurred_at_ms, 0.0))
 
     for result in session_results:
-        required = REQUIRED_SERVER_EVENT_TYPES.get(result.booking_outcome) if not result.is_error else None
+        required = find_required_server_event_types(result)
         if required:
             report.missing_server_events += [
                 f"{result.session_key} · {event_type}"
@@ -199,6 +212,8 @@ class EventDeliverySuite:
 
         report = evaluate_delivery(session_results, records)
         is_passed = report.issue_count == 0  # 전달 결과만 판정
+        run_config = context.run_config
+        planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
         return SuiteResult(
             suite_name=self.suite_name,
             outcome=SuiteOutcome.PASSED if is_passed else SuiteOutcome.FAILED,
@@ -214,6 +229,7 @@ class EventDeliverySuite:
             details={
                 "start_offsets": {str(partition): offset for partition, offset in start_offsets.items()},
                 "read_record_count": len(records),
+                ACTOR_PROGRESS_DETAIL_KEY: build_funnel_progress(planned_users, session_results),
                 "missing_browser_event_ids": report.missing_browser_event_ids[:MAX_LISTED_ISSUE_COUNT],
                 "missing_server_events": report.missing_server_events[:MAX_LISTED_ISSUE_COUNT],
                 "duplicate_event_ids": report.duplicate_event_ids[:MAX_LISTED_ISSUE_COUNT],

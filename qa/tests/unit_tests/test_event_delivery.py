@@ -10,6 +10,7 @@ from ticket_guard_qa.system_targets.live_kafka_reader import decode_event
 from ticket_guard_qa.system_targets.target_interfaces import StreamRecord
 from ticket_guard_qa.test_suites.event_delivery import (
     BOOKED_SERVER_EVENT_TYPES,
+    SOLD_OUT_BEFORE_CONFIRM_SERVER_EVENT_TYPES,
     SOLD_OUT_SERVER_EVENT_TYPES,
     EventDeliverySuite,
     build_message,
@@ -81,6 +82,15 @@ def test_sold_out_needs_cancel_and_capture_is_counted_apart():
     report = evaluate_delivery([session], records + [capture])
     assert report.missing_server_events == ["a2 · queue_cancel"]
     assert report.capture_event_count == 1
+
+
+def test_sold_out_before_confirm_needs_only_queue_and_cancel():
+    session = VirtualUserSessionResult(SessionKey("a4"), 1.0, False, booking_outcome=BookingOutcome.SOLD_OUT,
+                                       step_latency_ms={"captcha": 50.0, "seat_select": 0.0, "confirm": 0.0})
+    records = [record(event_type, "a4") for event_type in sorted(SOLD_OUT_BEFORE_CONFIRM_SERVER_EVENT_TYPES)]
+    assert evaluate_delivery([session], records).missing_server_events == []
+    no_cancel = [r for r in records if r.event["eventType"] != "queue_cancel"]
+    assert evaluate_delivery([session], no_cancel).missing_server_events == ["a4 · queue_cancel"]
 
 
 def test_other_users_and_error_sessions_are_not_judged():

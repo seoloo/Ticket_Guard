@@ -50,7 +50,9 @@ BUILT_IN_ACTOR_TYPES: tuple[ActorType, ...] = (
 
 class SessionStep(StrEnum):
     """B3 종류별 진행 · 가상 사용자 한 명이 지나가는 단계"""
-    ENTERED = "ENTERED"
+    ENTERED = "ENTERED"  # 예매 시작
+    QUEUE_PASSED = "QUEUE_PASSED"
+    CAPTCHA_PASSED = "CAPTCHA_PASSED"
     SEAT_SELECTED = "SEAT_SELECTED"
     CONFIRMED = "CONFIRMED"
     VERDICT_RECEIVED = "VERDICT_RECEIVED"
