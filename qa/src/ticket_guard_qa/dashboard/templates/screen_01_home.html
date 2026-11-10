@@ -125,7 +125,7 @@
   <a class="card continue-card" href="{{ base_path }}/runs/new?from_run_id={{ latest_summary.run_id }}">
     <span class="continue-icon" style="background:var(--qa-blue-light);color:var(--qa-blue-text)"><i data-lucide="refresh-cw"></i></span>
     <span class="spacer"><b>{{ latest_summary.run_id[-11:] }} 동일 조건 재실행</b>
-      <span class="muted">{% set latest_config = latest_summary.run_config %}VU {{ latest_config.virtual_user_count }}{% if latest_config.target_kind.value == 'live' %} · {{ ('최대 ' ~ latest_config.duration_sec ~ '초') if latest_config.duration_sec else '최대 시간 자동' }}{% endif %}{{ ' · 버스트' if latest_config.is_open_burst }}</span></span><i data-lucide="chevron-right"></i>
+      <span class="muted">{% set latest_config = latest_summary.run_config %}VU {{ latest_config.virtual_user_count }}{% if latest_config.target_kind.value == 'live' %} · {{ ('최대 ' ~ latest_config.duration_sec ~ '초') if latest_config.duration_sec else '최대 시간 자동' }}{% endif %} · {{ latest_config.entry_title }}</span></span><i data-lucide="chevron-right"></i>
   </a>
   {% else %}
   <div class="card continue-card"><span class="muted">Run 기록 없음 · 첫 Run 이후 표시</span></div>

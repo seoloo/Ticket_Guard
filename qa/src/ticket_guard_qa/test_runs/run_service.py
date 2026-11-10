@@ -105,7 +105,7 @@ class RunService:
         """Live 예상 소요 · Suite별 · Mock = None (흉내 시간 고정)"""
         if run_config.target_kind is TargetKind.FAKE:
             return None
-        samples = self.run_repository.list_recent_suite_durations(TargetKind.LIVE.value, HISTORY_RUN_LIMIT)
+        samples = self.run_repository.list_recent_suite_durations(TargetKind.LIVE.value, HISTORY_RUN_LIMIT, run_config.wave_size)
         return estimate_live_run(run_config, self.bot_profile_store.load_current_registry(),
                                  self.settings.queue_admission_limit, samples)
 

@@ -100,8 +100,11 @@ def send_traffic_and_read_stream(
     start_offsets = stream_reader.snapshot_end_offsets()
     context.report_progress(f"토픽 시작 위치 · {' · '.join(f'P{p}={o}' for p, o in sorted(start_offsets.items()))}")
     session_results = send_virtual_user_traffic(
-        context.system_target.booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed), context.traffic_time_limit_sec,
+        context.system_target.booking_api,
+        build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed, run_config.wave_size),
+        context.traffic_time_limit_sec,
         lambda results: context.report_progress(f"VU {sum(r is not None for r in results)}/{len(planned_users)} 종료"),
+        run_config.wave_size,
     )
     context.report_progress("이벤트 수신 대기 · 토픽 조회")
     return start_offsets, session_results, stream_reader.read_since(start_offsets, context.run_id)

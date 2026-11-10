@@ -6,14 +6,14 @@ from dataclasses import dataclass
 from statistics import median
 
 from ticket_guard_qa.answer_key.expected_verdicts import plan_virtual_users
-from ticket_guard_qa.domain.models import RunConfig
+from ticket_guard_qa.domain.models import PlannedUser, RunConfig
 from ticket_guard_qa.macro_bots.bot_catalog import BROWSER_TRAFFIC, get_bot_type_info
 from ticket_guard_qa.macro_bots.bot_profiles import BotProfileRegistry
 from ticket_guard_qa.system_targets.live_django_system import MAX_CONCURRENT_BROWSERS
 from ticket_guard_qa.test_suites.booking_flow import BOOKING_FLOW_SUITE_NAME
 from ticket_guard_qa.test_suites.event_delivery import EVENT_DELIVERY_SUITE_NAME
 from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
-from ticket_guard_qa.traffic_generators.virtual_user_traffic import PRE_OPEN_LOGIN_SEC
+from ticket_guard_qa.traffic_generators.virtual_user_traffic import PRE_OPEN_LOGIN_SEC, split_into_waves
 
 TRAFFIC_SUITE_NAMES = (BOOKING_FLOW_SUITE_NAME, EVENT_DELIVERY_SUITE_NAME, VERDICT_ACCURACY_SUITE_NAME)  # VU 전원 트래픽
 DEFAULT_SUITE_SEC = {  # 트래픽 없는 Suite · 실측 전 초기값
@@ -67,21 +67,29 @@ class RunEstimate:
         }
 
 
-def calculate_traffic_suite_sec(run_config: RunConfig, registry: BotProfileRegistry, admission_limit: int) -> float:
-    """오픈 전 준비 + max(대기열 처리, 브라우저 차례 대기) · 같은 기기 창은 브라우저 1개"""
-    planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
-    count_by_actor = Counter(user.actor_type for user in planned_users)
+def calculate_wave_sec(wave_users: list[PlannedUser], registry: BotProfileRegistry, admission_limit: int) -> float:
+    """회차 1개 · 오픈 전 준비 + max(대기열 처리, 브라우저 차례 대기) · 같은 기기 창은 브라우저 1개"""
+    count_by_actor = Counter(user.actor_type for user in wave_users)
     behavior_by_actor = {actor: registry.get_profile(actor).behavior for actor in count_by_actor}
     longest_browse_sec = max((behavior.browse_page_count * behavior.page_dwell_mean_ms / 1000
                               for behavior in behavior_by_actor.values()), default=0.0)
     pre_open_sec = PRE_OPEN_LOGIN_SEC + longest_browse_sec
-    queue_sec = QUEUE_WAIT_SEC + math.ceil(len(planned_users) / max(admission_limit, 1)) * HTTP_ADMITTED_SEC
+    queue_sec = QUEUE_WAIT_SEC + math.ceil(len(wave_users) / max(admission_limit, 1)) * HTTP_ADMITTED_SEC
     browser_count = sum(
         math.ceil(count / max(behavior_by_actor[actor].sessions_per_device, 1))
         for actor, count in count_by_actor.items() if get_bot_type_info(actor).traffic_channel == BROWSER_TRAFFIC
     )
     browser_sec = math.ceil(browser_count / MAX_CONCURRENT_BROWSERS) * BROWSER_SESSION_SEC if browser_count else 0.0
     return pre_open_sec + max(queue_sec, browser_sec)
+
+
+def calculate_traffic_suite_sec(run_config: RunConfig, registry: BotProfileRegistry, admission_limit: int) -> float:
+    """접속 방식 · 회차를 차례로 실행 · 한 번에 전원 = 회차 1개"""
+    planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
+    return sum(
+        calculate_wave_sec([planned_users[index] for index in wave], registry, admission_limit)
+        for wave in split_into_waves(len(planned_users), run_config.wave_size)
+    )
 
 
 def estimate_from_history(suite_name: str, virtual_user_count: int, samples: list[SuiteDurationSample]) -> float | None:

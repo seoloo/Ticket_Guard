@@ -31,6 +31,8 @@ RUN_STATUS_FILTERS = {"PASSED": "PASS", "FAILED": "FAIL", "RUNNING": "진행 중
 VIRTUAL_USER_PRESETS = (50, 200, 500)
 DURATION_PRESETS_SEC = (120, 300, 600)  # Live · 트래픽 Suite 1개 최대 시간
 AUTO_TIME_LIMIT_VALUE = 0  # 자동 · 예상 시간 기준
+ENTRY_MODE_BURST, ENTRY_MODE_WAVE = "burst", "wave"  # 접속 방식 · 한 번에 전원 진입 · 나눠서 진입
+DEFAULT_WAVE_SIZE = 40  # 나눠서 진입 처음 값
 TRAFFIC_FIELD_PREFIX = "percent_"  # 폼 이름 · percent_HUMAN · percent_BOT_E
 
 
@@ -94,6 +96,7 @@ def _render_test_setup(
         "virtual_user_presets": VIRTUAL_USER_PRESETS,
         "duration_presets_sec": DURATION_PRESETS_SEC,
         "auto_time_limit_value": AUTO_TIME_LIMIT_VALUE,
+        "default_wave_size": DEFAULT_WAVE_SIZE,
         "suite_title_by_name": {suite.suite_name: suite.title for suite in list_suites()},
         "alert_policy_titles": ALERT_POLICY_TITLES,
         "pass_criteria": PASS_CRITERIA,
@@ -117,17 +120,30 @@ def show_test_setup(request: Request, from_run_id: str | None = None, run_servic
     return _render_test_setup(request, run_service, run_config)
 
 
+def parse_wave_size(form, virtual_user_count: int) -> int:
+    """접속 방식 · 한 번에 전원 = 0 · 나눠서 진입 = 회차당 인원 1 ~ VU 수"""
+    if form.get("entry_mode", ENTRY_MODE_BURST) != ENTRY_MODE_WAVE:
+        return 0
+    wave_size = int(form.get("wave_size") or 0)
+    if not 1 <= wave_size <= virtual_user_count:
+        raise ValueError(f"회차당 인원 1 ~ {virtual_user_count}명 사이 입력 필요")
+    return wave_size
+
+
 def parse_run_config(form, run_service: RunService) -> RunConfig:
     """02 폼 → Run 설정 · 최대 시간 0 = 자동 · 잘못된 값 = ValueError"""
+    virtual_user_count = int(form.get("virtual_user_count", 200))
+    wave_size = parse_wave_size(form, virtual_user_count)
     return RunConfig(
         target_kind=TargetKind(form.get("target_kind", TargetKind.FAKE.value)),
         suite_names=tuple(form.getlist("suite_names")),
-        virtual_user_count=int(form.get("virtual_user_count", 200)),
+        virtual_user_count=virtual_user_count,
         duration_sec=max(int(form.get("duration_sec", AUTO_TIME_LIMIT_VALUE) or AUTO_TIME_LIMIT_VALUE), 0),
         traffic_mix=parse_traffic_mix(form, list_traffic_types(run_service)),
         random_seed=run_service.settings.random_seed,
-        is_open_burst=form.get("is_open_burst") == "on",
+        is_open_burst=wave_size == 0,
         alert_policy=AlertPolicy(form.get("alert_policy", AlertPolicy.ON_FAILURE.value)),
+        wave_size=wave_size,
     )
 
 
