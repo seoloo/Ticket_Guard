@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     target_kind: TargetKind = TargetKind.FAKE
 
     system_base_url: str = "http://127.0.0.1:8000"
+    max_concurrent_browsers: int = 8  # 브라우저 봇 동시 실행 · 1개 = 메모리 약 300MB · 창은 × 3 · 모자라면 VU가 차례 대기
     browser_executable_path: str = ""  # 브라우저 봇 Chromium 위치 · 비면 Playwright 기본 · qa-dashboard 이미지 = /usr/bin/chromium
     system_username: str = ""
     system_password: str = ""

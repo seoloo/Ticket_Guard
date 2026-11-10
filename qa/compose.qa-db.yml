@@ -1,5 +1,5 @@
 # QA DB · MongoDB QA 전용 인스턴스 · 정답표 · 봇 설정 · Run 기록 · 팀 compose에 덧붙여 실행 · AGENTS.md 6장
-# docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build
+# docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build
 # 내 PC에서 Compass로 볼 때만 -f qa/compose.qa-db.local.yml 추가 (127.0.0.1:27021)
 # qa-backend 네트워크 = qa-dashboard · qa-mongo만 · web · Spark · raw consumer · 시스템 MongoDB는 접근 못 함
 services:

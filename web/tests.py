@@ -192,7 +192,7 @@ class WebTests(SimpleTestCase):
     def test_queue_captcha_and_png_secrecy(self):
         self.login()
         a = self.repo.start('ticketguard', 'blue-hour', 'tab-one')
-        self.assertContains(self.client.get('/queue/'), '조금만 기다려 주세요')
+        self.assertRedirects(self.client.get('/queue/'), '/captcha/', fetch_redirect_response=False)
         a['entered'] -= 20
         self.repo.tick('ticketguard', 'tab-one', a['id'])
         response = self.client.get('/captcha.png', {'pageId': 'tab-one', 'attemptId': a['id']})

@@ -58,3 +58,24 @@ def test_live_elapsed_time_keeps_counting_past_window_until_suites_finish(qa_set
     assert max(message.elapsed_sec for message in messages) > 0.1  # 121 / 120초처럼 초과 표시
     assert messages[-1].text.startswith("예상 시간 초과")
     assert suites_finished.is_set()  # Suite 종료 = 표시 멈춤
+
+
+def test_verdict_accuracy_skips_before_traffic_when_verdicts_unreadable(qa_settings, qa_database):
+    from dataclasses import replace
+
+    from ticket_guard_qa.system_targets.fake_system import build_fake_system_target
+    from ticket_guard_qa.system_targets.live_django_system import LiveDjangoVerdictReader
+
+    class NoTrafficBookingApi:
+        def __getattr__(self, name):
+            raise AssertionError(f"판정 미연결인데 트래픽 전송 · {name}")
+
+    def build_target(settings, target_kind):
+        return replace(build_fake_system_target(settings.random_seed),
+                       verdict_reader=LiveDjangoVerdictReader(), booking_api=NoTrafficBookingApi())
+
+    run_service = RunService(qa_settings, qa_database, RunProgressStream(), system_target_builder=build_target)
+    summary = run_service.run_now(RunConfig(TargetKind.FAKE, ("verdict_accuracy",)))
+    result = summary.suite_results[0]
+    assert result.outcome is SuiteOutcome.SKIPPED and "시스템 판정 없음" in result.message
+    assert result.duration_sec < 5  # 트래픽 없이 바로
