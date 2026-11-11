@@ -1,3 +1,5 @@
+from unittest import skip
+
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
@@ -16,6 +18,7 @@ class BoardPageTests(SimpleTestCase):
                 self.assertNotContains(response, '<nav aria-label="주 메뉴">')
                 self.assertIn('no-store', response['Cache-Control'])
 
+    @skip('공지사항·자유게시판 메뉴 임시 숨김(주석 처리) 중')
     def test_home_menu_points_to_separate_pages(self):
         response = self.client.get('/')
         self.assertContains(response, 'href="/notices/">공지사항</a>')

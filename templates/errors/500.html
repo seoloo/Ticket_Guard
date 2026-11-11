@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load assets %}
+{% block title %}일시적인 오류가 발생했어요 · 티켓가드{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% asset 'errors.css' %}">{% endblock %}
+{% block content %}
+<section class="error-page" aria-labelledby="error-title">
+  <article class="error-ticket error-ticket--server">
+    <div class="error-ticket-body">
+      <span class="eyebrow">ADMISSION TICKET · ERROR 500</span>
+      <h1 id="error-title">잠시 공연이 지연되고 있어요</h1>
+      <p class="muted">일시적인 문제로 요청을 처리하지 못했어요.<br>잠시 후 다시 시도해 주세요.</p>
+      <dl class="error-info">
+        <div><dt>오류 번호</dt><dd class="error-code" data-request-id="{{ request_id }}">{{ error_code }}</dd></div>
+        <div><dt>발생 시각</dt><dd>{{ occurred_at|date:"Y.m.d H:i" }}</dd></div>
+      </dl>
+      <p class="error-help">문의하실 때 오류 번호를 알려주시면 빠르게 확인할 수 있어요.</p>
+      <div class="error-actions">
+        <a class="button" href="{{ request.get_full_path }}">다시 시도</a>
+        <a class="button outline" href="/">공연 목록으로</a>
+      </div>
+    </div>
+    <div class="error-ticket-stub" aria-hidden="true">
+      <span>STATUS</span><strong>500</strong><em>공연 지연</em>
+    </div>
+  </article>
+</section>
+{% endblock %}
