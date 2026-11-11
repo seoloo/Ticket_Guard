@@ -30,6 +30,7 @@ class RequestTelemetryMiddleware:
         incoming=request.headers.get('X-Capture-Request-ID')
         try: request_id=str(UUID(incoming))
         except (ValueError,TypeError,AttributeError): request_id=str(uuid4())
+        request.capture_request_id=request_id  # 에러 페이지 오류 번호 = server_request.details.requestId
         request_body={'state':'unavailable','reason':'not_observed'}
         known=[]
         if not excluded:

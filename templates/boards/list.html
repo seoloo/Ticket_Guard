@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static assets %}
 {% block title %}{{ board.title }} · 티켓가드{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'boards.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% asset 'boards.css' %}">{% endblock %}
 {% block content %}
 <div class="boards-layout">
   <aside class="boards-sidebar" aria-label="이용 메뉴">
