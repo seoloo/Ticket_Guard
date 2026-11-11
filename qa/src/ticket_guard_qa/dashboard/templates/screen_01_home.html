@@ -111,6 +111,8 @@
   <a class="card continue-card" href="{{ base_path }}/runs/{{ latest_summary.run_id }}">
     {% if latest_summary.status.value == 'PASSED' %}
     <span class="continue-icon" style="background:var(--pass-green-light);color:var(--pass-green)"><i data-lucide="circle-check"></i></span>
+    {% elif latest_summary.status.value == 'RUNNING' %}
+    <span class="continue-icon" style="background:var(--qa-blue-light);color:var(--qa-blue-text)"><i data-lucide="loader"></i></span>
     {% else %}
     <span class="continue-icon" style="background:var(--fail-red-light);color:var(--fail-red-text)"><i data-lucide="circle-alert"></i></span>
     {% endif %}

@@ -31,13 +31,14 @@ CLICK_POINT = (640.0, 400.0)
 class FakeBrowserPage:
     """예매 화면 흉내 · 클릭 순서 기록 · 먼저 팔린 좌석은 확정 때 드러남"""
 
-    def __init__(self, hidden_sold_seat_ids: set[str] | None = None, is_queue_stuck: bool = False) -> None:
+    def __init__(self, hidden_sold_seat_ids: set[str] | None = None, is_queue_stuck: bool = False,
+                 shown_sold_seat_ids: set[str] | None = None) -> None:
         self.url = ""
         self.clicks: list[str] = []
         self.filled: dict[str, str] = {}
         self.visited: list[str] = []
         self.hidden_sold_seat_ids = set(hidden_sold_seat_ids or ())
-        self.shown_sold_seat_ids: set[str] = set()
+        self.shown_sold_seat_ids: set[str] = set(shown_sold_seat_ids or ())
         self.chosen_seat_ids: list[str] = []
         self.is_selection_error_shown = False
         self.is_queue_stuck = is_queue_stuck
@@ -63,6 +64,8 @@ class FakeBrowserPage:
             else:
                 self.chosen_seat_ids.append(seat_id)
             self.is_selection_error_shown = False
+        elif selector == browser.CANCEL_BOOKING:  # 확인 창 수락 → 취소 응답 → 공연 상세로 이동
+            self.url = f"{BASE_URL}/show/1/"
         elif selector == browser.CONFIRM_BOOKING:
             sold = self.hidden_sold_seat_ids.intersection(self.chosen_seat_ids)
             if sold:  # 예매 화면처럼 · 팔린 좌석만 선택 해제 · 나머지 선택 유지
@@ -164,6 +167,35 @@ def test_browser_flow_gives_up_when_retry_count_is_zero():
 
     assert result.booking_outcome is BookingOutcome.SOLD_OUT
     assert page.clicks[-1] == browser.CANCEL_BOOKING  # 계정 정리
+    assert page.url == f"{BASE_URL}/show/1/"  # 취소 응답 뒤 화면 이동까지 대기
+
+
+def test_browser_flow_skips_confirm_when_wanted_seats_are_already_sold():
+    plan = build_plan()
+    page = FakeBrowserPage(shown_sold_seat_ids=set(plan.preferred_seat_ids))
+    result = run_flow(page, plan)
+
+    assert result.booking_outcome is BookingOutcome.SOLD_OUT
+    assert browser.CONFIRM_BOOKING not in page.clicks
+    assert result.step_latency_ms["confirm"] == 0.0  # 이벤트 전달 검증 · 확정 이벤트 요구 안 함
+    assert page.clicks[-1] == browser.CANCEL_BOOKING
+
+
+class FakePlaywrightDialog:
+    def __init__(self) -> None:
+        self.is_accepted = False
+
+    async def accept(self) -> None:
+        self.is_accepted = True
+
+
+def test_playwright_page_accepts_confirm_dialogs():
+    handlers = {}
+    page = type("FakePlaywrightPage", (), {"on": lambda self, event, handler: handlers.setdefault(event, handler)})()
+    browser.PlaywrightBrowserPage(page)
+    dialog = FakePlaywrightDialog()
+    asyncio.run(handlers["dialog"](dialog))
+    assert dialog.is_accepted  # 예매 취소 확인 창 · 닫히면 취소 요청이 안 나감
 
 
 def build_live_api(page_factory, account_count: int = 2) -> tuple[LiveDjangoBookingApi, list[FakeBrowser]]:
@@ -326,6 +358,9 @@ class NavigatingPlaywrightPage:
 
     def __init__(self, message: str) -> None:
         self.message = message
+
+    def on(self, event, handler) -> None:
+        pass
 
     async def evaluate(self, expression):
         raise Error(self.message)

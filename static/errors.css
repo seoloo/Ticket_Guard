@@ -1,0 +1,49 @@
+/* 404 / 500 error pages: admission ticket with a perforated stub. */
+/* Canvas, header and buttons come from the base theme in app.css. */
+body[data-screen="error"] .site-header nav a:hover{color:#8068bb}
+.error-page{display:flex;justify-content:center;padding:40px 0 24px}
+.error-ticket{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 220px;width:100%;max-width:820px;background:linear-gradient(145deg,#fff 0%,#fff 55%,#fbf8ff 100%);border:1px solid #ece7f0;border-radius:26px;box-shadow:0 12px 30px #8e829b24,inset 0 2px 0 #fff}
+.error-ticket:after{content:'';position:absolute;top:10px;left:8%;width:40%;height:14px;border-radius:999px;background:#fff9;filter:blur(6px);pointer-events:none}
+.error-ticket-body{min-width:0;padding:44px 48px;display:flex;flex-direction:column;gap:14px}
+.error-ticket-body .eyebrow{margin:0}
+.error-ticket-body h1{margin:0;font-size:32px;line-height:1.35;font-weight:900}
+.error-ticket-body>.muted{margin:0;font-size:15px;line-height:1.7}
+.error-info{margin:10px 0 0;padding:16px 18px;background:#f8f5ff;border:1px solid #efeaf7;border-radius:14px;display:grid;gap:8px;font-size:13px}
+.error-info div{display:grid;grid-template-columns:80px minmax(0,1fr);gap:12px}
+.error-info dt{color:var(--muted)}
+.error-info dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.error-help{margin:0;font-size:12px;color:var(--muted)}
+.error-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.error-actions .button{padding:13px 26px}
+
+.error-ticket-stub{position:relative;border-left:2px dashed #d7cdea;background:#f4f0fc;border-radius:0 26px 26px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:40px 24px}
+.error-ticket-stub:before,.error-ticket-stub:after{content:'';position:absolute;left:-14px;width:26px;height:26px;border-radius:50%;background:var(--bg)}
+.error-ticket-stub:before{top:-13px;border-bottom:1px solid #ece7f0}
+.error-ticket-stub:after{bottom:-13px;border-top:1px solid #ece7f0}
+.error-ticket-stub span{font-size:11px;letter-spacing:.2em;color:#5d4f8f;font-weight:700}
+.error-ticket-stub strong{font-size:64px;line-height:1;color:var(--primary);font-weight:900;letter-spacing:-.04em}
+.error-ticket-stub em{margin-top:10px;padding:4px 12px;border-radius:999px;border:1px solid var(--primary);color:#5d4f8f;font-size:11px;font-weight:700;font-style:normal;letter-spacing:.1em}
+
+/* 500: warm alert tone and a "delayed" stamp. */
+.error-ticket--server .eyebrow{color:#a3430a}
+.error-ticket--server .error-info{background:#fff5eb;border:1px solid #f4d4b9}
+.error-ticket--server .error-info dt,.error-ticket--server .error-info dd{color:#8a3a0a}
+.error-ticket--server .error-code{font-family:monospace;font-size:14px;font-weight:700;letter-spacing:.04em}
+.error-ticket--server .error-ticket-stub{border-left-color:#e8d3c2;background:#fdf6f0}
+.error-ticket--server .error-ticket-stub span{color:#8a3a0a}
+.error-ticket--server .error-ticket-stub strong{color:#a3430a}
+.error-ticket--server .error-ticket-stub em{border:2px solid #a3430a;border-radius:0;color:#a3430a;font-size:13px;font-weight:900;letter-spacing:0;padding:6px 14px;transform:rotate(-8deg)}
+
+@media(max-width:760px){
+  .error-page{padding:8px 0}
+  .error-ticket{grid-template-columns:1fr}
+  .error-ticket-body{padding:28px 24px}
+  .error-ticket-body h1{font-size:26px}
+  .error-ticket-stub{order:-1;flex-direction:row;gap:14px;padding:18px 24px;border-left:0;border-bottom:2px dashed #d7cdea;border-radius:26px 26px 0 0}
+  .error-ticket--server .error-ticket-stub{border-bottom-color:#e8d3c2}
+  .error-ticket-stub strong{font-size:40px}
+  .error-ticket-stub em{margin-top:0}
+  .error-ticket-stub:before,.error-ticket-stub:after{top:auto;bottom:-14px;border:0}
+  .error-ticket-stub:before{left:-13px}
+  .error-ticket-stub:after{left:auto;right:-13px}
+}

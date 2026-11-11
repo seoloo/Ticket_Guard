@@ -44,7 +44,7 @@
 </section>
 
 {% if not verdict_details %}
-{{ empty_state("bot-off", "탐지 데이터 없음", "판정 정확도 Suite 미실행", base_path ~ "/runs/new?from_run_id=" ~ summary.run_id, "Run 재구성") }}
+{{ empty_state("bot-off", "탐지 데이터 없음", missing_verdict_reason, base_path ~ "/runs/new?from_run_id=" ~ summary.run_id, "Run 재구성") }}
 {% else %}
 
 <div class="target-card-grid">

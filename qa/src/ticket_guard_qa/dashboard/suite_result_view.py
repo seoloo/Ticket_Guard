@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 
 from ticket_guard_qa.dashboard.screen_format import split_message_lines
 from ticket_guard_qa.domain.enums import SuiteOutcome
-from ticket_guard_qa.domain.models import SuiteResult
+from ticket_guard_qa.domain.models import RunSummary, SuiteResult
 from ticket_guard_qa.test_suites.booking_flow import BOOKING_FLOW_SUITE_NAME, STEP_TITLES
+from ticket_guard_qa.test_suites.verdict_accuracy import VERDICT_ACCURACY_SUITE_NAME
 
 MAX_TILE_COUNT = 6
 SEGMENT_SEPARATOR = " · "
@@ -161,6 +162,18 @@ def build_booking_flow_view(result: SuiteResult) -> SuiteResultView:
         view.tiles.append(SuiteTile("중복 판매", f"{double_sold}석", True))
     view.detail_lines.extend((kind, text) for kind, text in lines if kind == "ref")
     return view
+
+
+def describe_missing_verdict(summary: RunSummary) -> str:
+    """판정 결과 없는 이유 · 04 오분류 판정 · B3 종료 안내 · B4 빈 화면"""
+    result = summary.find_suite_result(VERDICT_ACCURACY_SUITE_NAME)
+    if result is None:
+        return "판정 정확도 Suite 미실행"
+    if result.outcome is SuiteOutcome.SKIPPED:
+        return f"판정 정확도 건너뜀 · {result.message}"
+    if result.outcome is SuiteOutcome.ERROR:
+        return "판정 정확도 오류 · Run 리포트 확인"
+    return "판정 결과 없음"
 
 
 def build_suite_result_view(result: SuiteResult) -> SuiteResultView:

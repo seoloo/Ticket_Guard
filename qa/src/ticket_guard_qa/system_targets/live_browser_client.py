@@ -25,6 +25,7 @@ VIEWPORT_WIDTH, VIEWPORT_HEIGHT = 1280, 800
 PAGE_TIMEOUT_MS = 15_000
 QUEUE_TIMEOUT_MS = 60_000  # 기본 대기 12초 + 여유
 CONFIRM_RESULT_TIMEOUT_SEC = 10.0
+CANCEL_RESULT_TIMEOUT_SEC = 5.0  # 취소 응답 → 다른 화면 이동
 RESULT_POLL_INTERVAL_SEC = 0.2
 BROWSER_SETUP_HINT = "browser 묶음 · Chromium 필요 · qa-dashboard 이미지 다시 빌드 · 내 PC = pip install -e qa[browser] · playwright install chromium"
 
@@ -94,11 +95,16 @@ class BrowserInstance(Protocol):
     def open_window(self, blocks_page_trace: bool) -> AbstractAsyncContextManager[BrowserPage]: ...
 
 
+async def accept_dialog(dialog: Any) -> None:
+    await dialog.accept()
+
+
 class PlaywrightBrowserPage:
     """Playwright 페이지 → BrowserPage · 클릭은 마우스 이동 궤적 없이 요소 중앙 바로 클릭"""
 
     def __init__(self, page: Any) -> None:
         self.page = page
+        page.on("dialog", accept_dialog)  # 예매 취소 · 화면 이동 확인 창 · 기본값(닫기)이면 취소 요청이 안 나감
 
     @property
     def url(self) -> str:
@@ -281,9 +287,14 @@ class LiveBrowserBookingClient:
         raise BookingFlowError("confirm", 0, "BROWSER_CONFIRM_TIMEOUT")
 
     async def cancel_booking(self) -> None:
-        """시험 끝 정리 · 계정당 진행 중 예매 1건 · 실패해도 60초 뒤 시스템 만료"""
+        """시험 끝 정리 · 계정당 진행 중 예매 1건 · 취소 응답 뒤 화면 이동까지 대기(창을 바로 닫으면 요청 중단)
+        실패해도 60초 뒤 시스템 만료"""
         try:
+            cancel_from_url = self.page.url
             await self.page.click(CANCEL_BOOKING)
+            deadline = time.monotonic() + CANCEL_RESULT_TIMEOUT_SEC
+            while self.page.url == cancel_from_url and time.monotonic() < deadline:
+                await asyncio.sleep(RESULT_POLL_INTERVAL_SEC)
         except Exception:  # noqa: BLE001 · 정리 실패는 결과에 영향 없음
             pass
 
