@@ -34,9 +34,9 @@ def stage_url(a):
 
 
 def snapshot(a):
+    rank, wait = repo.queue_status(a)
     return dict(id=a['id'], stage=a['stage'], redirect=stage_url(a),
-                rank=max(1, a['rank'] - int((time.monotonic()-a['entered']) * 10)),
-                wait=max(0, int(settings.QUEUE_WAIT_SECONDS-(time.monotonic()-a['entered']))),
+                rank=rank, wait=wait,
                 wrong=a['wrong'], sequence=a['sequence'], sold=sorted(repo.sold), remaining=repo.remaining)
 
 
@@ -67,11 +67,12 @@ def page(request, screen, identifier=None):
                 context.update(show=SHOWS[identifier], opens_at=int(repo.opens_at(user, identifier)*1000))
             elif screen in ('queue', 'captcha', 'select'):
                 a = repo.current(user)
+                repo.advance_queue()
                 if a['stage'] != screen:
                     emit(user,'booking_access_rejected',a,result='rejected',errorCode='INVALID_STEP',details={'action':'page_'+screen})
                     return redirect(stage_url(a))
                 context.update(show=SHOWS[a['show_id']], attempt_id=a['id'], sequence=a['sequence'],
-                               rank=a['rank'], wrong=a['wrong'], remaining=repo.remaining,
+                               rank=repo.queue_status(a)[0], queue_wait=repo.queue_status(a)[1], wrong=a['wrong'], remaining=repo.remaining,
                                rows=[dict(label=r, seats=[dict(id=f'{r}{c}', number=c, sold=f'{r}{c}' in repo.sold)
                                      for c in range(1, 11)]) for r in 'ABCDEFGHIJ'])
             elif screen == 'complete':

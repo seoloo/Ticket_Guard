@@ -39,27 +39,46 @@ docker compose --env-file .env logs --tail 50 web
 
 `compose.yml`은 기존 파일명 그대로 유지했습니다. Python **3.13.15**, Django **5.2.18**, Pillow **12.0.0**을 사용합니다. 호스트에 Python을 설치할 필요가 없습니다. 기본 Compose는 Kafka와 토픽 초기화를 함께 실행합니다. MongoDB는 별도 mongo 프로필로 추가했습니다. 같은 이름을 쓰는 이전 폴더 자원과 충돌하지 않도록 MongoDB 명령에는 `-p ticket-guard-workspace-db`를 반드시 사용합니다. 실행·초기화·검증은 [MongoDB 문서](docs/mongodb.md)를 따릅니다. Spark는 별도 `ticket-guard-workspace-pipeline` 프로젝트와 spark 프로필로 빌드·점검합니다. 실제 적재 명령은 [Spark 문서](docs/spark.md)를 먼저 확인하세요. 기존 `.env`를 복사 명령으로 덮어쓰지 마세요.
 
-### QA 대시보드 접속 (관리자)
+### QA 대시보드 실행 (관리자 · Live Run)
 
 관리자 로그인과 QA 대시보드(`/qa/`)는 팀 입구 `compose.gateway.yml`과 QA DB `qa/compose.qa-db.yml`을 함께 붙여 실행할 때만 켜집니다. `docker compose --env-file .env up -d`만으로 띄우면 관리자 로그인이 꺼져 있어 "아이디 또는 비밀번호를 확인해 주세요"가 표시됩니다.
 
-1. 기존 `.env`에 두 묶음을 직접 추가합니다. `.env`는 Git에서 제외되므로 pull로 갱신되지 않습니다.
-   - 관리자 계정: `.env.example`의 `DEMO_ADMIN_USERNAME` · `DEMO_ADMIN_PASSWORD` 두 줄
-   - QA DB 계정: `QA_MONGO_*` 여섯 줄 · 형식은 [qa/README.md](qa/README.md)
-2. 세 파일을 붙여 실행합니다. 이후 `ps` · `logs` · `down`에도 같은 `-f`를 붙입니다.
+모든 명령은 저장소 맨 위 폴더(PowerShell)에서 실행. `-f` 4개를 붙여야 관리자 로그인 · QA 대시보드(`/qa/`)가 켜짐.
+
+**1. 처음 실행 · PC를 다시 켠 뒤**
 
 ```powershell
-docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build
-docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml ps
+# 시스템 MongoDB 먼저 실행: 관리자 앱이 사용하는 외부 네트워크 생성
+docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo up -d --no-deps --wait mongo
+
+# 기본 웹·QA·관리자 대시보드 실행
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build --wait
+
+# 실행 상태 확인
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml ps -a
 ```
 
-3. http://localhost:8000/login/ 에서 관리자 계정으로 로그인하면 QA 대시보드로 이동합니다.
+**2. 최신화 (git pull 뒤)**
 
 | 증상 | 원인 | 확인 명령 |
 |---|---|---|
 | 관리자 로그인 실패 | `.env` 관리자 두 줄 누락 · `compose.gateway.yml` 누락 | `docker compose --env-file .env -f compose.yml -f compose.gateway.yml exec web printenv DEMO_ADMIN_USERNAME` · 출력 없으면 누락 |
 | 로그인 후 `/qa/` 502 | QA 대시보드 미기동 · `qa/compose.qa-db.yml` 누락 · `QA_MONGO_*` 누락 | `docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml logs --tail 50 qa-dashboard qa-mongo` |
 | `/qa/` 접속 시 로그인 화면으로 이동 | 고객 계정 또는 로그아웃 상태 · 관리자 전용이라 정상 차단 | 관리자 계정으로 다시 로그인 |
+QA 대시보드는 코드를 이미지 안에 복사해서 실행 → pull 뒤 다시 빌드해야 반영.
+
+```powershell
+# QA 코드만 바뀌었을 때 · 예매 웹 데이터 유지
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build --no-deps qa-dashboard
+# 예매 웹 등 다른 코드도 바뀌었을 때 · 1단계 전체 실행 명령 다시 실행
+```
+
+**3. 접속**
+
+http://localhost:8000/login/ → 관리자 계정 로그인 → QA 대시보드로 이동.
+
+- `.env`가 바뀌면 1단계 전체 실행 명령을 다시 실행
+- `down -v` 사용 금지 · QA DB 기록까지 삭제
 
 ## 사용 흐름
 

@@ -30,6 +30,8 @@ DEMO_ADMIN_PASSWORD = os.environ.get('DEMO_ADMIN_PASSWORD', '')  # 비어 있으
 SHOW_SCENARIOS = DEBUG and os.environ.get('SHOW_SCENARIOS', '1') == '1'
 # QA 테스트 훅 · DJANGO_DEBUG=1일 때만 · 비어 있으면 꺼짐 (Issue #6)
 QUEUE_WAIT_SECONDS = max(int(os.environ.get('QUEUE_WAIT_SECONDS') or 12), 0) if DEBUG else 12
+BOOKING_ADMISSION_BATCH_SIZE = max(1, int(os.environ.get('BOOKING_ADMISSION_BATCH_SIZE') or 40))
+BOOKING_ADMISSION_INTERVAL_SECONDS = max(1, int(os.environ.get('BOOKING_ADMISSION_INTERVAL_SECONDS') or 5))
 QA_TEST_ACCOUNT_COUNT = min(max(int(os.environ.get('QA_TEST_ACCOUNT_COUNT') or 0), 0), 9999) if DEBUG else 0
 QA_TEST_ACCOUNT_PASSWORD = os.environ.get('QA_TEST_ACCOUNT_PASSWORD', '') if DEBUG else ''
 QA_CAPTCHA_FIXED_ANSWER = os.environ.get('QA_CAPTCHA_FIXED_ANSWER', '').strip().upper() if DEBUG else ''

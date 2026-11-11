@@ -85,7 +85,7 @@
       scheduleId:showId ? showId+'-evening' : null,...overrides
     });
   }
-  window.addEventListener('pagehide', () => event('page_exit',{pageName:screen,previousPageName}));
+  window.addEventListener('pagehide', () => { if (pageNames.includes(screen)) event('page_exit',{pageName:screen,previousPageName}); });
   window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload(); });
   document.querySelectorAll('.money').forEach(el => {
     const value = Number(el.textContent.replace(/[^0-9]/g, ''));
@@ -118,16 +118,46 @@
   document.querySelectorAll('[data-genre]').forEach(el => el.addEventListener('click', () => event('genre_change',{genre:el.dataset.genre},{},true)));
   document.querySelectorAll('[data-show-link]').forEach(el => el.addEventListener('click', () => event('show_select',{clickTarget:el.dataset.clickTarget || 'poster'},{showId:el.dataset.showLink,scheduleId:null},true)));
   ['#date-select', '#time-select'].forEach(id => $(id)?.addEventListener('change', () => event('schedule_select',{trigger:id==='#date-select'?'date_change':'time_change',selectedDate:$('#date-select').value})));
-  document.querySelectorAll('.featured-show-card').forEach(card => card.addEventListener('mouseenter', () => {
+  function expandFeaturedCard(card) {
+    const previous = $('.featured-show-card.is-expanded');
+    const layout = card.closest('.featured-layout');
+    const layoutBounds = layout.getBoundingClientRect();
+    const cardBounds = card.getBoundingClientRect();
+    card.style.setProperty('--expand-top', `${Math.max(0, cardBounds.top - layoutBounds.top)}px`);
+    card.style.setProperty('--expand-bottom', `${Math.max(0, layoutBounds.bottom - cardBounds.bottom)}px`);
+    document.querySelectorAll('.featured-show-card').forEach(item => {
+      item.classList.toggle('is-previous-expanded', previous !== card && item === previous);
+      item.classList.toggle('is-active', item === card);
+      item.classList.toggle('is-expanded', item === card);
+    });
     const hero = $('#featured-hero');
+    hero.hidden = window.matchMedia('(min-width: 761px)').matches;
+    if (hero.hidden) return;
     hero.style.setProperty('--hero-image', `url('${card.dataset.heroImage}')`);
-    $('#hero-title').innerHTML = card.dataset.heroTitle;
+    $('#hero-title').textContent = card.dataset.heroTitle;
     $('#hero-tagline').textContent = card.dataset.heroTagline;
     $('#hero-show-meta').textContent = card.dataset.heroMeta;
     $('#hero-show-description').textContent = card.dataset.heroDescription;
     $('#hero-show-detail').hidden = false;
-    document.querySelectorAll('.featured-show-card').forEach(item => item.classList.toggle('is-active', item === card));
-  }));
+    const mobileLink = $('#featured-mobile-link');
+    mobileLink.href = card.querySelector('.featured-card-expansion').href;
+    mobileLink.setAttribute('aria-label', `${card.dataset.heroTitle} 공연 상세 보기`);
+    mobileLink.hidden = false;
+  }
+  document.querySelectorAll('.featured-show-card').forEach(card => {
+    card.addEventListener('mouseenter', () => expandFeaturedCard(card));
+    const trigger = card.querySelector('.featured-card-trigger');
+    trigger.addEventListener('focus', () => expandFeaturedCard(card));
+    trigger.addEventListener('click', () => expandFeaturedCard(card));
+    card.querySelector('.featured-card-expansion').addEventListener('animationend', (event) => {
+      if (event.animationName !== 'featured-card-unfold' || !card.classList.contains('is-expanded')) return;
+      document.querySelectorAll('.featured-show-card.is-previous-expanded').forEach(item => item.classList.remove('is-previous-expanded'));
+    });
+  });
+  window.matchMedia('(min-width: 761px)').addEventListener('change', () => {
+    const selected = $('.featured-show-card.is-expanded');
+    if (selected) expandFeaturedCard(selected);
+  });
 
   function countdown() {
     const el = $('#countdown');
@@ -177,7 +207,7 @@
       if (screen === 'queue') {
         $('#queue-rank').textContent = result.rank;
         $('#queue-wait').textContent = result.wait > 0 ? '약 ' + result.wait + '초' : '곧 입장해요';
-        $('#queue-bar').style.width = Math.max(5, (12-result.wait) / 12 * 100) + '%';
+        $('#queue-bar').style.width = Math.max(5, 100 / Math.max(1, result.rank)) + '%';
       }
       if (result.stage !== screen) go(result.redirect);
     } catch (error) {
@@ -322,7 +352,7 @@
   });
 
   setTimeout(async () => {
-    event('page_enter',{pageName:screen,previousPageName});
+    if (pageNames.includes(screen)) event('page_enter',{pageName:screen,previousPageName});
     if (screen==='shows' && sessionStorage.getItem('tg-search-length')!==null) {
       event('search_change',{queryLength:Number(sessionStorage.getItem('tg-search-length')),resultCount:Number(body.dataset.resultCount || 0)});
       sessionStorage.removeItem('tg-search-length');
