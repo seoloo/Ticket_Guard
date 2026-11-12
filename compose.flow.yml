@@ -1,0 +1,36 @@
+# 기존 서비스는 변경하지 않는다. 별도 프로젝트로 명시적으로 실행한다.
+services:
+  flow:
+    image: ticket-guard-workspace-spark:dev
+    build: ./pipeline
+    command: [flow]
+    init: true
+    restart: "no"
+    environment:
+      SPARK_KAFKA_BOOTSTRAP_SERVERS: ${SPARK_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      KAFKA_EVENTS_TOPIC: ${KAFKA_EVENTS_TOPIC:-ticketguard.events.v1}
+      SPARK_KAFKA_GROUP_ID: ${SPARK_KAFKA_GROUP_ID:-ticketguard-spark-consumer}
+      RAW_SOURCE_ID: ${RAW_SOURCE_ID:?원본 적재기와 같은 원본 식별자 필요}
+      FLOW_RAW_MONGO_URI: ${FLOW_RAW_MONGO_URI:?원본 읽기 전용 연결 필요}
+      FLOW_TARGET_MONGO_URI: ${FLOW_TARGET_MONGO_URI:?지표 전용 DB 쓰기 연결 필요}
+      FLOW_CHECKPOINT_DIR: /checkpoints/flow-v1
+      FLOW_TRIGGER_SECONDS: ${FLOW_TRIGGER_SECONDS:-1}
+      FLOW_PRESENCE_SECONDS: ${FLOW_PRESENCE_SECONDS:-30}
+      FLOW_GRACE_SECONDS: ${FLOW_GRACE_SECONDS:-300}
+      FLOW_MAX_EVENTS: ${FLOW_MAX_EVENTS:-250000}
+      SPARK_MAX_OFFSETS_PER_TRIGGER: ${SPARK_MAX_OFFSETS_PER_TRIGGER:-1000}
+    networks: [kafka, raw, metrics]
+    volumes: [flow-state:/checkpoints]
+    stop_grace_period: 30s
+networks:
+  kafka:
+    external: true
+    name: ${SPARK_KAFKA_NETWORK:-ticket-guard_default}
+  raw:
+    external: true
+    name: ${FLOW_RAW_NETWORK:-ticket-guard-raw_raw-backend}
+  metrics:
+    external: true
+    name: ${SPARK_MONGO_NETWORK:-ticket-guard-workspace-db_mongo-backend}
+volumes:
+  flow-state:
