@@ -1,11 +1,14 @@
-"""관리자 화면 렌더링 · 샘플 시안과 실제 DB 조회 화면 분리"""
+"""
+[홍석환] 관리자 실제 화면과 세 관점 시안 렌더링
+시안 데이터는 전용 모듈에서 구성하고 실제 DB 조회 경로와 분리한다.
+"""
 from pathlib import Path
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from ticket_guard_admin.preview_data import build_preview_data
+from ticket_guard_admin.monitoring_preview_data import build_monitoring_preview
 from ticket_guard_admin.mongo_reader import AdminMongoReader
 from pymongo.errors import PyMongoError
 
@@ -14,11 +17,11 @@ templates = Jinja2Templates(directory=ADMIN_DASHBOARD_DIR / "templates")
 
 
 def render_db_preview(request: Request, run_id: str | None = None) -> HTMLResponse:
-    return templates.TemplateResponse(request, "screen_05_admin_dashboard.html", {
+    return templates.TemplateResponse(request, "monitor_preview.html", {
         "base_path": request.app.state.base_path,
         "admin_user": getattr(request.state, "admin_user", ""),
         "run_id": run_id,
-        **build_preview_data(),
+        "preview": build_monitoring_preview(),
     })
 
 

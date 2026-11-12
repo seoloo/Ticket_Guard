@@ -1,3 +1,7 @@
+<!--
+[홍석환] 화면 이미지와 시각 자산 안내
+사용한 이미지의 구성과 화면 반영 방식, 원본 자산의 보존 기준을 설명한다.
+-->
 # Visual assets
 
 The original user-provided mockups in docs/ are preserved. Production UI elements are HTML/CSS; no entire mockup is embedded as the interface.

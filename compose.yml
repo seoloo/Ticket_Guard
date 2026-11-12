@@ -1,3 +1,5 @@
+# [홍석환] 기본 서비스와 데이터 처리 실행 구성
+# Django·Kafka 및 선택 실행 MongoDB·Spark 서비스의 연결과 실행 조건을 정의한다.
 name: ticket-guard
 
 services:

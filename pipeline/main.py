@@ -1,3 +1,7 @@
+"""
+[홍석환] Kafka와 MongoDB 사이의 Spark 처리 진입점
+실행 모드에 따라 환경 점검 또는 스트리밍 적재를 시작하고 종료를 관리한다.
+"""
 import logging
 import signal
 import sys

@@ -1,8 +1,7 @@
-"""Real MongoDB bootstrap checks, using unique Compose projects and disposable volumes.
-
-Run explicitly: python -m unittest discover -s mongo/tests -v
-Requires Docker, pymongo and local mongo:8.0.34 / ticket-guard-qa:dev images.
-Never loads real .env files.
+"""
+[홍석환] MongoDB 최초 설치와 계정 구성 회귀 검사
+별도 시험 프로젝트와 임시 저장소에서 초기화·계정·접속 동작을 확인한다.
+실제 환경 파일과 기존 운영 데이터를 사용하지 않는다.
 """
 import json
 from pathlib import Path

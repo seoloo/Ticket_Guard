@@ -1,3 +1,7 @@
+"""
+[홍석환] Django 공통 실행 설정
+웹·인증·수집·Kafka 및 시뮬레이션 설정을 환경변수에서 구성한다.
+"""
 import os
 from pathlib import Path
 

@@ -1,3 +1,5 @@
+# [홍석환] 시스템 MongoDB의 선택적 로컬 접속 구성
+# 기본 실행 설정에 로컬 주소 전용 DB 포트 공개를 추가한다.
 # Explicit opt-in only. Use together with the repository compose.yml.
 services:
   mongo:

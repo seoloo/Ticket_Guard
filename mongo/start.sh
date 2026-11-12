@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# [홍석환] 시스템 MongoDB 실행 전 설정 검사
+# 필수 계정·DB 환경변수를 확인하고 공식 MongoDB 실행 절차로 연결한다.
 set -euo pipefail
 for name in MONGO_INITDB_ROOT_USERNAME MONGO_INITDB_ROOT_PASSWORD MONGO_WRITER_USERNAME MONGO_WRITER_PASSWORD MONGO_INITDB_DATABASE; do
   value="${!name:-}"

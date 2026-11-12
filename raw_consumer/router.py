@@ -1,4 +1,8 @@
-"""Immutable routing contract v1. Do not edit this mapping for a live group."""
+"""
+[홍석환] 원본 이벤트의 컬렉션 라우팅 계약
+이벤트 버전·종류에 따라 저장 컬렉션을 선택하고 미분류 사유를 제공한다.
+동작 중인 소비자 그룹의 라우팅 계약은 임의로 바꾸지 않는다.
+"""
 import hashlib
 import json
 

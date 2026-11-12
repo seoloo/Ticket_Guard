@@ -1,3 +1,7 @@
+/*
+[홍석환] 원본 MongoDB 읽기 전용 계정 설정
+조회 계정 설정을 검사하고 원본 조회에 필요한 최소 권한을 구성한다.
+*/
 // Used by initial bootstrap and explicit administrator-authenticated setup.
 function rawReaderSettings() {
   const user = process.env.RAW_MONGO_READER_USERNAME;

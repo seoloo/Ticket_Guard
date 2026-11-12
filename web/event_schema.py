@@ -1,4 +1,7 @@
-"""Executable schema v1: reject unknown fields, including sensitive payloads."""
+"""
+[홍석환] 수집 이벤트 형식 검증
+이벤트 버전·필드·시각·상세 정보의 형식을 검사하고 전송 가능한 JSON을 생성한다.
+"""
 import json
 import re
 from datetime import datetime

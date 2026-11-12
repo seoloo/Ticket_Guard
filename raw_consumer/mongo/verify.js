@@ -1,3 +1,7 @@
+/*
+[홍석환] 원본 MongoDB 계정과 조회 권한 점검
+지정된 쓰기 또는 조회 계정으로 인증하고 저장소 구성을 확인한다.
+*/
 try {
   const target = db.getSiblingDB(process.env.MONGO_INITDB_DATABASE);
   const reader = process.env.RAW_MONGO_VERIFY_ROLE === 'reader';

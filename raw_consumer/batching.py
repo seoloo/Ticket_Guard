@@ -1,4 +1,7 @@
-"""A batch ends on count, raw bytes, or elapsed time from its first record."""
+"""
+[홍석환] 원본 레코드 배치 구성
+메시지 수·바이트 수·첫 레코드 이후 경과 시간에 따라 배치 경계를 결정한다.
+"""
 import time
 from records import message_bytes
 

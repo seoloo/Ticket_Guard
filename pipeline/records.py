@@ -1,4 +1,7 @@
-"""Lossless Kafka transport record to BSON; no JSON parsing or filtering."""
+"""
+[홍석환] Kafka 전송 레코드의 BSON 변환
+토픽·파티션·오프셋과 원문 바이트를 저장 가능한 전송 정보로 변환한다.
+"""
 from datetime import timezone
 from bson.binary import Binary
 from bson.int64 import Int64

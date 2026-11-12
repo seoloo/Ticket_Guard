@@ -1,3 +1,5 @@
+# [홍석환] Spark 처리 이미지 구성
+# MongoDB 의존성과 Kafka 연결 라이브러리를 설치하고 Spark 실행 진입점을 구성한다.
 FROM spark:3.5.8-scala2.12-java17-python3-ubuntu@sha256:5363cd7d22758958565206f67a764356ebebb9fa8f5721e9c55aa86a78efafda
 USER root
 COPY requirements.txt /tmp/pipeline-requirements.txt

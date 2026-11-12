@@ -1,3 +1,7 @@
+/*
+[홍석환] 시스템 MongoDB 계정과 저장 구조 점검
+인증·역할·컬렉션 정보와 건수를 조회하며 데이터를 추가하거나 변경하지 않는다.
+*/
 // Read-only: authenticate, inspect roles/metadata and count, never insert.
 try {
   const conn = new Mongo('mongodb://127.0.0.1:27017/?directConnection=true');
