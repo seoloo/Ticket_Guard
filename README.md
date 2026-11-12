@@ -41,19 +41,30 @@ docker compose --env-file .env logs --tail 50 web
 
 ### QA 대시보드 실행 (관리자 · Live Run)
 
+관리자 로그인과 QA 대시보드(`/qa/`)는 팀 입구 `compose.gateway.yml`과 QA DB `qa/compose.qa-db.yml`을 함께 붙여 실행할 때만 켜집니다. `docker compose --env-file .env up -d`만으로 띄우면 관리자 로그인이 꺼져 있어 "아이디 또는 비밀번호를 확인해 주세요"가 표시됩니다.
+
 모든 명령은 저장소 맨 위 폴더(PowerShell)에서 실행. `-f` 4개를 붙여야 관리자 로그인 · QA 대시보드(`/qa/`)가 켜짐.
 
 **1. 처음 실행 · PC를 다시 켠 뒤**
 
 ```powershell
-# 시스템 MongoDB 먼저 · 없으면 network … could not be found 오류
-docker compose -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo up -d --no-deps mongo
-# 전체 실행
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build
+# 시스템 MongoDB 먼저 실행: 관리자 앱이 사용하는 외부 네트워크 생성
+docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml --profile mongo up -d --no-deps --wait mongo
+
+# 기본 웹·QA·관리자 대시보드 실행
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build --wait
+
+# 실행 상태 확인
+docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml ps -a
 ```
 
 **2. 최신화 (git pull 뒤)**
 
+| 증상 | 원인 | 확인 명령 |
+|---|---|---|
+| 관리자 로그인 실패 | `.env` 관리자 두 줄 누락 · `compose.gateway.yml` 누락 | `docker compose --env-file .env -f compose.yml -f compose.gateway.yml exec web printenv DEMO_ADMIN_USERNAME` · 출력 없으면 누락 |
+| 로그인 후 `/qa/` 502 | QA 대시보드 미기동 · `qa/compose.qa-db.yml` 누락 · `QA_MONGO_*` 누락 | `docker compose --env-file .env -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml logs --tail 50 qa-dashboard qa-mongo` |
+| `/qa/` 접속 시 로그인 화면으로 이동 | 고객 계정 또는 로그아웃 상태 · 관리자 전용이라 정상 차단 | 관리자 계정으로 다시 로그인 |
 QA 대시보드는 코드를 이미지 안에 복사해서 실행 → pull 뒤 다시 빌드해야 반영.
 
 ```powershell
