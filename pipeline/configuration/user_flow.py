@@ -1,4 +1,8 @@
 """사용자 흐름 전용 설정. 자격 증명은 출력하지 않는다."""
+"""
+[홍석환] 사용자 흐름 실행과 보존 설정
+최근 한 시간 집계를 기본으로 하고 필수 연결·실행 값의 범위를 확인한다.
+"""
 import os
 from dataclasses import dataclass, field
 
@@ -14,11 +18,12 @@ class FlowConfig:
     checkpoint: str
     interval: int = 1
     presence: int = 30
-    retention: int = 43200
+    retention: int = 3600
     grace: int = 300
     max_offsets: int = 1000
     timeout_ms: int = 1000
     max_events: int = 250000
+    raw_wait_seconds: int = 10
 
     @classmethod
     def load(cls):
@@ -40,7 +45,8 @@ class FlowConfig:
                    os.environ.get('SPARK_KAFKA_GROUP_ID', 'ticketguard-spark-consumer'),
                    required('FLOW_RAW_MONGO_URI'), required('FLOW_TARGET_MONGO_URI'),
                    required('RAW_SOURCE_ID'), checkpoint,
-                   number('FLOW_TRIGGER_SECONDS', 1, 1), number('FLOW_PRESENCE_SECONDS', 30, 3600),
-                   43200, number('FLOW_GRACE_SECONDS', 300, 3600),
+                   number('FLOW_TRIGGER_SECONDS', 1, 60), number('FLOW_PRESENCE_SECONDS', 30, 3600),
+                   3600, number('FLOW_GRACE_SECONDS', 300, 3600),
                    number('SPARK_MAX_OFFSETS_PER_TRIGGER', 1000, 10000),
-                   number('FLOW_READ_TIMEOUT_MS', 1000, 10000), number('FLOW_MAX_EVENTS', 250000, 1000000))
+                   number('FLOW_READ_TIMEOUT_MS', 1000, 10000), number('FLOW_MAX_EVENTS', 250000, 1000000),
+                   number('FLOW_RAW_WAIT_SECONDS', 10, 120))

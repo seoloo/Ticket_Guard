@@ -1,4 +1,8 @@
 """불변 결과를 먼저 기록하고 단일 공개 포인터를 마지막에 교체한다."""
+"""
+[홍석환] 검증 지표 저장과 한 시간 공개 이력 조회
+현재 공개 버전은 만료시키지 않고 재공개한 버전의 이전 만료 예약을 해제한다.
+"""
 import hashlib
 import json
 from bson import BSON
@@ -16,7 +20,7 @@ def indexes(db):
     db.flow_versions.create_index([('scope', 1), ('publishedAt', -1)])
 
 
-def publish(db, metrics, ranges, now, scope='all', retention=43200, grace=300):
+def publish(db, metrics, ranges, now, scope='all', retention=3600, grace=30):
     content = {'metrics': metrics, 'ranges': ranges, 'scope': scope}
     version = hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
     # 현재 결과는 TTL 없이 유지한다. 이전 공개 버전만 포인터 교체 후 만료시킨다.
@@ -31,6 +35,8 @@ def publish(db, metrics, ranges, now, scope='all', retention=43200, grace=300):
         raise RuntimeError('공개 문서 용량 제한 초과')
     db.flow_versions.update_one({'_id': version}, {'$setOnInsert': document}, upsert=True)
     db.flow_series.update_one({'_id': series_id}, {'$setOnInsert': series}, upsert=True)
+    db.flow_versions.update_one({'_id': version}, {'$unset': {'expiresAt': ''}})
+    db.flow_series.update_one({'_id': series_id}, {'$unset': {'expiresAt': ''}})
     old = db.flow_public.find_one({'_id': scope})
     db.flow_public.replace_one({'_id': scope}, {'_id': scope, 'version': version, 'asOf': utc(now),
                                'status': 'verified', 'seriesCutoff': utc(now - retention)}, upsert=True)
@@ -63,5 +69,5 @@ def read_public(db, scope='all', now=None):
     if now is not None:
         from user_flow.events import stamp
         for name in ('presence', 'booking'):
-            series[name] = [p for p in series[name] if stamp(p['at']) >= now - 43200]
+            series[name] = [p for p in series[name] if now - 3600 <= stamp(p['at']) <= now]
     return version, series

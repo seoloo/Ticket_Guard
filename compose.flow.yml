@@ -1,7 +1,9 @@
 # 기존 서비스는 변경하지 않는다. 별도 프로젝트로 명시적으로 실행한다.
+# [홍석환] 사용자 흐름 전용 실행 연결
+# 원본 읽기·지표 쓰기·복구 상태를 기존 서비스와 분리한다.
 services:
   flow:
-    image: ticket-guard-workspace-spark:dev
+    image: ticket-guard-user-flow:dev
     build: ./pipeline
     command: [flow]
     init: true
@@ -13,12 +15,14 @@ services:
       RAW_SOURCE_ID: ${RAW_SOURCE_ID:?원본 적재기와 같은 원본 식별자 필요}
       FLOW_RAW_MONGO_URI: ${FLOW_RAW_MONGO_URI:?원본 읽기 전용 연결 필요}
       FLOW_TARGET_MONGO_URI: ${FLOW_TARGET_MONGO_URI:?지표 전용 DB 쓰기 연결 필요}
-      FLOW_CHECKPOINT_DIR: /checkpoints/flow-v1
+      FLOW_CHECKPOINT_DIR: ${FLOW_CHECKPOINT_DIR:-/checkpoints/flow-v1}
       FLOW_TRIGGER_SECONDS: ${FLOW_TRIGGER_SECONDS:-1}
       FLOW_PRESENCE_SECONDS: ${FLOW_PRESENCE_SECONDS:-30}
       FLOW_GRACE_SECONDS: ${FLOW_GRACE_SECONDS:-300}
       FLOW_MAX_EVENTS: ${FLOW_MAX_EVENTS:-250000}
       SPARK_MAX_OFFSETS_PER_TRIGGER: ${SPARK_MAX_OFFSETS_PER_TRIGGER:-1000}
+      FLOW_READ_TIMEOUT_MS: ${FLOW_READ_TIMEOUT_MS:-1000}
+      FLOW_RAW_WAIT_SECONDS: ${FLOW_RAW_WAIT_SECONDS:-10}
     networks: [kafka, raw, metrics]
     volumes: [flow-state:/checkpoints]
     stop_grace_period: 30s
