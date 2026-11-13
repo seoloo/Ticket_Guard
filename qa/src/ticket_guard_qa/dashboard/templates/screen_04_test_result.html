@@ -36,16 +36,37 @@
   .run-description { font-size: 16px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .suite-check-table { table-layout: fixed; width: 100%; }
   .suite-check-table th:nth-child(1) { width: 150px; } .suite-check-table th:nth-child(2) { width: 76px; }
-  .check-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-  .check-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; font-weight: 700; border-radius: 8px; padding: 3px 9px; background: var(--qa-blue-soft); border: 1px solid var(--line-color); color: var(--text-color); white-space: nowrap; }
-  .check-chip b { margin-right: 6px; font-size: 11px; }
-  .check-chip.is-fail { background: var(--fail-red-light); border-color: #F6C2C4; color: var(--fail-red-text); }
-  .check-chip.is-ref { background: var(--gray-chip-background); color: var(--sub-text-color); }
+  /* Suite 자체 검증 · 결론 한 줄 → 핵심 수치 타일 → 상세 · 원문 접기 */
+  .suite-headline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; line-height: 1.5; }
+  .suite-headline b { font-size: 14.5px; overflow-wrap: anywhere; }
+  .suite-headline.is-skipped b { font-weight: 600; color: var(--sub-text-color); }
+  .headline-badge { font-size: 11px; font-weight: 800; color: #fff; background: var(--fail-red); border-radius: 6px; padding: 1px 7px; flex-shrink: 0; }
+  .headline-reason { font-size: 13px; color: var(--fail-red-text); overflow-wrap: anywhere; }
+  .suite-tiles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .suite-headline + .suite-tiles { margin-top: 10px; }
+  .suite-tile { background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 10px; padding: 6px 12px; min-width: 96px; }
+  .suite-tile span { display: block; font-size: 12px; color: var(--muted-text-color); white-space: nowrap; }
+  .suite-tile b { font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .suite-tile.is-alert { background: var(--fail-red-light); border-color: #F6C2C4; }
+  .suite-tile.is-alert b { color: var(--fail-red-text); }
+  .suite-more { margin-top: 8px; }
+  .suite-more summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--qa-blue-text); list-style: none; }
+  .suite-more summary::-webkit-details-marker { display: none; }
+  .suite-more summary::after { content: "▾"; font-size: 11px; transition: transform .15s; }
+  .suite-more[open] summary::after { transform: rotate(180deg); }
+  .more-count { font-size: 11px; background: var(--qa-blue-light); border-radius: 999px; padding: 0 7px; }
+  .detail-lines { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+  .detail-lines li { display: flex; gap: 8px; font-size: 13px; line-height: 1.55; background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 8px; padding: 5px 10px; overflow-wrap: anywhere; }
+  .detail-lines li b { font-size: 11px; flex-shrink: 0; line-height: 20px; }
+  .detail-lines li.is-fail { background: var(--fail-red-light); border-color: #F6C2C4; color: var(--fail-red-text); }
+  .detail-lines li.is-ref { background: var(--gray-chip-background); color: var(--sub-text-color); }
+  .raw-message { margin-top: 8px; background: #F8FAFC; border: 1px dashed var(--line-color); border-radius: 8px; padding: 8px 10px; color: var(--muted-text-color); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
   .criteria-card { margin-top: 24px; padding: 24px 28px; }
   .criteria-table th, .criteria-table td { white-space: nowrap; }
   .criteria-table td.criteria-number { width: 32px; text-align: center; font-weight: 800; color: var(--muted-text-color, #8A94A6); }
   .criteria-term { display: block; font-size: 12px; color: #8A94A6; margin-top: 2px; }
   .criteria-table td.strong { font-weight: 800; }
+  .criteria-table td.criteria-detail { white-space: normal; overflow-wrap: anywhere; min-width: 220px; }  /* 긴 오류 사유 · 표 밖으로 넘치지 않게 */
   .status-chip { display: inline-block; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
   .status-chip.is-pass { background: var(--pass-green-light); color: var(--pass-green); }
   .status-chip.is-fail { background: var(--fail-red-light); color: var(--fail-red-text); }
@@ -124,17 +145,33 @@
     <h3 class="section-heading block-heading">Suite 자체 검증<span class="heading-tag">Suite마다 고유 검사</span></h3>
     <table class="result-table suite-check-table">
       <tr><th>Suite</th><th>결과</th><th>검사 항목</th></tr>
-      {% for result in summary.suite_results %}
+      {% for result, view in suite_views %}
+      {% set outcome_key = result.outcome.value | lower %}
       <tr>
         <td class="suite-name">{{ suite_title_by_name.get(result.suite_name, result.suite_name) }}</td>
-        <td><span class="pill is-{{ result.outcome.value | lower }}">{{ {'PASSED': '통과', 'FAILED': '실패', 'SKIPPED': '건너뜀', 'ERROR': '오류'}[result.outcome.value] }}</span></td>
+        <td><span class="pill is-{{ outcome_key }}">{{ {'PASSED': '통과', 'FAILED': '실패', 'SKIPPED': '건너뜀', 'ERROR': '오류'}[result.outcome.value] }}</span></td>
         <td>
-          {% set lines = result.message | message_lines %}
-          {% if lines %}
-          <div class="check-chips">
-            {% for kind, text in lines %}<span class="check-chip is-{{ kind }}" title="{{ text }}">{% if kind != 'info' %}<b>{{ 'FAIL' if kind == 'fail' else '참고' }}</b>{% endif %}{{ text }}</span>{% endfor %}
+          {% if view.is_empty %}<span class="muted">-</span>{% else %}
+          {% if view.headline %}
+          <div class="suite-headline is-{{ outcome_key }}">
+            {% if result.outcome.value in ('FAILED', 'ERROR') %}<span class="headline-badge">{{ 'FAIL' if result.outcome.value == 'FAILED' else 'ERROR' }}</span>{% endif %}
+            <b>{{ view.headline }}</b>{% if view.reason %}<span class="headline-reason">{{ view.reason }}</span>{% endif %}
           </div>
-          {% else %}<span class="muted">-</span>{% endif %}
+          {% endif %}
+          {% if view.tiles %}
+          <div class="suite-tiles">
+            {% for tile in view.tiles %}<div class="suite-tile{{ ' is-alert' if tile.is_alert }}"><span>{{ tile.label }}</span><b>{{ tile.value }}</b></div>{% endfor %}
+          </div>
+          {% endif %}
+          {% set detail_list %}{% if view.detail_lines %}<ul class="detail-lines">{% for kind, text in view.detail_lines %}<li class="is-{{ kind }}">{% if kind != 'info' %}<b>{{ 'FAIL' if kind == 'fail' else '참고' }}</b>{% endif %}<span>{{ text }}</span></li>{% endfor %}</ul>{% endif %}{% endset %}
+          {% if view.is_summarized and view.raw_message and (view.tiles or view.detail_lines) %}
+          <details class="suite-more">
+            <summary>{{ '상세 · 원문 보기' if view.detail_lines else '원문 보기' }}{% if view.detail_lines %} <span class="more-count">{{ view.detail_lines | length }}</span>{% endif %}</summary>
+            {{ detail_list }}
+            <div class="raw-message mono">{{ view.raw_message }}</div>
+          </details>
+          {% elif not view.is_summarized %}{{ detail_list }}{% endif %}
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -174,7 +211,7 @@
         <a class="button is-soft is-small" href="{{ base_path }}/runs/{{ summary.run_id }}/bots"><i data-lucide="bot"></i>탐지 리포트</a>
       </div>
       {% else %}
-      <div class="sub-text" style="margin-top:12px">판정 정확도 Suite 미실행</div>
+      <div class="sub-text" style="margin-top:12px">{{ missing_verdict_reason }}</div>
       {% endif %}
     </section>
   </aside>
@@ -192,7 +229,7 @@
       <td class="strong">{{ row.criterion | target_words }}</td>
       <td class="strong">{{ row.result.measured_value | metric(row.criterion.metric_name) if row.result.measured_value is not none else '-' }}</td>
       <td><span class="status-chip is-{{ row.status.value }}">{{ criterion_status_titles[row.status] }}</span></td>
-      <td class="muted">{{ row.detail }}</td>
+      <td class="muted criteria-detail">{{ row.detail }}</td>
     </tr>
     {% endfor %}
   </table>

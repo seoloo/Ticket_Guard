@@ -30,6 +30,23 @@
   .summary-row span { white-space: nowrap; }
   .summary-row b { color: var(--text-color); text-align: right; }
   .summary-box { background: var(--qa-blue-soft); border: 1px solid var(--line-color); border-radius: 14px; padding: 10px 18px; margin: 14px 0 20px; }
+  .chip.is-static { cursor: default; background: var(--gray-chip-background); }
+  .wave-input { display: inline-flex; align-items: center; gap: 8px; margin-left: 6px; font-size: 14.5px; font-weight: 700; color: var(--sub-text-color); }
+  .wave-input[hidden], #wave-preview[hidden], .wave-warning[hidden], .wave-blocks[hidden] { display: none; }
+  .wave-sentence { margin-top: 10px; font-size: 14.5px; color: var(--sub-text-color); }
+  .wave-sentence b { color: var(--qa-blue-text); }
+  .wave-blocks { display: flex; gap: 6px; margin-top: 8px; }
+  .wave-block { flex: 1; min-width: 0; border-radius: 10px; background: var(--qa-blue-light); color: var(--qa-blue-text); text-align: center; padding: 7px 4px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+  .wave-block span { display: block; font-size: 11.5px; font-weight: 600; color: var(--muted-text-color); overflow: hidden; text-overflow: ellipsis; }
+  .wave-block.is-more { flex: 0 0 auto; padding: 7px 12px; background: var(--gray-chip-background); color: var(--sub-text-color); }
+  .wave-warning { margin-top: 10px; font-size: 13.5px; font-weight: 700; color: var(--fail-red-text); background: var(--fail-red-light); border: 1px solid #F6C2C4; border-radius: 10px; padding: 8px 12px; }
+  [data-target-only][hidden] { display: none; }
+  .estimate-list { list-style: none; margin: 4px 0 6px; padding: 8px 0 0; border-top: 1px dashed #CBD6EA; }
+  .estimate-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13.5px; color: var(--sub-text-color); }
+  .estimate-list li span:first-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .estimate-list b { color: var(--text-color); font-variant-numeric: tabular-nums; }
+  .estimate-source { font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 1px 6px; background: var(--gray-chip-background); color: var(--muted-text-color); }
+  .estimate-source.is-recent { background: var(--pass-green-light); color: var(--pass-green); }
   .busy-card { margin-bottom: 18px; padding: 20px 22px; border-style: dashed; }
   .busy-timer { display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--db-orange-light); color: var(--db-orange-text); border: 1px solid #F8C9A6; border-radius: 12px; padding: 12px; font-weight: 800; margin: 12px 0; }
   .busy-timer b { font-size: 24px; letter-spacing: .02em; }
@@ -74,13 +91,36 @@
       </div>
     </div>
 
+    {% set is_wave_entry = run_config.wave_size > 0 %}
     <div class="setup-row">
-      <div><div class="row-title">테스트 시간</div>{% if run_config.target_kind.value == 'fake' %}<div class="row-hint">Mock · {{ fake_run_duration_sec }}초 시뮬레이션</div>{% endif %}</div>
+      <div><div class="row-title">접속 방식</div><div class="row-hint">회차 안에서는 동시 진입</div></div>
+      <div>
+        <div class="chips">
+          <label class="chip"><input type="radio" name="entry_mode" value="burst" {{ 'checked' if not is_wave_entry }}>한 번에 전원 진입</label>
+          <label class="chip"><input type="radio" name="entry_mode" value="wave" {{ 'checked' if is_wave_entry }}>나눠서 진입</label>
+          <span class="wave-input" id="wave-input" {{ 'hidden' if not is_wave_entry }}>회차당 <input id="wave-size-input" class="number-input" type="number" name="wave_size" min="1" value="{{ run_config.wave_size or default_wave_size }}" aria-label="회차당 인원">명</span>
+        </div>
+        <div id="wave-preview" {{ 'hidden' if not is_wave_entry }}>
+          <div class="wave-sentence" id="wave-sentence"></div>
+          <div class="wave-blocks" id="wave-blocks"></div>
+          <div class="wave-warning" id="wave-warning" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    {% set is_auto_limit = run_config.duration_sec == auto_time_limit_value %}
+    <div class="setup-row" data-target-only="fake">
+      <div class="row-title">테스트 시간</div>
+      <div class="chips"><span class="chip is-static"><i data-lucide="timer"></i>Mock · {{ fake_run_duration_sec }}초 시뮬레이션</span></div>
+    </div>
+    <div class="setup-row" data-target-only="live">
+      <div><div class="row-title">Suite별 최대 시간</div><div class="row-hint">트래픽 Suite 1개 기준</div></div>
       <div class="chips">
+        <label class="chip"><input type="radio" name="duration_sec" value="{{ auto_time_limit_value }}" {{ 'checked' if is_auto_limit }}><i data-lucide="sparkles"></i>자동 <span class="chip-hint" id="auto-limit-hint">예상 시간 × 2</span></label>
         {% for preset in duration_presets_sec %}
         <label class="chip"><input type="radio" name="duration_sec" value="{{ preset }}" {{ 'checked' if preset == run_config.duration_sec }}>{{ preset }}초</label>
         {% endfor %}
-        {% if run_config.duration_sec not in duration_presets_sec %}
+        {% if not is_auto_limit and run_config.duration_sec not in duration_presets_sec %}
         <label class="chip"><input type="radio" name="duration_sec" value="{{ run_config.duration_sec }}" checked>{{ run_config.duration_sec }}초</label>
         {% endif %}
       </div>
@@ -105,11 +145,6 @@
           <a class="button is-soft is-small" href="{{ base_path }}/bots"><i data-lucide="bot"></i>봇 프로필</a>
         </div>
       </div>
-    </div>
-
-    <div class="setup-row">
-      <div class="row-title">오픈 버스트</div>
-      <div class="row"><label class="switch"><input type="checkbox" name="is_open_burst" {{ 'checked' if run_config.is_open_burst }}><span></span></label>오픈 시각 <b>동시 진입</b> (T1 대기열 테스트 포함)</div>
     </div>
 
     <div class="setup-row">
@@ -151,6 +186,7 @@
       <div class="summary-box">
         <div class="summary-row"><span>조건</span><b id="summary-condition"></b></div>
         <div class="summary-row"><span>예상 소요</span><b id="summary-duration" style="color:var(--qa-blue-text);font-size:20px"></b></div>
+        <ul class="estimate-list" id="estimate-list" hidden></ul>
       </div>
       <button class="button is-wide" type="submit" form="setup-form" {{ 'disabled' if active_run_id }}><i data-lucide="play"></i>Run 시작</button>
       {% if latest_run_id %}
@@ -217,16 +253,123 @@
     return [...setupForm.querySelectorAll(`input[name=${fieldName}]:checked`)].map((input) => input.closest("label").dataset.label || input.closest("label").textContent.trim());  // 말풍선 글 제외
   }
 
+  const suiteTitleByName = {{ suite_title_by_name | tojson }};
+  const estimateUrl = "{{ base_path }}/runs/estimate";
+  const ESTIMATE_DELAY_MS = 300;  // 입력 멈춘 뒤 한 번만 계산
+  let estimateTimer = null;
+  let estimateRequestNumber = 0;
+
+  function formatDuration(seconds) {
+    return seconds < 60 ? `${Math.round(seconds)}초` : `${Math.max(Math.round(seconds / 60), 1)}분`;
+  }
+
+  function showTargetRows(targetKind) {
+    document.querySelectorAll("[data-target-only]").forEach((row) => { row.hidden = row.dataset.targetOnly !== targetKind; });
+  }
+
+  function readTimeLimitText() {
+    const limitSec = Number(setupForm.elements.duration_sec.value);
+    return limitSec ? `최대 ${limitSec}초` : "최대 시간 자동";
+  }
+
+  function showEstimate(estimate) {
+    const list = document.getElementById("estimate-list");
+    if (estimate.low_sec === undefined) { list.hidden = true; return; }
+    document.getElementById("summary-duration").textContent =
+      estimate.low_sec === estimate.high_sec ? `약 ${formatDuration(estimate.total_sec)}` : `약 ${formatDuration(estimate.low_sec)} ~ ${formatDuration(estimate.high_sec)}`;
+    document.getElementById("auto-limit-hint").textContent =
+      estimate.is_time_limit_auto ? `${estimate.traffic_time_limit_sec}초` : "예상 시간 × 2";
+    list.replaceChildren(...estimate.suites.map((suite) => {
+      const item = document.createElement("li");
+      const isRecent = suite.source === "recent";
+      item.innerHTML = `<span></span><span class="estimate-source ${isRecent ? "is-recent" : ""}">${isRecent ? "실측" : "계산"}</span><b></b>`;
+      item.firstElementChild.textContent = suiteTitleByName[suite.suite_name] || suite.suite_name;
+      item.lastElementChild.textContent = formatDuration(suite.seconds);
+      return item;
+    }));
+    list.hidden = estimate.suites.length === 0;
+  }
+
+  function requestEstimate() {
+    const requestNumber = ++estimateRequestNumber;  // 늦게 온 이전 응답 무시
+    fetch(estimateUrl, { method: "POST", body: new FormData(setupForm) })
+      .then((response) => response.ok ? response.json() : null)
+      .then((estimate) => { if (estimate && requestNumber === estimateRequestNumber) showEstimate(estimate); })
+      .catch(() => {});
+  }
+
+  const MAX_WAVE_BLOCKS = 10;  // 회차가 많으면 앞 회차 + "외 N회"
+  const startButton = document.querySelector("button[type=submit][form=setup-form]");
+  const isRunLocked = startButton.disabled;  // 다른 Run 실행 중
+
+  function buildWaveBlock(title, detail, isMore = false) {
+    const block = document.createElement("div");
+    block.className = isMore ? "wave-block is-more" : "wave-block";
+    block.textContent = title;
+    if (detail) { const range = document.createElement("span"); range.textContent = detail; block.append(range); }
+    return block;
+  }
+
+  function refreshWavePreview() {
+    // 접속 방식 · 나눠서 진입 = 회차 문장 · 블록 · 잘못된 값 경고 · 결과 = 요약 문구
+    const isWave = setupForm.elements.entry_mode.value === "wave";
+    document.getElementById("wave-input").hidden = !isWave;
+    document.getElementById("wave-preview").hidden = !isWave;
+    if (!isWave) return { title: "한 번에 전원 진입", isValid: true };
+    const total = Math.floor(Number(userInput.value) || 0);
+    const size = Math.floor(Number(setupForm.elements.wave_size.value) || 0);
+    const warning = document.getElementById("wave-warning");
+    const sentence = document.getElementById("wave-sentence");
+    const blocks = document.getElementById("wave-blocks");
+    if (size < 1 || size > total) {
+      warning.textContent = size > total ? `회차당 ${size}명 · VU ${total}명보다 큼 · 1 ~ ${total}명 사이 입력 필요` : "회차당 인원 1명 이상 입력 필요";
+      warning.hidden = false; sentence.hidden = true; blocks.hidden = true;
+      return { title: "회차당 인원 확인 필요", isValid: false };
+    }
+    warning.hidden = true; sentence.hidden = false; blocks.hidden = false;
+    const fullWaveCount = Math.floor(total / size);
+    const lastWaveSize = total % size;
+    const waveCount = fullWaveCount + (lastWaveSize ? 1 : 0);
+    const title = `${size}명씩 ${fullWaveCount}회${lastWaveSize ? ` + 마지막 ${lastWaveSize}명` : ""}`;
+    sentence.innerHTML = `${total}명을 <b>${title}</b>${lastWaveSize ? ` · 총 ${waveCount}회` : ""} · 앞 회차 종료 후 다음 회차`;
+    const shownCount = waveCount > MAX_WAVE_BLOCKS ? MAX_WAVE_BLOCKS - 1 : waveCount;
+    const waveBlocks = [];
+    for (let wave = 1; wave <= shownCount; wave++) {
+      const first = (wave - 1) * size + 1;
+      const last = Math.min(wave * size, total);
+      waveBlocks.push(buildWaveBlock(`${wave}회 · ${last - first + 1}명`, `VU ${first}~${last}`));
+    }
+    if (shownCount < waveCount) waveBlocks.push(buildWaveBlock(`외 ${waveCount - shownCount}회`, "", true));
+    blocks.replaceChildren(...waveBlocks);
+    return { title, isValid: true };
+  }
+
   function refreshSummary() {
     const targetKind = setupForm.elements.target_kind.value;
-    const durationSec = Number(setupForm.elements.duration_sec.value);
-    const expectedSec = targetKind === "fake" ? fakeRunDurationSec : durationSec;
-    document.getElementById("summary-target").textContent = targetKind === "fake" ? "Mock" : "Live";
+    const isMock = targetKind === "fake";
+    const wavePlan = refreshWavePreview();
+    startButton.disabled = isRunLocked || !wavePlan.isValid;
+    showTargetRows(targetKind);
+    document.getElementById("summary-target").textContent = isMock ? "Mock" : "Live";
     document.getElementById("summary-suites").textContent = readCheckedLabels("suite_names").join(" · ") || "미선택";
     document.getElementById("summary-alert").textContent = readCheckedLabels("alert_policy")[0] || "";
     document.getElementById("summary-condition").textContent =
-      `VU ${userInput.value} · ${durationSec}초${setupForm.elements.is_open_burst.checked ? " · 버스트" : ""}`;
-    document.getElementById("summary-duration").textContent = expectedSec < 60 ? `약 ${expectedSec}초` : `약 ${Math.round(expectedSec / 60)}분`;
+      `VU ${userInput.value} · ${wavePlan.title} · ${isMock ? `${fakeRunDurationSec}초 시뮬레이션` : readTimeLimitText()}`;
+    clearTimeout(estimateTimer);
+    if (!wavePlan.isValid) {
+      estimateRequestNumber++;
+      document.getElementById("summary-duration").textContent = "-";
+      document.getElementById("estimate-list").hidden = true;
+      return;
+    }
+    if (isMock) {
+      estimateRequestNumber++;
+      document.getElementById("summary-duration").textContent = `약 ${formatDuration(fakeRunDurationSec)}`;
+      document.getElementById("estimate-list").hidden = true;
+      return;
+    }
+    document.getElementById("summary-duration").textContent = "계산 중";
+    estimateTimer = setTimeout(requestEstimate, ESTIMATE_DELAY_MS);
   }
 
   setupForm.addEventListener("input", (event) => {

@@ -111,6 +111,8 @@
   <a class="card continue-card" href="{{ base_path }}/runs/{{ latest_summary.run_id }}">
     {% if latest_summary.status.value == 'PASSED' %}
     <span class="continue-icon" style="background:var(--pass-green-light);color:var(--pass-green)"><i data-lucide="circle-check"></i></span>
+    {% elif latest_summary.status.value == 'RUNNING' %}
+    <span class="continue-icon" style="background:var(--qa-blue-light);color:var(--qa-blue-text)"><i data-lucide="loader"></i></span>
     {% else %}
     <span class="continue-icon" style="background:var(--fail-red-light);color:var(--fail-red-text)"><i data-lucide="circle-alert"></i></span>
     {% endif %}
@@ -125,7 +127,7 @@
   <a class="card continue-card" href="{{ base_path }}/runs/new?from_run_id={{ latest_summary.run_id }}">
     <span class="continue-icon" style="background:var(--qa-blue-light);color:var(--qa-blue-text)"><i data-lucide="refresh-cw"></i></span>
     <span class="spacer"><b>{{ latest_summary.run_id[-11:] }} 동일 조건 재실행</b>
-      <span class="muted">VU {{ latest_summary.run_config.virtual_user_count }} · {{ latest_summary.run_config.duration_sec }}초{{ ' · 버스트' if latest_summary.run_config.is_open_burst }}</span></span><i data-lucide="chevron-right"></i>
+      <span class="muted">{% set latest_config = latest_summary.run_config %}VU {{ latest_config.virtual_user_count }}{% if latest_config.target_kind.value == 'live' %} · {{ ('최대 ' ~ latest_config.duration_sec ~ '초') if latest_config.duration_sec else '최대 시간 자동' }}{% endif %} · {{ latest_config.entry_title }}</span></span><i data-lucide="chevron-right"></i>
   </a>
   {% else %}
   <div class="card continue-card"><span class="muted">Run 기록 없음 · 첫 Run 이후 표시</span></div>

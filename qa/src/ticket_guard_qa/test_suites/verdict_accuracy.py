@@ -2,9 +2,8 @@
 from collections import Counter
 
 from ticket_guard_qa.answer_key.expected_verdicts import build_answer_key, plan_virtual_users
-from ticket_guard_qa.domain.enums import BookingOutcome, SessionStep, SuiteOutcome
+from ticket_guard_qa.domain.enums import SessionStep, SuiteOutcome
 from ticket_guard_qa.domain.models import (
-    ActorProgress,
     AnswerKey,
     PlannedUser,
     SessionKey,
@@ -17,6 +16,7 @@ from ticket_guard_qa.scoring.detection_breakdown import count_rule_hits
 from ticket_guard_qa.scoring.detection_metrics import calculate_detection_metrics, find_false_positives, find_missed_bots
 from ticket_guard_qa.scoring.latency_metrics import calculate_error_rate_percent, calculate_p95
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
+from ticket_guard_qa.traffic_generators.session_funnel import build_actor_progress, build_funnel_progress
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_planned_user_session_plans,
     save_browser_captures,
@@ -26,30 +26,6 @@ from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
 
 VERDICT_ACCURACY_SUITE_NAME = "verdict_accuracy"  # 04 · B1 · B4가 결과를 찾는 이름
 MAX_LISTED_SESSION_COUNT = 200  # 04 · 05 화면 목록 길이
-PLANNED_PROGRESS_KEY = "PLANNED"
-
-
-def build_actor_progress(planned_users: list[PlannedUser], reached_count_by_step: dict[SessionStep, Counter]) -> ActorProgress:
-    planned_count_by_actor = Counter(user.actor_type for user in planned_users)
-    return {
-        actor_type.value: {
-            PLANNED_PROGRESS_KEY: planned_count,
-            **{step.value: counts[actor_type] for step, counts in reached_count_by_step.items()},
-        }
-        for actor_type, planned_count in planned_count_by_actor.items()
-    }
-
-
-def count_reached_steps(
-    planned_users: list[PlannedUser], results: list[VirtualUserSessionResult | None]
-) -> dict[SessionStep, Counter]:
-    finished = [(user, result) for user, result in zip(planned_users, results) if result is not None]
-    return {
-        SessionStep.ENTERED: Counter(user.actor_type for user, _ in finished),
-        SessionStep.CONFIRMED: Counter(
-            user.actor_type for user, result in finished if result.booking_outcome is BookingOutcome.BOOKED
-        ),
-    }
 
 
 def send_planned_user_traffic(
@@ -63,14 +39,16 @@ def send_planned_user_traffic(
         finished_count = sum(result is not None for result in results)
         context.report_progress(
             f"Entered {finished_count}/{len(planned_users)}",
-            actor_progress=build_actor_progress(planned_users, count_reached_steps(planned_users, results)),
+            actor_progress=build_funnel_progress(planned_users, results),
         )
 
     session_results = send_virtual_user_traffic(
-        booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, context.run_config.random_seed),
-        context.run_config.duration_sec, report_traffic_progress,
+        booking_api,
+        build_planned_user_session_plans(planned_users, context.bot_profile_registry, context.run_config.random_seed,
+                                         context.run_config.wave_size),
+        context.traffic_time_limit_sec, report_traffic_progress, context.run_config.wave_size,
     )
-    save_browser_captures(context.report_output_dir, context.run_id, session_results)  # B3 브라우저 화면
+    save_browser_captures(context.report_output_dir, context.run_id, planned_users, session_results)  # B3 브라우저 화면
     session_key_by_label = {
         user.virtual_user_label: result.session_key for user, result in zip(planned_users, session_results)
     }
@@ -117,6 +95,8 @@ class VerdictAccuracySuite:
 
     def run(self, context: SuiteContext) -> SuiteResult:
         run_config = context.run_config
+        # 판정 읽기 미연결(NotImplementedError)이면 트래픽 전에 건너뜀 · 연결되면 그대로 진행 · 약 5분 절약
+        context.system_target.verdict_reader.read_session_verdicts(context.run_id)
         planned_users = plan_virtual_users(run_config.traffic_mix, run_config.virtual_user_count, run_config.random_seed)
         context.report_progress(f"VU {len(planned_users)} 접속")
         session_key_by_label, session_results = send_planned_user_traffic(context, planned_users)

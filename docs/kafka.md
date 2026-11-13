@@ -30,9 +30,9 @@ Django 서버 처리 결과 ─────┘
 
 ```powershell
 cd C:\workspace\Ticket_Guard
-docker compose up -d --build
-docker compose ps -a
-docker compose logs --tail 30 kafka-init
+docker compose --env-file .env up -d --build
+docker compose --env-file .env ps -a
+docker compose --env-file .env logs --tail 30 kafka-init
 ```
 
 `kafka` healthy → `kafka-init` 성공 종료 → `web` 시작 순서입니다. init가 Exit 0인 것은 정상입니다. 이미 실행 중인 웹은 이후 Kafka 장애와 무관하게 요청을 처리합니다. 새 전체 기동은 Kafka 준비를 기다리므로 Kafka를 영구적으로 사용할 수 없을 때 정상 기동된다고 주장하지 않습니다.
@@ -56,7 +56,7 @@ Kafka는 Docker 내부 `kafka:9092`에서만 접근합니다. 호스트 포트�
 
 `init_kafka`는 없으면 생성하고, 기존 토픽이 있으면 **설정·데이터를 변경하지 않고 drift를 경고**합니다. 환경 변수를 바꿔도 기존 토픽의 retention/파티션이 자동 변경되지 않습니다. 파티션 증가에 따른 key 배치 변화나 retention 축소에 따른 삭제를 피하기 위한 정책입니다. 변경은 별도 검토 후 수행해야 합니다.
 
-KAFKA_CLUSTER_ID는 기존 볼륨에 대해 유지하세요. `/var/lib/kafka/data`에 로그와 메타데이터를 같이 저장합니다. `docker compose down`은 named volume을 유지하지만 `down -v`는 데이터를 삭제하므로 사용하지 마세요. 단일 노드이므로 `acks=all`도 호스트/디스크 장애에 대한 복제를 제공하지 않습니다. plaintext는 로컬 격리 네트워크의 개발 설정이고 운영은 인증/TLS/ACL/다중 브로커 검토가 필요합니다.
+KAFKA_CLUSTER_ID는 기존 볼륨에 대해 유지하세요. `/var/lib/kafka/data`에 로그와 메타데이터를 같이 저장합니다. `docker compose --env-file .env down`은 named volume을 유지하지만 `down -v`는 데이터를 삭제하므로 사용하지 마세요. 단일 노드이므로 `acks=all`도 호스트/디스크 장애에 대한 복제를 제공하지 않습니다. plaintext는 로컬 격리 네트워크의 개발 설정이고 운영은 인증/TLS/ACL/다중 브로커 검토가 필요합니다.
 
 ## 발행과 순서
 
@@ -153,10 +153,10 @@ requestSequence, result, errorCode, isSimulation, scenarioName, details
 
 ```powershell
 # 현재 보관 중인 가장 앞부터 최대 10개. group은 진단 전용으로 제한합니다.
-docker compose exec -T web python manage.py consume_events --group ticketguard-debug-manual --from-beginning --max-messages 10 --timeout 20
+docker compose --env-file .env exec -T web python manage.py consume_events --group ticketguard-debug-manual --from-beginning --max-messages 10 --timeout 20
 
 # 먼저 실행한 뒤 웹에서 행동: 할당 완료 시점의 끝부터 신규 이벤트 확인
-docker compose exec -T web python manage.py consume_events --group ticketguard-debug-live --max-messages 10 --timeout 30
+docker compose --env-file .env exec -T web python manage.py consume_events --group ticketguard-debug-live --max-messages 10 --timeout 30
 ```
 
 토픽/파티션/offset/key와 스키마 검사를 통과한 이벤트를 출력합니다. 잘못된 payload는 원문을 출력하지 않습니다. 매 실행마다 명시적으로 beginning/end 위치를 지정하고 offset을 commit하지 않으므로, 같은 group 이름을 써도 이어 읽기가 아닙니다. future raw-writer/Spark group과 공유하지 않습니다. 제한시간/개수에 도달하면 종료하며 MongoDB 적재나 영속 아카이브 기능이 아닙니다.
@@ -164,9 +164,9 @@ docker compose exec -T web python manage.py consume_events --group ticketguard-d
 ## 테스트
 
 ```powershell
-docker compose exec -e EVENT_PUBLISHER=mock -T web python manage.py check
-docker compose exec -e EVENT_PUBLISHER=mock -T web python manage.py test web -v 2
-docker compose exec -T web python manage.py verify_kafka
+docker compose --env-file .env exec -e EVENT_PUBLISHER=mock -T web python manage.py check
+docker compose --env-file .env exec -e EVENT_PUBLISHER=mock -T web python manage.py test web -v 2
+docker compose --env-file .env exec -T web python manage.py verify_kafka
 ```
 
 단위/HTTP 테스트는 Kafka 없이 mock으로 실행합니다. GitHub CI도 mock입니다. verify_kafka는 별도 Django 테스트 프로세스의 계정·재고와 실제 Kafka를 사용하고 live 웹 예매 상태를 바꾸지 않습니다. 전달 콜백과 key, 스키마, 동일 ID 재요청, 예매 성공/재반환, 시나리오 구분을 검사합니다. 실제 토픽에 QA 이벤트가 추가됩니다. 보안문자 자동 입력 대신 검증된 상태의 fixture를 사용하며 실제 브라우저 전체 예매 완료 검사로 표현하지 않습니다.
@@ -174,10 +174,10 @@ docker compose exec -T web python manage.py verify_kafka
 장애 검사는 두 터미널이 필요합니다. 첫 번째에서 아래를 실행하고 `FAILED_WAITING_FOR_RECOVERY`가 나오면 두 번째에서 100초 안에 Kafka를 시작하세요.
 
 ```powershell
-docker compose stop kafka
-docker compose exec -T web python manage.py verify_kafka --outage
+docker compose --env-file .env stop kafka
+docker compose --env-file .env exec -T web python manage.py verify_kafka --outage
 # 두 번째 터미널:
-docker compose start kafka
+docker compose --env-file .env start kafka
 ```
 
 볼륨/토픽 삭제 없이 실패 callback, 예매 유지, 동일 eventId 재시도와 신규 이벤트 전달을 확인합니다. 다른 사용자의 테스트를 방해하지 않는 시간에 실행하세요.

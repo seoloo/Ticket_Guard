@@ -32,15 +32,28 @@ QA 계정은 QA DB를 처음 띄울 때(빈 볼륨) 한 번 만들어져요. 나
 
 QA 대시보드는 코드를 이미지 안에 복사해서 돌아가요. 그래서 **화면이나 코드를 고친 뒤에는 내렸다가 다시 빌드해서 띄워야** 반영돼요.
 
-```bash
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml down
-```
+Live Run 시험 계정 · 초기화(`.env` 네 줄)와 시스템 MongoDB 먼저 띄우기는 저장소 맨 위 [README](../README.md) "QA 대시보드 실행" 1 · 2단계를 따라요.
+
+전체 실행 (처음 · 예매 웹 등이 꺼져 있을 때)
 
 ```bash
-docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml up -d --build
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build
+```
+
+QA 대시보드만 다시 빌드 (QA 코드를 받거나 고친 뒤 · 예매 웹 데이터 유지)
+
+```bash
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml up -d --build --no-deps qa-dashboard
+```
+
+내리기
+
+```bash
+docker compose -f compose.yml -f compose.gateway.yml -f qa/compose.qa-db.yml -f qa/compose.qa-live.yml down
 ```
 
 - **`-f qa/compose.qa-db.yml`을 항상 같이 붙여요.** 빼고 띄우면 QA 대시보드가 QA DB 주소를 못 받아서 "QA DB = MongoDB" 오류로 시작하지 않아요.
+- **`-f qa/compose.qa-live.yml`도 같이 붙여요.** 빼면 Live Run 전 시험 데이터 초기화가 꺼져서 좌석이 쌓이고, 결과가 전부 "매진"이 돼요.
 - 내 PC의 Compass로 QA DB를 볼 때만 `-f qa/compose.qa-db.local.yml`을 더 붙여요. `127.0.0.1:27021`로 열리고, QA 계정(`QA_MONGO_USERNAME`)으로 접속해요.
 
 - 접속: `http://127.0.0.1:8000` → 관리자 계정(`.env`의 `DEMO_ADMIN_USERNAME` · `DEMO_ADMIN_PASSWORD`)으로 로그인 → `/qa/` QA 대시보드

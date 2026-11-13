@@ -4,6 +4,7 @@
 */
 // Used by initial bootstrap and explicit administrator-authenticated setup.
 function rawReaderSettings() {
+  if (!process.env.RAW_MONGO_READER_USERNAME && !process.env.RAW_MONGO_READER_PASSWORD) return null;
   const user = process.env.RAW_MONGO_READER_USERNAME;
   const password = process.env.RAW_MONGO_READER_PASSWORD;
   const names = [process.env.MONGO_INITDB_ROOT_USERNAME, process.env.RAW_MONGO_WRITER_USERNAME, user];
@@ -16,6 +17,7 @@ function rawReaderSettings() {
 
 function setupRawReader(target) {
   const settings = rawReaderSettings();
+  if (!settings) return;
   const existing = target.getUser(settings.user);
   if (existing) {
     if (existing.roles.length !== 1 || existing.roles[0].role !== 'read' || existing.roles[0].db !== target.getName()) {
@@ -37,7 +39,7 @@ function setupRawReader(target) {
 if (typeof RAW_READER_INITIALIZING === 'undefined') {
   let stage = 'configuration';
   try {
-    rawReaderSettings();
+    if (!rawReaderSettings()) throw new Error('Raw reader configuration required');
     stage = 'administrator authentication';
     const admin = db.getSiblingDB('admin');
     if (!admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD)) {

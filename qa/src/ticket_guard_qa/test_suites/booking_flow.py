@@ -3,10 +3,11 @@ from collections import Counter
 
 from ticket_guard_qa.answer_key.expected_verdicts import plan_virtual_users
 from ticket_guard_qa.domain.enums import BookingOutcome, SuiteOutcome
-from ticket_guard_qa.domain.models import SuiteResult, VirtualUserSessionResult
+from ticket_guard_qa.domain.models import MESSAGE_LINE_SEPARATOR, SuiteResult, VirtualUserSessionResult
 from ticket_guard_qa.scoring.latency_metrics import calculate_p95
 from ticket_guard_qa.system_targets.target_interfaces import AccountPoolExhaustedError
 from ticket_guard_qa.test_suites.suite_interface import SuiteContext, SuiteGuide
+from ticket_guard_qa.traffic_generators.session_funnel import ACTOR_PROGRESS_DETAIL_KEY, build_funnel_progress
 from ticket_guard_qa.traffic_generators.virtual_user_traffic import (
     build_planned_user_session_plans,
     save_browser_captures,
@@ -48,13 +49,14 @@ def build_message(session_results: list[VirtualUserSessionResult], planned_count
     if succeeded:
         parts.append(f"전체 p95 {calculate_p95([result.latency_ms for result in succeeded]):.0f}ms")
         parts.extend(f"{STEP_TITLES.get(step, step)} {value:.0f}ms" for step, value in summarize_step_p95(succeeded).items())
-    failure_counts = Counter(result.failed_step or "unknown" for result in session_results if result.is_error)
-    if failure_counts:
-        parts.insert(0, "FAIL: " + ", ".join(f"{step} {count}건" for step, count in failure_counts.most_common()))
+    fail_lines = []  # 실패 원인은 줄을 나눔 · 04 결론 · 원문 가독성
     double_sold = find_double_sold_seat_ids(session_results)
     if double_sold:
-        parts.insert(0, f"FAIL: 중복 판매 {len(double_sold)}석 ({', '.join(double_sold[:5])})")
-    return " · ".join(parts)
+        fail_lines.append(f"FAIL: 중복 판매 {len(double_sold)}석 ({', '.join(double_sold[:5])})")
+    failure_counts = Counter(result.failed_step or "unknown" for result in session_results if result.is_error)
+    if failure_counts:
+        fail_lines.append("FAIL: " + ", ".join(f"{step} {count}건" for step, count in failure_counts.most_common()))
+    return MESSAGE_LINE_SEPARATOR.join([*fail_lines, " · ".join(parts)])
 
 
 class BookingFlowSuite:
@@ -82,15 +84,17 @@ class BookingFlowSuite:
             finished_count = sum(result is not None for result in results)
             context.report_progress(
                 f"VU {finished_count}/{planned_count} 종료 · 예매 완료 {outcome_counts[BookingOutcome.BOOKED]}"
-                f" · 매진 {outcome_counts[BookingOutcome.SOLD_OUT]}"
+                f" · 매진 {outcome_counts[BookingOutcome.SOLD_OUT]}",
+                actor_progress=build_funnel_progress(planned_users, results),
             )
 
         try:
             session_results = send_virtual_user_traffic(
-                booking_api, build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed),
-                run_config.duration_sec, report_traffic_progress,
+                booking_api,
+                build_planned_user_session_plans(planned_users, context.bot_profile_registry, run_config.random_seed, run_config.wave_size),
+                context.traffic_time_limit_sec, report_traffic_progress, run_config.wave_size,
             )
-            save_browser_captures(context.report_output_dir, context.run_id, session_results)  # B3 브라우저 화면
+            save_browser_captures(context.report_output_dir, context.run_id, planned_users, session_results)  # B3 브라우저 화면
         except AccountPoolExhaustedError as error:
             return SuiteResult(self.suite_name, SuiteOutcome.FAILED, message=f"FAIL: {error}")
 
@@ -110,5 +114,6 @@ class BookingFlowSuite:
                 **({"booking_flow_p95_latency_ms": calculate_p95(succeeded_latencies)} if succeeded_latencies else {}),
             },
             message=f"{build_message(session_results, planned_count)} · {reset_message}",
-            details={"step_p95_latency_ms": summarize_step_p95(session_results), "double_sold_seat_ids": double_sold},
+            details={"step_p95_latency_ms": summarize_step_p95(session_results), "double_sold_seat_ids": double_sold,
+                     ACTOR_PROGRESS_DETAIL_KEY: build_funnel_progress(planned_users, session_results)},
         )

@@ -7,7 +7,7 @@ services:
     environment:
       TICKET_GUARD_QA_SYSTEM_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_MONGO_URI:?Set system DB reader URI}
       TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI: ${TICKET_GUARD_QA_SYSTEM_RAW_MONGO_URI:?Set raw DB reader URI}
-      TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID: ${TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID:?Set the same value as raw_consumer/.env RAW_SOURCE_ID}
+      TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID: ${TICKET_GUARD_QA_SYSTEM_RAW_SOURCE_ID:?Set the same value as root .env RAW_SOURCE_ID}
     networks:
       - default
       - qa-backend

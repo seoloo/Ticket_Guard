@@ -8,7 +8,8 @@ from functools import partial
 from pymongo import MongoClient, UpdateOne
 from pymongo.errors import AutoReconnect, BulkWriteError, NetworkTimeout, WTimeoutError
 from pymongo.write_concern import WriteConcern
-from records import document
+from ingestion.records import document
+from ingestion.normalization import normalize
 
 
 def client_for(config):

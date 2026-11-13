@@ -29,7 +29,7 @@
         환영해요
       </h2>
       <p class="muted">로그인하고 다음 무대를 만나보세요.</p>
-      <form id="login-form">
+      <form id="login-form" method="post" action="/login/">{% csrf_token %}
         <label for="username">아이디</label><input id="username"
                                                 name="username"
                                                 autocomplete="username"
@@ -49,6 +49,13 @@
                                     aria-pressed="false">보기</button>
         </div>
         <p id="login-error" class="field-error" role="alert" hidden></p>
+        <div id="login-lock" class="login-lock" role="alert" hidden>
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+          <div>
+            <strong>로그인이 잠겼어요</strong>
+            <p id="login-lock-message">로그인 오류가 반복되어 계정 보호를 위해 로그인을 막았어요. 잠시 후 다시 시도해 주세요.</p>
+          </div>
+        </div>
         <button class="button full" type="submit">
           로그인 <span aria-hidden="true">→</span>
         </button>
@@ -78,7 +85,7 @@
       <span class="eyebrow">CREATE ACCOUNT</span>
       <h2>회원가입</h2>
       <p class="muted">아이디와 비밀번호를 입력해 주세요.</p>
-      <form id="signup-form">
+      <form id="signup-form" method="post" action="/signup/">{% csrf_token %}
         <label for="signup-username">아이디</label>
         <input id="signup-username" name="username" autocomplete="username" placeholder="아이디를 입력해 주세요" maxlength="100" required />
         <label for="signup-password">비밀번호</label>
@@ -86,6 +93,7 @@
           <input id="signup-password" type="password" name="password" autocomplete="new-password" placeholder="비밀번호를 입력해 주세요" maxlength="200" required />
           <button type="button" id="toggle-signup-password" aria-label="비밀번호 표시" aria-pressed="false">보기</button>
         </div>
+        <p id="signup-error" class="field-error" role="alert" hidden></p>
         <p class="signup-note">가입 기능은 서버 계정 저장 단계에서 연결됩니다.</p>
         <button class="button full" type="submit">회원가입 <span aria-hidden="true">→</span></button>
         <nav class="login-links" aria-label="계정 메뉴"><a href="/login/">로그인으로 돌아가기</a></nav>
@@ -106,24 +114,86 @@
       <input type="hidden" name="genre" value="{{ genre }}" />
       <button type="submit" aria-label="검색">→</button>
     </form>
+    {% if not user %}
     <nav class="shows-account-links" aria-label="계정 메뉴">
       <a href="/login/">로그인</a>
       <a href="/signup/">회원가입</a>
     </nav>
+    {% endif %}
   </div>
-  <div class="featured-layout"><section class="hero" id="featured-hero" style="--hero-image:url('/static/images/hero.png')"><div class="hero-blur" aria-hidden="true"></div><div class="hero-art" aria-hidden="true"></div>
+  <div class="featured-layout"><section class="hero" id="featured-hero"><div class="hero-blur" aria-hidden="true"></div><div class="hero-art" aria-hidden="true"></div>
     <div class="hero-content">
       <div class="eyebrow light">YOUR NEXT LIVE MOMENT</div>
       <h1 id="hero-title">당신의 다음 무대를<br />찾아보세요<span class="hero-dot">.</span></h1>
       <p id="hero-tagline">음악이 시작되는 곳, 티켓가드</p>
       <div class="hero-show-detail" id="hero-show-detail" hidden><span id="hero-show-meta"></span><p id="hero-show-description"></p></div>
     </div>
-    <span class="hero-counter">01 <i></i> 02</span>
+    <span class="hero-counter">01 <i></i> 02</span><a id="featured-mobile-link" class="hero-mobile-link" hidden></a>
   </section>
   <aside class="featured-shows" aria-label="추천 공연">
-    {% for featured in featured_shows %}<a class="featured-show-card{% if forloop.first %} is-active{% endif %}" href="/detail/{{ featured.id }}/" style="--card-image:url('{% static 'images/' %}{{ featured.poster }}')" data-hero-title="{{ featured.title }}" data-hero-tagline="{{ featured.tagline }}" data-hero-description="{{ featured.description }}" data-hero-meta="{{ featured.date }} · {{ featured.venue }}" data-hero-image="/static/images/{{ featured.poster }}"><span>{{ featured.title }}</span></a>{% endfor %}
+    {% for featured in featured_shows %}
+      <div class="featured-show-card"
+           style="--card-image:url('{% static 'images/' %}{{ featured.poster }}')"
+           data-hero-title="{{ featured.title }}"
+           data-hero-tagline="{{ featured.tagline }}"
+           data-hero-description="{{ featured.description }}"
+           data-hero-meta="{{ featured.date }} · {{ featured.venue }}"
+           data-hero-image="{% static 'images/' %}{{ featured.poster }}">
+        <button class="featured-card-trigger" type="button" aria-label="{{ featured.title }} 미리보기">
+          <span>{{ featured.title }}</span>
+        </button>
+        <a class="featured-card-expansion" href="/detail/{{ featured.id }}/" aria-label="{{ featured.title }} 공연 상세 보기">
+          <img class="featured-expanded-art" src="{% static 'images/' %}{{ featured.poster }}" alt="" />
+          <div class="featured-expanded-content">
+            <div class="eyebrow light">FEATURED PERFORMANCE</div>
+            <h2>{{ featured.title }}</h2>
+            <p>{{ featured.tagline }}</p>
+            <div class="featured-expanded-detail">
+              <strong>{{ featured.date }} · {{ featured.venue }}</strong>
+              <p>{{ featured.description }}</p>
+            </div>
+          </div>
+        </a>
+      </div>
+    {% endfor %}
   </aside>
   </div>
+  <div class="section-divider-grid banner-board-divider">
+    <div class="section-divider" role="separator" aria-label="메인 배너와 게시판 구분">----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------</div>
+  </div>
+  {% comment %}공지사항·자유게시판 미리보기 임시 숨김
+  <section class="notice-section" aria-label="게시판">
+    <div class="notice-grid">
+      <section class="board-column" aria-labelledby="notice-heading">
+        <h2 id="notice-heading">공지사항</h2>
+        <div class="board-content card">
+          <ul class="board-list">
+            {% for notice in notices|slice:":5" %}
+              <li>{{ notice.title }}</li>
+            {% empty %}
+              <li class="board-empty">등록된 공지사항이 없습니다.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+      <section class="board-column" aria-labelledby="free-board-heading">
+        <h2 id="free-board-heading">자유게시판</h2>
+        <div class="board-content card">
+          <ul class="board-list">
+            {% for post in free_posts|slice:":5" %}
+              <li>{{ post.title }}</li>
+            {% empty %}
+              <li class="board-empty">등록된 게시글이 없습니다.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+    </div>
+  </section>
+  <div class="section-divider-grid">
+    <div class="section-divider" role="separator" aria-label="공연 목록과 공지사항 구분">----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------</div>
+  </div>
+  {% endcomment %}
   <div class="genre-list" aria-label="장르 필터">
     {% for item in genres %}
       <a class="chip {% if genre == item %}selected{% endif %}"
@@ -139,11 +209,13 @@
            href="/detail/{{ show.id }}/"
            data-show-link="{{ show.id }}">
           {% include "components/poster.html" with lazy=True %}
-          <span class="poster-tag">{{ show.kind_label }}</span>
           <span class="poster-cta">공연 자세히 보기 ↗</span>
         </a>
         <div class="concert-info">
-          <span class="category">{{ show.genre }}</span>
+          <div class="concert-labels">
+            <span class="category">{{ show.genre }}</span>
+            <span class="seating-tag">{{ show.kind_label }}</span>
+          </div>
           <h3>
             <a href="/detail/{{ show.id }}/">{{ show.title }}</a>
           </h3>
@@ -260,7 +332,7 @@
           <span>현재 대기 순번</span><strong id="queue-rank">{{ rank }}</strong>
         </div>
         <div>
-          <span>예상 대기 시간</span><b id="queue-wait">약 12초</b><small>모의 대기열 기준</small>
+          <span>예상 대기 시간</span><b id="queue-wait">약 {{ queue_wait }}초</b><small>현재 대기 순서 기준</small>
         </div>
       </div>
       <div class="queue-track">
@@ -300,6 +372,7 @@
       <br />
       원하는 좌석을 선택할 수 있어요.
     </p>
+    {% include "components/connection.html" %}
     <form id="captcha-form">
       <div class="captcha-image-wrap">
         <img id="captcha-image"
@@ -336,6 +409,7 @@
     </div>
     <button class="text-button" id="cancel-booking">예매 진행 취소</button>
   </div>
+  {% include "components/connection.html" %}
   <div class="selection-layout">
     <section class="card selection-main">
       {% if show.kind == "reserved" %}

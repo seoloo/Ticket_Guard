@@ -1,7 +1,7 @@
 # [홍석환] 시스템 MongoDB의 선택적 팀 접속 구성
 # 명시한 호스트 주소와 포트로 팀 내부 접속을 허용한다.
 # Optional team access on the host LAN address; keep compose.local.yml for localhost.
-# docker compose -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml -f mongo/compose.lan.yml --profile mongo up -d --no-deps mongo
+# docker compose --env-file .env -p ticket-guard-workspace-db -f compose.yml -f mongo/compose.local.yml -f mongo/compose.lan.yml --profile mongo up -d --no-deps mongo
 services:
   mongo:
     ports:

@@ -4,6 +4,7 @@
 단일 프로세스 잠금을 사용하므로 다중 작업자 운영용 저장소로 사용하지 않는다.
 """
 import secrets
+import math
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -15,29 +16,29 @@ from .events import emit
 SHOWS = {
     'blue-hour': dict(id='blue-hour', title='블루 아워 라이브', english='BLUE HOUR LIVE',
         genre='콘서트', venue='한빛아트홀', date='2026.12.12', time='19:00',
-        price=55000, kind='reserved', kind_label='지정석', poster='blue-hour.png',
+        price=55000, kind='reserved', kind_label='지정석', poster='warm.png',
         tagline='해가 지고, 가장 깊은 푸른 순간에 펼쳐지는 특별한 라이브.',
         description='하루와 밤이 만나는 푸른 시간. 감성적인 라이브 사운드와 깊이 있는 무대로 잊지 못할 저녁을 선사합니다.'),
     'open-air': dict(id='open-air', title='오픈 에어 세션', english='OPEN AIR SESSION',
         genre='페스티벌', venue='리버사이드 파크', date='2026.12.19', time='18:00',
-        price=35000, kind='general', kind_label='자유석', poster='open-air.png',
+        price=35000, kind='general', kind_label='자유석', poster='winter.png',
         tagline='도심을 벗어나, 하늘 아래 펼쳐지는 특별한 라이브.',
         description='노을빛 하늘, 선선한 바람, 그리고 음악. 탁 트인 야외 무대에서 좋아하는 사람과 함께 특별한 시간을 보내세요.')
     , 'spring-concert': dict(id='spring-concert', title='봄날의 콘서트', english='SPRING CONCERT',
         genre='콘서트', venue='올림픽공원 올림픽홀', date='2026.04.19', time='19:00', price=65000,
-        kind='reserved', kind_label='지정석', poster='hero.png', tagline='따뜻한 봄바람과 함께하는 특별한 라이브.',
+        kind='reserved', kind_label='지정석', poster='november.png', tagline='따뜻한 봄바람과 함께하는 특별한 라이브.',
         description='봄의 시작을 알리는 싱어송라이터들의 따뜻한 무대입니다.')
     , 'city-night': dict(id='city-night', title='도시의 밤', english='CITY NIGHT',
         genre='뮤지컬', venue='세빛섬 컨벤션홀', date='2026.05.24', time='20:00', price=48000,
-        kind='reserved', kind_label='지정석', poster='blue-hour.png', tagline='빛나는 도시의 밤, 새로운 이야기.',
+        kind='reserved', kind_label='지정석', poster='warm.png', tagline='빛나는 도시의 밤, 새로운 이야기.',
         description='도시의 불빛 아래 펼쳐지는 감각적인 음악과 퍼포먼스입니다.')
     , 'starlight': dict(id='starlight', title='별빛 아래', english='UNDER THE STARLIGHT',
         genre='페스티벌', venue='서울숲 야외무대', date='2026.06.06', time='18:30', price=42000,
-        kind='general', kind_label='자유석', poster='open-air.png', tagline='별빛 아래 함께 듣는 한여름의 음악.',
+        kind='general', kind_label='자유석', poster='winter.png', tagline='별빛 아래 함께 듣는 한여름의 음악.',
         description='자연과 음악이 만나는 야외 페스티벌에서 특별한 밤을 즐겨보세요.')
     , 'summer-rhythm': dict(id='summer-rhythm', title='여름의 리듬', english='SUMMER RHYTHM',
         genre='콘서트', venue='잠실실내체육관', date='2026.07.18', time='19:30', price=58000,
-        kind='reserved', kind_label='지정석', poster='hero.png', tagline='뜨거운 계절을 깨우는 리듬.',
+        kind='reserved', kind_label='지정석', poster='november.png', tagline='뜨거운 계절을 깨우는 리듬.',
         description='여름밤을 가득 채울 에너지 넘치는 라이브 콘서트입니다.')
 }
 
@@ -62,7 +63,9 @@ class MockRepository:
         self.bookings = {}
         self.sold = {'A5', 'B2', 'B8', 'D3', 'D9', 'F4', 'F8', 'H1', 'H10', 'I4'}
         self.remaining = 28
-        self.queue_counter = 126
+        self.queue_counter = 0
+        self.admission_window = None
+        self.admission_count = 0
         self.opens = {}
         self.scenarios = {}
 
@@ -80,6 +83,40 @@ class MockRepository:
     def opens_at(self, user, show_id):
         return self.opens.get((user, show_id), 0)
 
+    def advance_queue(self):
+        """Global FIFO admission: at most one batch per interval, no saved slots."""
+        with self.lock:
+            now = time.monotonic()
+            interval = settings.BOOKING_ADMISSION_INTERVAL_SECONDS
+            if self.admission_window is None or now >= self.admission_window + interval:
+                self.admission_window = now
+                self.admission_count = 0
+            waiting = []
+            for user in list(self.attempts):
+                a = self.current(user, False)
+                if a and a['stage'] == 'queue':
+                    waiting.append((user, a))
+            waiting.sort(key=lambda item: item[1]['rank'])
+            available = settings.BOOKING_ADMISSION_BATCH_SIZE - self.admission_count
+            for user, a in waiting[:max(0, available)]:
+                a['stage'] = 'captcha'
+                self.admission_count += 1
+                emit(user, 'queue_admitted', a, details={'elapsedMs':round((now-a['entered'])*1000,2)})
+
+    def queue_status(self, a):
+        with self.lock:
+            if a['stage'] != 'queue':
+                return 0, 0
+            rank = sum(other['stage'] == 'queue' and other['rank'] <= a['rank']
+                       for other in self.attempts.values())
+            available = settings.BOOKING_ADMISSION_BATCH_SIZE - self.admission_count
+            if rank <= available:
+                return rank, 0
+            interval = settings.BOOKING_ADMISSION_INTERVAL_SECONDS
+            wait = max(0, self.admission_window + interval - time.monotonic())
+            wait += ((rank - available - 1) // settings.BOOKING_ADMISSION_BATCH_SIZE) * interval
+            return rank, math.ceil(wait)
+
     def start(self, user, show_id, page_id):
         if not isinstance(show_id, str) or show_id not in SHOWS:
             raise FlowError('공연을 찾을 수 없어요.')
@@ -95,13 +132,16 @@ class MockRepository:
                 if old['show_id'] != show_id:
                     raise FlowError('진행 중인 예매를 먼저 취소해 주세요.', 'ACTIVE_ATTEMPT', 409)
                 return old
+            self.advance_queue()
             self.queue_counter += 1
             a = dict(id=str(uuid4()), show_id=show_id, page_id=page_id, stage='queue',
                      entered=time.monotonic(), heartbeat=time.monotonic(), rank=self.queue_counter,
                      wrong=0, captcha='', sequence=0, booking_id=None, scenario=self.scenarios.get((user,show_id)))
             self.attempts[user] = a
             emit(user, 'queue_enter', a)
-            emit(user, 'queue_register', a, details={'initialRank':a['rank'],'estimatedWaitMs':settings.QUEUE_WAIT_SECONDS*1000})
+            rank, wait = self.queue_status(a)
+            emit(user, 'queue_register', a, details={'initialRank':max(1,rank),'estimatedWaitMs':wait*1000})
+            self.advance_queue()
             return a
 
     def owned(self, user, page_id, attempt_id):
@@ -116,9 +156,7 @@ class MockRepository:
         with self.lock:
             a = self.owned(user, page_id, attempt_id)
             a['heartbeat'] = time.monotonic()
-            if a['stage'] == 'queue' and time.monotonic() - a['entered'] >= settings.QUEUE_WAIT_SECONDS:
-                a['stage'] = 'captcha'
-                emit(user,'queue_admitted',a,details={'elapsedMs':round((time.monotonic()-a['entered'])*1000,2)})
+            self.advance_queue()
             return a
 
     def challenge(self, user, page_id, attempt_id, reason='initial'):
@@ -234,7 +272,8 @@ class MockRepository:
                 return
             a = self.owned(user, page_id, attempt_id)
             if name == 'admit' and a['stage'] == 'queue':
-                a['entered'] = time.monotonic() - settings.QUEUE_WAIT_SECONDS
+                a['stage'] = 'captcha'
+                emit(user,'queue_admitted',a,details={'elapsedMs':round((time.monotonic()-a['entered'])*1000,2)})
             elif name == 'expire' and a['stage'] != 'complete':
                 a['heartbeat'] = time.monotonic() - settings.ATTEMPT_TIMEOUT_SECONDS - 1
             elif name == 'four_wrong' and a['stage'] == 'captcha':

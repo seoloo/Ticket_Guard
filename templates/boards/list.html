@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static assets %}
+{% block title %}{{ board.title }} · 티켓가드{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% asset 'boards.css' %}">{% endblock %}
+{% block content %}
+<div class="boards-layout">
+  <aside class="boards-sidebar" aria-label="이용 메뉴">
+    <div class="boards-menu-heading"><span class="eyebrow">TICKET GUARD</span><strong>이용 메뉴</strong></div>
+    <nav class="boards-menu" aria-label="게시판 주 메뉴">
+      <a href="{% url 'home' %}">공연 찾기</a>
+      <a href="/history/">예매 내역</a>
+      <a href="{% url 'notices' %}" {% if screen == 'notices' %}aria-current="page"{% endif %}>공지사항</a>
+      <a href="{% url 'free_board' %}" {% if screen == 'free_board' %}aria-current="page"{% endif %}>자유게시판</a>
+    </nav>
+    <p class="boards-menu-note">좋아하는 무대와 만나는 순간<br>티켓가드와 함께하세요.</p>
+  </aside>
+  <section class="boards-main" aria-labelledby="board-title">
+    <div class="boards-breadcrumb"><a href="{% url 'home' %}">홈</a><span aria-hidden="true"> / </span>{{ board.title }}</div>
+    <div class="boards-heading">
+      <div><span class="eyebrow">{{ board.eyebrow }}</span><h1 id="board-title">{{ board.title }}</h1><p>{{ board.description }}</p></div>
+      <span class="boards-count">총 <strong>{{ total_count }}</strong>개의 글</span>
+    </div>
+    <div class="boards-tools">
+      <nav class="boards-filters" aria-label="{{ board.title }} 분류">
+        {% for item in board.categories %}
+          <a class="boards-filter{% if category == item %} is-selected{% endif %}" href="?category={{ item|urlencode }}&amp;q={{ query|urlencode }}" {% if category == item %}aria-current="true"{% endif %}>{{ item }}</a>
+        {% endfor %}
+      </nav>
+      <form class="boards-search" method="get" role="search">
+        <input type="hidden" name="category" value="{{ category }}">
+        <label class="sr-only" for="board-search">{{ board.title }} 제목 검색</label>
+        <input id="board-search" type="search" name="q" value="{{ query }}" maxlength="100" placeholder="제목을 검색해 보세요">
+        <button type="submit">검색</button>
+      </form>
+    </div>
+    <div class="boards-table-wrap" tabindex="0" role="region" aria-label="{{ board.title }} 목록">
+      <table class="boards-table">
+        <caption class="sr-only">{{ board.title }} 글 목록</caption>
+        <thead><tr><th scope="col">번호</th><th scope="col" class="boards-title-cell">제목</th>{% if screen == 'free_board' %}<th scope="col">작성자</th>{% endif %}<th scope="col">등록일</th><th scope="col">조회</th></tr></thead>
+        <tbody>
+          {% for post in posts %}
+            <tr><td>{{ post.number }}</td><td class="boards-title-cell">{{ post.title }}</td>{% if screen == 'free_board' %}<td>{{ post.author }}</td>{% endif %}<td>{{ post.date }}</td><td>{{ post.views }}</td></tr>
+          {% empty %}
+            <tr><td class="boards-empty" colspan="{% if screen == 'free_board' %}5{% else %}4{% endif %}">{% if query %}검색 결과가 없습니다.{% else %}{{ board.empty }}{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="boards-help"><p>공연별 이용 안내는 공연 상세 페이지에서 확인해 주세요.</p><a href="{% url 'home' %}">공연 찾아보기 ↗</a></div>
+  </section>
+</div>
+{% endblock %}

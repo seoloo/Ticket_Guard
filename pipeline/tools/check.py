@@ -9,14 +9,14 @@ import socket
 import tempfile
 from pathlib import Path
 import pymongo
-from mongo_writer import client_for
+from ingestion.mongo_writer import client_for
 
 
 def worker_import_check(_):
     import pymongo
-    import records
-    import mongo_writer
-    import settings
+    from ingestion import records
+    from ingestion import mongo_writer
+    from configuration import ingest as settings
     return pymongo.version == '4.15.5' and callable(records.document) and callable(mongo_writer.write_partition)
 
 

@@ -21,6 +21,7 @@ from .events import emit, publisher, CLIENT_EVENTS, build_event, event_request_c
 from .event_schema import EventValidationError, timestamp, validate_event, validate_details
 from .telemetry import TELEMETRY_EVENTS, sanitize
 from .qa_test_hooks import is_test_account_login
+from .login_guard import login_guard, login_client, issue_login_cookie
 
 ADMIN_HOME_URL = '/qa/'  # 팀 입구(nginx)가 QA 대시보드로 넘김
 
@@ -38,9 +39,9 @@ def stage_url(a):
 
 
 def snapshot(a):
+    rank, wait = repo.queue_status(a)
     return dict(id=a['id'], stage=a['stage'], redirect=stage_url(a),
-                rank=max(1, a['rank'] - int((time.monotonic()-a['entered']) * 10)),
-                wait=max(0, int(settings.QUEUE_WAIT_SECONDS-(time.monotonic()-a['entered']))),
+                rank=rank, wait=wait,
                 wrong=a['wrong'], sequence=a['sequence'], sold=sorted(repo.sold), remaining=repo.remaining)
 
 
@@ -71,11 +72,12 @@ def page(request, screen, identifier=None):
                 context.update(show=SHOWS[identifier], opens_at=int(repo.opens_at(user, identifier)*1000))
             elif screen in ('queue', 'captcha', 'select'):
                 a = repo.current(user)
+                repo.advance_queue()
                 if a['stage'] != screen:
                     emit(user,'booking_access_rejected',a,result='rejected',errorCode='INVALID_STEP',details={'action':'page_'+screen})
                     return redirect(stage_url(a))
                 context.update(show=SHOWS[a['show_id']], attempt_id=a['id'], sequence=a['sequence'],
-                               rank=a['rank'], wrong=a['wrong'], remaining=repo.remaining,
+                               rank=repo.queue_status(a)[0], queue_wait=repo.queue_status(a)[1], wrong=a['wrong'], remaining=repo.remaining,
                                rows=[dict(label=r, seats=[dict(id=f'{r}{c}', number=c, sold=f'{r}{c}' in repo.sold)
                                      for c in range(1, 11)]) for r in 'ABCDEFGHIJ'])
             elif screen == 'complete':
@@ -120,7 +122,11 @@ def qa_reset(request):
     if request.session.get('role') != 'admin':
         return JsonResponse({'error': '관리자 권한이 필요해요.'}, status=403)
     repo.reset()
+    login_guard.reset()
     return JsonResponse({'ok': True})
+
+
+LOGIN_LOCKED_MESSAGE = '로그인 오류가 반복되어 계정 보호를 위해 로그인을 막았어요. 잠시 후 다시 시도해 주세요.'
 
 
 def read_body(request):
@@ -137,6 +143,7 @@ def read_body(request):
 
 @require_POST
 @never_cache
+@issue_login_cookie
 @event_request_context
 def action(request):
     data={}
@@ -148,12 +155,26 @@ def action(request):
             username, password = data.get('username', ''), data.get('password', '')
             if not isinstance(username, str) or not isinstance(password, str):
                 raise FlowError('아이디와 비밀번호를 확인해 주세요.')
+            # Counted per browser, whatever usernames are tried. Locked = refused even with the right password.
+            client = login_client(request)
+            if login_guard.is_locked(client):
+                emit(None, 'login_fail', result='rejected', errorCode='LOGIN_LOCKED', details={'reason': 'locked'})
+                raise FlowError(LOGIN_LOCKED_MESSAGE, 'LOGIN_LOCKED', 429)
             is_admin = is_admin_login(username, password)
             is_customer = username in (settings.DEMO_USERNAME, settings.DEMO_SECOND_USERNAME) and secrets.compare_digest(password, settings.DEMO_PASSWORD)
             is_customer = is_customer or is_test_account_login(username, password)
             if not (is_admin or is_customer):
-                emit(None, 'login_fail', result='failure', errorCode='INVALID_CREDENTIALS')
-                raise FlowError('아이디 또는 비밀번호를 확인해 주세요.', 'LOGIN_FAILED', 401)
+                failures, locked_now = login_guard.fail(client)
+                emit(None, 'login_fail', result='failure', errorCode='INVALID_CREDENTIALS',
+                     details={'failureCount': failures, 'maxFailures': settings.LOGIN_MAX_FAILURES})
+                if locked_now:
+                    emit(None, 'login_fail', result='rejected', errorCode='LOGIN_LOCKED',
+                         details={'reason': 'limit_reached', 'failureCount': failures})
+                    raise FlowError(LOGIN_LOCKED_MESSAGE, 'LOGIN_LOCKED', 429)
+                error = FlowError(f'아이디 또는 비밀번호를 확인해 주세요 · 로그인 오류 {failures}회', 'LOGIN_FAILED', 401)
+                error.extra = {'failureCount': failures}
+                raise error
+            login_guard.succeed(client)
             request.session.flush()
             request.session['user'] = username
             request.session['role'] = 'admin' if is_admin else 'customer'
@@ -209,7 +230,7 @@ def action(request):
                 emit(user,'booking_confirm_rejected',a,result='rejected',errorCode=e.code,details={'action':'confirm'})
             elif e.code in ('AUTH_REQUIRED','DUPLICATE_PAGE','ACTIVE_ATTEMPT','STALE_ATTEMPT','EXPIRED'):
                 emit(user,'booking_access_rejected',a,result='rejected',errorCode=e.code,details={'action':safe_action})
-        body = dict(error=e.message, code=e.code, redirect=e.redirect)
+        body = dict(error=e.message, code=e.code, redirect=e.redirect, **getattr(e, 'extra', {}))
         if e.code in ('SEAT_SOLD', 'INSUFFICIENT_STOCK'):
             with repo.lock:
                 body.update(sold=sorted(repo.sold), remaining=repo.remaining)

@@ -11,5 +11,6 @@ __pycache__
 !.env.example
 docs
 .pytest_cache
+**/.pytest_cache
 .coverage
 htmlcov

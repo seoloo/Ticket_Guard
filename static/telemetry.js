@@ -8,10 +8,13 @@
   'use strict';
   const nativeFetch = window.fetch.bind(window);
   const queueKey = 'tg-capture-v2';
-  let pageInstanceId=crypto.randomUUID(),bootstrapStorageError=null;
-  try {pageInstanceId=sessionStorage.getItem('tg-page')||pageInstanceId;sessionStorage.setItem('tg-page',pageInstanceId);}
-  catch(error){bootstrapStorageError=error.name;console.error('Capture storage unavailable; using memory',error.name);}
-  const pageViewId = crypto.randomUUID();
+  // Safe stand-ins from browser-support.js (shared with app.js so both see the same tg-page).
+  const {storage:safeStorage,uuid}=window.tgBrowser;
+  let pageInstanceId=safeStorage.getItem('tg-page')||uuid(),bootstrapStorageError=null;
+  safeStorage.setItem('tg-page',pageInstanceId);
+  const storageProblem=window.tgBrowser.problems.find(p=>p.capability.startsWith('session_storage'));
+  if(storageProblem){bootstrapStorageError=storageProblem.reason||'unavailable';console.error('Capture storage unavailable; using memory',bootstrapStorageError);}
+  const pageViewId = uuid();
   const secretKey = /^(?:password|passwd|current[-_]?password|new[-_]?password|confirm[-_]?password|authorization|proxy[-_]?authorization|(?:set[-_]?)?cookie|sessionid|csrf|csrf[-_]?token|x[-_]?csrf[-_]?token|csrfmiddlewaretoken|(?:x[-_]?)?api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|auth|secret|client[-_]?secret|answer|captcha[-_]?answer|captcha[-_]?response|g[-_]?recaptcha[-_]?response|otp)$/i;
   const secrets = new Set();
   const diagnostics = {storageFailures:bootstrapStorageError?1:0, serializationFailures:0, rejected:0, networkFailures:0, delivered:0, lastError:null};
@@ -121,7 +124,7 @@
       if(audit.redactions.length)audit.status='redacted';
       const token=csrf();if(token)secrets.add(token);
       const safeContext=redact(jsonCopy(context),'context',audit);
-      queue.push({payload:{eventId:crypto.randomUUID(),eventType,occurredAt:new Date().toISOString(),pageInstanceId,pageViewId,
+      queue.push({payload:{eventId:uuid(),eventType,occurredAt:new Date().toISOString(),pageInstanceId,pageViewId,
         ...safeContext,details:clean,capture:audit},pending:false,failures:0});
       persist();void flush();
     } catch(error) {diagnostics.serializationFailures++;diagnostics.lastError='capture:'+error.name;console.error('Capture failed',eventType,error.name);}
@@ -205,7 +208,7 @@
   window.fetch=function(input,init={}) {
     const rawUrl=input instanceof Request?input.url:String(input);
     if(excluded(rawUrl))return nativeFetch(input,init);
-    const began=performance.now(),requestId=crypto.randomUUID();
+    const began=performance.now(),requestId=uuid();
     let request;
     try {
       const headers=pairs(init.headers||(input instanceof Request?input.headers:undefined));
@@ -253,7 +256,7 @@
   xhrProto.setRequestHeader=function(name,value){const result=setHeader.call(this,name,value);xhrData.get(this)?.headers.push({name,value});return result;};
   xhrProto.send=function(value){
     const info=xhrData.get(this);if(!info||excluded(info.url))return send.call(this,value);
-    const began=performance.now(),requestId=crypto.randomUUID();
+    const began=performance.now(),requestId=uuid();
     const type=info.headers.find(x=>x.name.toLowerCase()==='content-type')?.value||'';
     const requestBody=body(value,type).catch(failedBody);
     void requestBody.then(snapshot=>record('browser_request_body',{requestId,transport:'xhr',request:{...info,body:snapshot}}));
@@ -301,4 +304,6 @@
       value:el?.type==='password'?'[REDACTED]':el?.value});
   },true);
   record('page_lifecycle',{phase:'collector_ready',url:location.href,readyState:document.readyState});
+  // Browser tools refused before this collector existed (later ones report themselves).
+  for(const problem of window.tgBrowser.problems)record('browser_error',{kind:'browser_capability',...problem});
 })();
