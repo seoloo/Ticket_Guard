@@ -1,4 +1,8 @@
 """로컬 Spark용 검증 우선 배치 처리와 무이벤트 시간 갱신."""
+"""
+[홍석환] 원본 자동 대조와 범위별 검증 공개 실행
+각 필터의 계산 결과까지 대조하고 실패 후 타이머 공개를 차단한다.
+"""
 import json
 import threading
 import time
@@ -34,12 +38,13 @@ class Processor:
             rows = list(islice(iterator, 100))
             if not rows:
                 return
-            for attempt in range(5):
+            deadline = time.monotonic() + self.config.raw_wait_seconds
+            while True:
                 try:
                     originals = verified_records(self.raw, self.config.source, rows, self.config.timeout_ms)
                     break
                 except VerificationPending:
-                    if attempt == 4:
+                    if time.monotonic() >= deadline:
                         raise
                     time.sleep(.25)
             yield from zip(rows, originals)
@@ -73,7 +78,8 @@ class Processor:
             except Exception as exc:
                 self.failed = True
                 self.target.flow_health.replace_one({'_id': 'pipeline'}, {'_id': 'pipeline', 'status': 'blocked',
-                    'checkedAt': iso(self.clock()), 'errorClass': type(exc).__name__}, upsert=True)
+                    'checkedAt': iso(self.clock()), 'errorClass': type(exc).__name__,
+                    'reason': str(exc) if isinstance(exc, VerificationPending) else '처리 실패'}, upsert=True)
                 raise RuntimeError('사용자 흐름 검증 실패: 공개 보류, 체크포인트 재시작 필요') from None
             finally:
                 reference.close()
@@ -86,6 +92,12 @@ class Processor:
             state = self.state()
             try:
                 self._publish(state)
+            except Exception as exc:
+                self.failed = True
+                self.target.flow_health.replace_one({'_id': 'pipeline'}, {'_id': 'pipeline',
+                    'status': 'blocked', 'checkedAt': iso(self.clock()),
+                    'errorClass': type(exc).__name__}, upsert=True)
+                raise
             finally:
                 state.close()
 
@@ -104,16 +116,20 @@ class Processor:
             if not reference.ready():
                 raise VerificationPending('원본 재계산 상태 미완료')
             reference.prune(now, self.config.retention, self.config.grace, self.config.presence)
-            expected = calculate(reference.observations(), now, self.config.presence, self.config.retention)
+            reference_rows = reference.observations()
+            expected = calculate(reference_rows, now, self.config.presence, self.config.retention)
             if calculate(rows, now, self.config.presence, self.config.retention) != expected:
                 raise VerificationPending('원본 재계산 지표 불일치')
         finally:
             reference.close()
-        contexts = {r['attempt']: (r['simulation'], r['show'], r['schedule']) for r in rows
-                    if r['attempt'] and r['simulation'] is not None}
-        for row in rows:
-            if row['attempt'] in contexts:
-                row['simulation'], row['show'], row['schedule'] = contexts[row['attempt']]
+        def enrich(values):
+            contexts = {r['attempt']: (r['simulation'], r['show'], r['schedule']) for r in values
+                        if r['attempt'] and r['simulation'] is not None}
+            for row in values:
+                if row['attempt'] in contexts:
+                    row['simulation'], row['show'], row['schedule'] = contexts[row['attempt']]
+        enrich(rows)
+        enrich(reference_rows)
         # 관측된 차원만 제공한다. all 외에 완전 일치 차원을 제공하며 임의 조합은 생성하지 않는다.
         scopes = {'all': rows}
         dimensions = {(r['simulation'], r['show'], r['schedule']) for r in rows}
@@ -126,9 +142,14 @@ class Processor:
             scopes[key] = [r for r in rows if (r['simulation'], r['show'], r['schedule']) == (simulation, show, schedule)]
         if len(scopes) > 100:
             raise RuntimeError('차원 수 제한 초과')
+        prepared = []
         for scope, values in scopes.items():
             calculated_at = self.clock()
             metrics = calculate(values, now, self.config.presence, self.config.retention)
+            expected_values = reference_rows if scope == 'all' else [r for r in reference_rows
+                if (r['simulation'], r['show'], r['schedule']) == tuple(json.loads(scope))]
+            if metrics != calculate(expected_values, now, self.config.presence, self.config.retention):
+                raise VerificationPending('필터별 원본 재계산 지표 불일치')
             metrics['calculatedAt'] = iso(calculated_at)
             metrics['latestReceivedAt'] = iso(max(r['received'] for r in values)) if values else None
             coverage = state.db.execute("SELECT value FROM meta WHERE key='coverageStart'").fetchone()
@@ -141,18 +162,22 @@ class Processor:
             history = [h for h in history if now - self.config.retention <= h['epoch'] and h['epoch'] != at]
             history.append({'epoch': at, 'at': iso(at), 'asOf': iso(now), 'current': metrics['current'], 'observed': True})
             # 중단 구간을 0으로 채우지 않는다. 12시간 격자에서 명시적 미관측값으로 제공한다.
+            # [홍석환] 현재 설정은 한 시간이며 중단된 구간은 접속·예매 모두 미관측이다.
             from user_flow.events import stamp
             first = (int((now-self.config.retention)//5)+1)*5
             grid = range(first, at+1, 5)
             known_presence = {h['epoch']: h for h in history}
             metrics['presenceSeries'] = [known_presence.get(t, {'at': iso(t), 'current': None, 'observed': False}) for t in grid]
             known_booking = {int(stamp(h['at'])): h for h in metrics['bookingSeries']}
-            metrics['bookingSeries'] = [known_booking.get(t, {'at': iso(t), 'numerator': 0 if t >= coverage_start else None,
-                'denominator': 0 if t >= coverage_start else None, 'ratio': None,
-                'ongoing': 0 if t >= coverage_start else None, 'observed': t >= coverage_start}) for t in grid]
+            metrics['bookingSeries'] = [known_booking.get(t, {'at': iso(t),
+                'numerator': 0 if t in known_presence else None,
+                'denominator': 0 if t in known_presence else None, 'ratio': None,
+                'ongoing': 0 if t in known_presence else None, 'observed': t in known_presence}) for t in grid]
             metrics['scope'] = scope
             metrics['verifiedAt'] = iso(self.clock())
             # 공개 시각은 기준 시각과 달리 실제 저장 직전의 시각이다.
+            prepared.append((scope, metrics, key, history))
+        for scope, metrics, key, history in prepared:
             publish(self.target, metrics, state.ranges(), self.clock(), scope, self.config.retention, 30)
             state.db.execute('INSERT OR REPLACE INTO meta VALUES (?,?)', (key, json.dumps(history)))
             state.db.commit()

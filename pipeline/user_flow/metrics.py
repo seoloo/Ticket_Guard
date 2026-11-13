@@ -1,4 +1,8 @@
 """검증된 최소 관측값으로 최근 12시간의 그래프와 수치를 계산한다."""
+"""
+[홍석환] 최근 한 시간 사용자 흐름 계산
+기존 설명의 12시간은 이전 기준이며 기본 집계 범위는 현재 한 시간이다.
+"""
 from collections import defaultdict
 from statistics import mean, median
 from user_flow.events import STAGES, LABELS, iso
@@ -8,7 +12,7 @@ def ratio(n, d):
     return {'numerator': n, 'denominator': d, 'ratio': n / d if d else None}
 
 
-def calculate(observations, now, presence_seconds=30, retention=43200, bucket=5):
+def calculate(observations, now, presence_seconds=30, retention=3600, bucket=5):
     rows = sorted((r for r in observations if r['time'] <= now), key=lambda r: (r['time'], r['id']))
     cutoff = now - retention
     # 같은 브라우저의 시작 전 화면은 다음 시작 시도에만 연결한다. 브라우저 간 추정 연결은 하지 않는다.
