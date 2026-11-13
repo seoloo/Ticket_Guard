@@ -1,0 +1,16 @@
+/*
+[홍석환] 실제 공개 지표의 조회 조건과 상태 스타일
+기준 시각·조회 범위·오류·미연결 상태를 시안과 구분해 표시한다.
+*/
+.mp-live-toolbar { display:flex; justify-content:space-between; gap:15px; align-items:center; margin:5px 0 22px; flex-wrap:wrap; }
+.mp-live-toolbar form { display:flex; align-items:center; gap:10px; max-width:100%; }
+.mp-live-toolbar label { margin:0; color:#6a7c98; font-size:12px; white-space:nowrap; }
+.mp-live-toolbar select { max-width:560px; min-height:38px; padding:7px 10px; border:1px solid #dce4f1; border-radius:8px; background:white; font-size:12px; width:auto; }
+.mp-live-toolbar>div { display:flex; gap:20px; font-size:12px; color:#5273ad; }
+.mp-live-meta { display:flex; flex-wrap:wrap; gap:13px; align-items:center; margin-bottom:22px; padding:13px 16px; border:1px solid #dce8f6; border-radius:10px; background:#f0f6ff; color:#5f7392; font-size:12px; }
+.mp-live-meta details { margin-left:auto; }.mp-live-meta summary { cursor:pointer; }.mp-live-meta details p { padding-top:8px; }
+.mp-empty-state { min-height:280px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+.mp-empty-state p { color:#71819a; max-width:720px; font-size:13px; line-height:1.8; }
+.mp-state-symbol { font-size:34px; color:#8ba4cb; }
+.mp-empty-chart { display:grid; min-height:220px; place-items:center; color:#8594ab; font-size:12px; }
+@media(max-width:700px) { .mp-live-toolbar form { width:100%; }.mp-live-toolbar select { min-width:0; width:100%; flex:1; }.mp-live-toolbar>div { font-size:11px; }.mp-live-meta { font-size:11px; }.mp-live-meta details { margin-left:0; width:100%; }.mp-empty-state { padding:28px 18px; }.mp-empty-state p { font-size:12px; } }

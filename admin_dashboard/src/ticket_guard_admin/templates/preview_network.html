@@ -1,0 +1,16 @@
+<!--
+[홍석환] 네트워크 상태 지표 검토 시안
+HTTP 오류와 응답 미수신을 구분하고 브라우저·서버 관측 시간을 표시한다.
+-->
+<section class="mp-view" data-preview-view="network" aria-labelledby="network-title" hidden>
+  <div class="mp-heading"><div><p class="mp-eyebrow">NETWORK OBSERVATION</p><h1 id="network-title" tabindex="-1">네트워크 상태</h1><p>요청과 응답의 관측 결과를 바탕으로 통신·서비스 상태를 살펴봅니다.</p></div><div class="mp-heading-tags"><span class="mp-pill mp-proposed">검토용 제안</span><span class="mp-period">최근 12시간 · KST</span></div></div>
+  <p class="mp-proposal-note">시안용 샘플 데이터 · 지표와 집계 기준은 검토용 제안이며 실제 운영 상태가 아닙니다.</p>
+  <div class="mp-network-kpis">
+    <article class="mp-card mp-compact-kpi"><h2>요청 수</h2><strong>{{ "{:,}".format(preview.network.requests) }}<small>건</small></strong><p>서버에서 관측한 HTTP 요청</p></article>
+    <article class="mp-card mp-compact-kpi"><h2>HTTP 오류 비율</h2><strong>{{ (preview.network.errors / preview.network.requests * 100)|round(1) }}<small>%</small></strong><p>오류 응답 {{ preview.network.errors }}건 / 요청 {{ "{:,}".format(preview.network.requests) }}건</p></article>
+    <article class="mp-card mp-compact-kpi"><h2>응답 미수신</h2><strong>{{ preview.network.missing }}<small>건</small></strong><p>브라우저에서 HTTP 응답을 받지 못한 요청</p></article>
+    <article class="mp-card mp-compact-kpi"><h2>브라우저 응답 관측 시간</h2><strong>{{ preview.network.browserMean|round|int }}<small>ms 평균</small></strong><p>중앙값 {{ preview.network.browserMedian }}ms · 순수 회선 지연과 다름</p></article>
+  </div>
+  <div class="mp-chart-grid"><section class="mp-card"><div class="mp-card-heading"><div><h2>요청 추이</h2><p>서버 관측 요청 · 구간별 건수</p></div><span class="mp-soft-tag">서버 관측</span></div><div class="mp-chart" id="mp-requests-chart"></div><p class="mp-chart-note"><span class="mp-chart-key"></span>HTTP 요청 수 · 합계 {{ "{:,}".format(preview.network.requests) }}건</p></section><section class="mp-card"><div class="mp-card-heading"><div><h2>HTTP 오류 추이</h2><p>오류 상태 코드가 반환된 요청 · 단위: 건</p></div><span class="mp-soft-tag">응답 미수신 별도</span></div><div class="mp-chart" id="mp-errors-chart"></div><p class="mp-chart-note"><span class="mp-chart-key amber"></span>HTTP 오류 응답 · 합계 {{ preview.network.errors }}건</p></section></div>
+  <section class="mp-card"><div class="mp-card-heading"><div><h2>요청 경로별 관측 상태</h2><p>브라우저 관측과 서버 처리 시간을 구분합니다. 단위: ms</p></div><span class="mp-soft-tag">검토용 제안</span></div><div class="mp-table-scroll"><table><thead><tr><th>요청 경로</th><th>서버 요청</th><th>HTTP 오류</th><th>응답 미수신</th><th>브라우저 평균 / 중앙값</th><th>서버 평균 / 중앙값</th></tr></thead><tbody>{% for row in preview.network.paths %}<tr><th><code>{{ row.path }}</code></th><td>{{ "{:,}".format(row.requests) }}건</td><td>{{ row.errors }}건</td><td>{{ row.missing }}건</td><td>{{ row.browserMean }} / {{ row.browserMedian }}</td><td>{{ row.serverMean }} / {{ row.serverMedian }}</td></tr>{% endfor %}</tbody></table></div><p class="mp-chart-note">서버 처리 시간 평균 {{ preview.network.serverMean }}ms · 중앙값 {{ preview.network.serverMedian }}ms. HTTP 오류는 응답을 받은 경우이며, 응답 미수신과 중복 집계하지 않습니다.</p></section>
+</section>

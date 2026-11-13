@@ -1,3 +1,7 @@
+/*
+[홍석환] 기존 원본 DB의 쓰기 계정 설정
+명시적으로 인증한 환경에서 쓰기 계정을 준비하고 기존 자격 증명을 덮어쓰지 않는다.
+*/
 // Explicit account setup for existing volumes; never resets existing credentials.
 let stage = 'configuration';
 try {

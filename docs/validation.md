@@ -1,3 +1,7 @@
+<!--
+[홍석환] 웹 구현 검증 기록
+검증 환경과 수행한 검사, 확인 결과 및 남은 제한을 기록한다.
+-->
 # Phase 1 verification
 
 Environment: Docker Desktop Linux container, official python:3.13.15-slim-trixie, Python 3.13.15, Django 5.2.18, Pillow 12.0.0. Existing compose.yml and GitHub remote retained.

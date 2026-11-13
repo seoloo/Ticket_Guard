@@ -1,4 +1,8 @@
-"""Idempotent collection bulks. The caller commits only after ALL bulks succeed."""
+"""
+[홍석환] 분류된 원본 배치의 MongoDB 저장
+컬렉션별 중복 방지 쓰기와 제한된 재시도를 수행한다.
+모든 저장이 성공한 뒤에만 호출자가 소비 위치를 확정할 수 있다.
+"""
 import time
 from collections import defaultdict
 import pymongo

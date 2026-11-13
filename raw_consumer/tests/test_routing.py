@@ -1,3 +1,7 @@
+"""
+[홍석환] 원본 라우팅과 저장 회귀 검사
+컬렉션 선택·원문 보존·배치·소비 위치 확정·실패 처리를 검증한다.
+"""
 import json
 import time
 import unittest

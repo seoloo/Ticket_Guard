@@ -1,4 +1,8 @@
-"""Anonymous simulation capture; business authentication remains unchanged."""
+"""
+[홍석환] 브라우저 관측 데이터 수신
+수집 요청을 검증·정제하고 이벤트 발행 및 수신 상태 조회를 제공한다.
+업무 인증과 수집 소유권을 구분한다.
+"""
 import json
 from uuid import UUID
 from django.core.exceptions import RequestDataTooBig

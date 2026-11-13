@@ -1,4 +1,7 @@
-"""Real isolated-topic regression. Only test-source documents are added."""
+"""
+[홍석환] 원본 적재 통합 검증
+격리된 Kafka 토픽과 시험 원본 식별자로 실제 적재·재처리 결과를 확인한다.
+"""
 import json
 import os
 import subprocess

@@ -1,4 +1,7 @@
-"""Read-only connection check run in the QA image, without importing QA code."""
+"""
+[홍석환] QA 환경의 외부 MongoDB 연결 점검
+QA 코드를 가져오지 않고 지정된 DB 연결을 읽기 전용으로 확인한다.
+"""
 import os
 import sys
 

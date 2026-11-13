@@ -1,0 +1,37 @@
+/*
+[홍석환] 공통 사용자 흐름 네트워크 그래프 스타일
+가변 단계 수와 전환율·역방향·재시도·취소 경로를 구분해 배치한다.
+*/
+.mp-flow-card { margin-top:0; }
+.mp-legend { display:flex; gap:19px; flex-wrap:wrap; align-items:center; font-size:10px; color:#7b88a0; margin:18px 0 3px; }
+.mp-legend>span { display:flex; align-items:center; gap:5px; }
+.mp-dot { height:7px; width:7px; display:inline-block; border-radius:50%; background:#2e6ae8; }
+.mp-line { width:17px; height:0; border-top:2px dashed #9aa8bb; display:inline-block; }
+.mp-line.purple { border-color:#8c78c8; }.mp-line.amber { border-color:#c5a04d; }
+.mp-legend .mp-legend-help { margin-left:auto; color:#96a1b3; font-size:10px; }
+.mp-flow-scroll { overflow-x:auto; margin:0 -5px; padding:4px 5px 0; }
+.mp-flow-graph { position:relative; min-width:1120px; height:290px; }
+.mp-flow-svg { position:absolute; inset:0; width:100%; height:100%; }
+.mp-flow-svg .mp-forward-path { fill:none; stroke:#7fa4ef; stroke-linecap:round; }
+.mp-flow-svg .mp-secondary-path { fill:none; stroke-width:1.5; stroke-dasharray:5 5; }
+.mp-stage { position:absolute; top:77px; width:154px; min-height:135px; border:1px solid #cfdcf2; border-radius:14px; background:linear-gradient(180deg,#f4f8ff,#fff); box-shadow:0 3px 8px #2858b006; text-align:left; padding:12px 13px; cursor:pointer; }
+.mp-stage:before { content:""; display:block; height:3px; border-radius:5px; width:28px; background:#769cec; margin-bottom:10px; }
+.mp-stage.selected { border-color:#3470eb; box-shadow:0 0 0 2px #e4edff; background:#f3f7ff; }
+.mp-stage-name { display:block; font-size:12px; font-weight:700; color:#425d83; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mp-stage-count { display:block; font-size:27px; font-weight:800; color:#2856b7; line-height:1.6; letter-spacing:-1px; }
+.mp-stage-count small { font-size:11px; margin-left:4px; font-weight:500; }
+.mp-stage-times { display:block; font-size:9px; color:#8292ab; line-height:1.8; white-space:nowrap; }
+.mp-stage-last { background:linear-gradient(180deg,#eef9f7,#fff); border-color:#c5e6df; }
+.mp-stage-last:before { background:#3caa94; }.mp-stage-last .mp-stage-count { color:#238b78; }
+.mp-edge-button { position:absolute; top:112px; width:43px; padding:3px 0; border:0; border-radius:5px; background:#fff; color:#5276b6; font-size:10px; font-weight:700; z-index:2; text-align:center; cursor:pointer; }
+.mp-edge-button:hover { background:#e9f1ff; }
+.mp-route-button { position:absolute; border:0; padding:3px 8px; border-radius:9px; font-size:10px; cursor:pointer; }
+.mp-route-button.backward { top:258px; color:#8975b5; background:#f3effa; }
+.mp-route-button.retry { top:15px; color:#9b7b2d; background:#fbf6e9; }
+.mp-route-button.cancel { top:232px; color:#7a8ba4; background:#f1f4f8; }
+.mp-flow-detail { padding:12px 15px; border:1px solid #e2eaf8; border-radius:8px; background:#f7faff; font-size:11px; color:#6e82a1; margin-top:5px; min-height:42px; line-height:1.8; }
+.mp-flow-detail b { color:#3a6095; }
+.mp-data-details { margin-top:12px; font-size:11px; color:#778ba8; }
+.mp-data-details summary { cursor:pointer; padding:4px 0; }
+.mp-data-details table { margin-top:12px; }
+@media(max-width:700px) { .mp-legend { gap:12px; }.mp-legend .mp-legend-help { margin-left:0; width:100%; }.mp-flow-scroll { border-right:1px dashed #dfe7f4; }.mp-flow-graph { min-width:1100px; }.mp-flow-detail { font-size:10px; } }

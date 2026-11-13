@@ -1,3 +1,7 @@
+/*
+[홍석환] 원본 컬렉션과 위치 인덱스 준비
+이벤트 분류별 컬렉션 및 원본 식별자·토픽·파티션·오프셋 조회 인덱스를 구성한다.
+*/
 // Repeatable setup for existing volumes. Does not change users or raw_events.
 function setupRawRouting(target) {
   const names = ['behavior_events', 'booking_events', 'auth_events', 'http_events',

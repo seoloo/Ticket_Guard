@@ -1,4 +1,7 @@
-"""Direct, batched Kafka raw routing. No post-ingestion classification stage."""
+"""
+[홍석환] Kafka 원본 소비와 배치 저장 실행
+파티션 소유권과 저장 완료를 확인한 뒤 소비 위치를 확정하고 종료·복구를 관리한다.
+"""
 import logging
 import os
 import signal

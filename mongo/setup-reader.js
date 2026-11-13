@@ -1,3 +1,7 @@
+/*
+[홍석환] 시스템 MongoDB 조회 계정 설정
+조회 계정의 입력값을 검사하고 최초 설치 또는 명시적 설정 시 읽기 권한을 준비한다.
+*/
 // Shared by first initialization and explicit, authenticated existing-DB setup.
 function readerSettings() {
   const username = process.env.MONGO_ADMIN_READER_USERNAME || '';

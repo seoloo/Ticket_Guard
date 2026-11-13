@@ -1,4 +1,7 @@
-"""Capture contract integration check against the configured development Kafka."""
+"""
+[홍석환] 관측 이벤트 Kafka 연동 검증 명령
+개발용 Kafka에서 수집 데이터 전송 계약과 재조립 결과를 확인한다.
+"""
 import json
 import time
 from datetime import datetime,timezone

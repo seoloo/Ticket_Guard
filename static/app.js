@@ -1,3 +1,8 @@
+/*
+[홍석환] 예매 화면의 사용자 동작 처리
+화면 이동·예매 요청·접속 유지·시나리오 제어 및 사용자 이벤트 수집을 연결한다.
+예매 상태와 검증의 최종 판단은 서버에서 수행한다.
+*/
 /* Plain browser JS. Authoritative state, prices and checks live on Django. */
 (() => {
   'use strict';

@@ -1,3 +1,5 @@
+# [홍석환] 원본 MongoDB 로컬 접속 설정
+# 원본 DB의 호스트 포트를 로컬 주소에만 선택적으로 공개한다.
 services:
   mongo-raw:
     ports:

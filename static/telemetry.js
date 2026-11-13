@@ -1,3 +1,8 @@
+/*
+[홍석환] 브라우저 네트워크와 화면 관측
+요청·응답·성능·오류·사용자 동작을 관측하고 비밀값을 가린 뒤 전송한다.
+업무 요청을 재실행하지 않는다.
+*/
 /* Simulation observer. Copies observable values; never replays business requests. */
 (() => {
   'use strict';

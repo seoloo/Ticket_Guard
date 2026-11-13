@@ -1,4 +1,8 @@
-"""Bounded timing and memory settings. Never log credentials."""
+"""
+[홍석환] 원본 배치 처리 설정
+필수값과 배치 크기·대기·쓰기 시간의 허용 범위를 검사한다.
+자격 증명은 로그로 출력하지 않는다.
+"""
 import os
 from dataclasses import dataclass
 

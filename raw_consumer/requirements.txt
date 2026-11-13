@@ -1,3 +1,5 @@
+# [홍석환] 원본 적재기 Python 의존성
+# Kafka 소비와 MongoDB 저장에 필요한 패키지 버전을 고정한다.
 confluent-kafka==2.16.1
 pymongo==4.15.5
 dnspython==2.8.0

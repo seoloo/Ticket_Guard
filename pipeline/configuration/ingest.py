@@ -1,4 +1,8 @@
-"""Configuration contains credentials; never print or serialize it to logs."""
+"""
+[홍석환] Spark 처리 환경 설정
+Kafka·MongoDB·체크포인트·배치 설정을 읽고 허용 범위를 검사한다.
+자격 증명이 포함된 설정은 로그에 출력하지 않는다.
+"""
 import os
 import re
 from dataclasses import dataclass, field

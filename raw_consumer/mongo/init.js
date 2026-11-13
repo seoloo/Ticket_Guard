@@ -1,3 +1,7 @@
+/*
+[홍석환] 원본 MongoDB 최초 초기화
+빈 저장소의 초기 실행에서 쓰기·조회 계정과 원본 컬렉션 구성을 준비한다.
+*/
 // The official entrypoint supplies db on its temporary initialization server.
 const target = db.getSiblingDB(process.env.MONGO_INITDB_DATABASE);
 globalThis.RAW_READER_INITIALIZING = true;

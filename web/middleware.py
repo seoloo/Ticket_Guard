@@ -1,4 +1,8 @@
-"""Server observation copies bodies; collection failures never replace business responses."""
+"""
+[홍석환] 서버 요청·응답 관측 미들웨어
+요청 식별자와 본문·응답·처리 시간을 수집하고 비밀값을 가린다.
+관측 실패로 업무 응답을 대체하지 않는다.
+"""
 import logging
 import time
 import traceback

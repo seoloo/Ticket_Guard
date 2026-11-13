@@ -1,1 +1,5 @@
+<!--
+[홍석환] 예매 진행 단계 표시 구성요소
+단계 순서와 현재·완료 상태를 접근성 정보를 포함해 표시한다.
+-->
 <ol class="progress" aria-label="예매 진행 단계">{% for step in progress %}<li class="{{ step.status }}" {% if step.status == 'active' %}aria-current="step"{% endif %}><span>{% if step.status == 'done' %}✓{% else %}{{ forloop.counter }}{% endif %}</span><b>{{ step.label }}</b></li>{% endfor %}</ol>

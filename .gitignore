@@ -1,3 +1,5 @@
+# [홍석환] Git 추적 제외 항목
+# 가상환경·캐시·비밀 환경 파일과 로컬 결과물을 추적 대상에서 제외한다.
 .venv/
 venv/
 __pycache__/
@@ -5,7 +7,6 @@ __pycache__/
 
 .env
 .env.*
-!.env.example
 
 .pytest_cache/
 .coverage

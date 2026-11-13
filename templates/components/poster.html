@@ -1,1 +1,5 @@
+<!--
+[홍석환] 공연 포스터 표시 구성요소
+공연별 이미지 경로와 대체 텍스트·지연 로딩 속성을 구성한다.
+-->
 {% load static %}<img class="poster {{ poster_class }}" src="{% static 'images/' %}{{ show.poster }}" alt="{{ show.title }} 공연 포스터" {% if lazy %}loading="lazy"{% endif %}>

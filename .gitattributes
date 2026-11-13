@@ -1,3 +1,5 @@
+# [홍석환] 저장소 파일 속성과 줄바꿈 규칙
+# MongoDB 실행 스크립트의 줄바꿈을 Linux 실행 환경에 맞게 유지한다.
 mongo/*.sh text eol=lf
 raw_consumer/mongo/*.sh text eol=lf
 
