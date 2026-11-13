@@ -2,7 +2,7 @@
 [홍석환] 예매 화면 공통 HTML 틀
 메뉴·계정 영역과 정적 자원을 연결하고 개별 화면이 사용할 공통 구조를 제공한다.
 -->
-{% load static %}<!doctype html>
+{% load static assets %}<!doctype html>
 <html lang="ko">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}티켓가드 · 좋아하는 무대와 만나는 순간{% endblock %}</title><meta name="description" content="좋아하는 무대와 만나는 순간. 티켓가드 공연 예매 시뮬레이션."><link rel="stylesheet" href="{% asset 'app.css' %}">{% block extra_css %}{% endblock %}<script src="{% asset 'browser-support.js' %}" defer></script>{% if capture_enabled %}<script src="{% asset 'telemetry.js' %}" defer></script>{% endif %}<script src="{% asset 'app.js' %}" defer></script></head>
 <body data-result-count="{{ shows|length }}" data-screen="{{ screen }}" data-attempt="{{ attempt_id|default:'' }}" data-show="{{ show.id|default:'' }}" data-price="{{ show.price|default:0 }}" data-kind="{{ show.kind|default:'' }}" data-sequence="{{ sequence|default:0 }}">
