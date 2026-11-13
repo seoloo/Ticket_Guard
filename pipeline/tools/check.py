@@ -1,4 +1,8 @@
-"""No record reads or writes: local Spark, metadata, auth and volume probes."""
+"""
+[홍석환] Spark 실행 환경 사전 점검
+로컬 작업자·Kafka 메타데이터·MongoDB 인증·체크포인트 권한을 확인한다.
+이벤트 소비와 DB 적재는 수행하지 않는다.
+"""
 import os
 import platform
 import socket

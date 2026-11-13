@@ -1,3 +1,7 @@
+"""
+[홍석환] 웹 요청 경로 등록
+화면·예매 동작·이벤트 수집·상태 확인 요청을 담당 처리 함수에 연결한다.
+"""
 from django.urls import path
 from web import views
 from web.capture_views import capture

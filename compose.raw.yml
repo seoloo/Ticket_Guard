@@ -1,3 +1,5 @@
+# [홍석환] Kafka 원본 적재 서비스 구성
+# 원본 소비자와 원본 MongoDB의 환경변수·네트워크·저장소를 정의한다.
 name: ticket-guard-raw
 services:
   raw-consumer:

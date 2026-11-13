@@ -1,4 +1,39 @@
+<!--
+[홍석환] 관리자 대시보드 실행 안내
+관리자 인증, MongoDB 연결, 서비스 실행 및 전용 검증 방법을 설명한다.
+-->
 # DB 관리자 대시보드
+
+## 실제 사용자 흐름 공개 지표
+
+- `/admin/`: Spark가 검증 후 공개한 사용자 흐름의 최신 수치·네트워크 그래프·시계열을 표시한다.
+- `/admin/db`: 기존 정제 이벤트·컬렉션·사용자 관측 조회를 보존한 경로다.
+- `/admin/preview`: 실제 DB를 사용하지 않는 고정 시안이다.
+
+기존 `TICKET_GUARD_ADMIN_MONGO_URI`만 사용한다. 새 연결 환경변수·데이터 API·자동 갱신은 추가하지 않는다. 현재 연결 대상에서 `flow_read_current`, `flow_read_series`를 읽을 수 있어야 한다. 파이프라인의 공개 뷰·계정은 별도 DB 담당 설정이며 관리자 앱이 생성하지 않는다.
+
+실제 공개 조회는 `user_flow/reader.py`, 계약 검사는 `user_flow/contracts.py`, 표시 형식은 `user_flow/presentation.py`, 페이지 연결은 `user_flow/pages.py`에서 담당한다. 시안과 실제 화면은 관점 탐색·사용자 흐름 템플릿·그래프 코드를 공유하지만 자료 공급 경로는 분리한다.
+
+네트워크·이상탐지는 실제 집계 계약이 아직 연결되지 않아 실제 화면에 미연결 안내만 표시한다. 공개 결과 없음·인증 실패·권한 부족·형식 오류·버전 불일치를 샘플이나 0으로 대체하지 않는다. 기존 이벤트 화면도 현재 연결 설정과 권한에 따라 조회되며, 서로 다른 DB의 자료를 임의로 찾아 합치지 않는다.
+
+실제 연결 상태와 검사 기록은 [공개 지표 연결 기록](LIVE_CONNECTION.md)을 참고한다.
+
+## 세 관점 화면 시안
+
+- 사용자 흐름: `/admin/preview#flow` — 확정 지표 다섯 가지를 네트워크 그래프·수치·시계열로 표현한다.
+- 네트워크 상태: `/admin/preview#network` — 요청·오류·응답 미수신·관측 시간의 검토용 제안이다.
+- 이상탐지: `/admin/preview#anomaly` — 신호 유형과 대상별 관측 근거를 확인하는 검토용 제안이다.
+
+모든 시안은 고정 샘플이며 실제 DB 연결·자동 갱신·운영 조치를 수행하지 않는다. 기존 `/admin/` 실제 화면은 유지한다.
+
+샘플 데이터는 `src/ticket_guard_admin/monitoring_preview_data.py`, 공통 틀은 `templates/monitor_preview.html`, 관점별 화면은 `templates/preview_*.html`, 그래프와 동작은 `static/monitor_*.js`에 분리한다. 실제 데이터를 연결할 때는 이 데이터 전달 경계를 교체하고 단위·버전·결측값 계약을 확인한다.
+
+브라우저 검사 도구는 `tests/check_preview_browser.cjs`다. 기존 관리자 설정과 게이트웨이를 사용하고 `output/admin-preview/`에 화면을 저장한다. 별도 공개 포트나 DB 쓰기는 수행하지 않는다. 관리자 로그인 과정의 일반 웹 관측 이벤트는 기존 수집 경로를 따른다.
+
+```powershell
+$env:PYTHONPATH='admin_dashboard/src;qa/src'
+.venv/Scripts/python.exe -m pytest admin_dashboard/tests qa/tests/unit_tests/test_live_mongo_reader.py -q
+```
 
 관리자 앱은 `admin_dashboard` 브랜치의 루트 `admin_dashboard/`에 둔다. Python 패키지는 `src/ticket_guard_admin/`이며 `ticket_guard_qa`를 import하지 않는다.
 QA 시험 실행 앱과 별도 프로세스로 실행하며 QA DB, Run 상태, 정답표를 초기화하거나 조회하지 않는다.

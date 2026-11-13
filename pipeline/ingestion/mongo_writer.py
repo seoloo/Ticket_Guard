@@ -1,3 +1,7 @@
+"""
+[홍석환] Spark 배치의 MongoDB 저장 처리
+정상·격리 이벤트를 저장하고 재시도와 대시보드용 집계를 수행한다.
+"""
 import time
 from datetime import datetime, timezone
 from functools import partial

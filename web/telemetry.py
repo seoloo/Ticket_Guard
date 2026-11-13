@@ -1,4 +1,7 @@
-"""Simulation capture: preserve observable fields; redact credentials with an audit."""
+"""
+[홍석환] 관측 데이터 정제와 비밀값 보호
+요청·응답 본문을 관측 형식으로 변환하고 자격 증명 가림 및 수집 한계를 기록한다.
+"""
 import base64
 import json
 import re

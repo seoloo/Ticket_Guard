@@ -1,0 +1,34 @@
+<!--
+[홍석환] DB 대시보드 세 관점 시안의 공통 틀
+공통 헤더·관점 탐색·샘플 안내와 화면별 템플릿을 연결한다.
+-->
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DB 대시보드 시안 · 사용자 흐름 | 티켓가드</title>
+  <link rel="stylesheet" href="{{ base_path }}/admin-static/theme_tokens.css">
+  <link rel="stylesheet" href="{{ base_path }}/admin-static/dashboard.css">
+  <link rel="stylesheet" href="{{ base_path }}/admin-static/shell.css">
+  <link rel="stylesheet" href="{{ base_path }}/admin-static/monitor_common.css">
+  <link rel="stylesheet" href="{{ base_path }}/admin-static/monitor_flow.css">
+  <script src="{{ base_path }}/admin-static/monitor_charts.js" defer></script>
+  <script src="{{ base_path }}/admin-static/monitor_flow.js" defer></script>
+  <script src="{{ base_path }}/admin-static/monitor_anomaly.js" defer></script>
+  <script src="{{ base_path }}/admin-static/monitor_navigation.js" defer></script>
+</head>
+<body class="monitor-preview" data-review-owner="{{ admin_user }}" data-review-scope="{{ base_path }}" data-reference="{{ run_id or '' }}">
+<a class="mp-skip" href="#preview-content">본문 바로가기</a>
+{% include "header.html" %}
+{% include 'monitor_navigation.html' %}
+<main id="preview-content" class="mp-main" tabindex="-1">
+  <div class="mp-notice"><span class="mp-pill">시안용 샘플 데이터</span><span>샘플 데이터 기반 화면 시안 · 실제 DB 연결 없음</span><a href="{{ base_path }}/">실제 DB 화면 보기 ↗</a></div>
+  {% with flow=preview.flow, is_preview=true %}{% include "monitor_user_flow.html" %}{% endwith %}
+  {% include "preview_network.html" %}
+  {% include "preview_anomaly.html" %}
+  <noscript><p class="mp-warning">그래프와 관점 전환은 JavaScript를 켜야 사용할 수 있습니다.</p></noscript>
+  <footer class="mp-footer">TicketGuard DB 대시보드 · 화면 구성 검토용 <span>{{ preview.snapshot }} 기준 고정 샘플</span></footer>
+</main>
+<script id="monitor-preview-data" data-monitor-data type="application/json">{{ preview | tojson }}</script>
+<div id="mp-view-status" class="mp-sr" role="status" aria-live="polite"></div>
+</body></html>

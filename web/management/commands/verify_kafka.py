@@ -1,4 +1,7 @@
-"""Isolated Django fixtures + real Kafka. Does not mutate the live web process."""
+"""
+[홍석환] Django 이벤트와 Kafka 연동 검증 명령
+격리된 시험 입력으로 실제 발행 결과를 확인하고 운영 웹 프로세스는 변경하지 않는다.
+"""
 import json
 import time
 from datetime import datetime,timezone

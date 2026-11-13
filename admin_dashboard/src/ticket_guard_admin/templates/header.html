@@ -1,4 +1,7 @@
-{# QA와 동일한 브랜드·아이콘·배치. 관리자 앱 안에서 독립적으로 제공. #}
+<!--
+[홍석환] 관리자 공통 브랜드와 주 메뉴
+기존 인증 사용자와 실제 조회·시안의 확인된 상태를 표시한다.
+-->
 {% macro nav_icon(name) -%}
 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 {% if name == 'home' %}<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>
@@ -20,7 +23,7 @@
     <a href="{{ base_path }}/" class="active" aria-current="page">{{ nav_icon('database') }}DB 대시보드</a>
   </nav>
   <div class="top-bar-right account">
-    <span class="target-chip sample-status"><i class="status-dot {{ 'is-down' if error is defined and error else 'is-preview' if error is not defined }}"></i>{{ ('DB 연결 실패' if error else 'DB 연결 정상') if error is defined else '샘플 데이터' }}</span>
+    {% if header_status is defined %}<span class="target-chip sample-status"><i class="status-dot {{ 'is-down' if header_error else 'is-preview' if header_tone != 'normal' else '' }}"></i>{{ header_status }}</span>{% else %}<span class="target-chip sample-status"><i class="status-dot {{ 'is-down' if error is defined and error else 'is-preview' if error is not defined }}"></i>{{ ('DB 연결 실패' if error else 'DB 연결 정상') if error is defined else '샘플 데이터' }}</span>{% endif %}
     <span class="admin-user">{{ nav_icon('user') }}{{ admin_user }}</span>
   </div>
 </header>

@@ -1,3 +1,7 @@
+<!--
+[홍석환] 시스템 구성과 구현 경계 설명
+예매 서비스와 이벤트 처리 경로의 책임 및 후속 구현 범위를 정리한다.
+-->
 # Ticket Guard: phase 1 boundaries and required next steps
 
 ## Data paths

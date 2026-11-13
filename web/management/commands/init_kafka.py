@@ -1,3 +1,7 @@
+"""
+[홍석환] Kafka 이벤트 토픽 초기화 명령
+설정된 토픽과 보관 정책을 준비하고 실행 환경의 구성을 확인한다.
+"""
 import os
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError

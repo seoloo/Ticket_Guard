@@ -1,3 +1,7 @@
+"""
+[홍석환] Kafka 수집 이벤트 소비 명령
+토픽의 전송 레코드를 읽고 이벤트 검증과 청크 재조립 결과를 확인한다.
+"""
 import json
 import time
 from django.conf import settings

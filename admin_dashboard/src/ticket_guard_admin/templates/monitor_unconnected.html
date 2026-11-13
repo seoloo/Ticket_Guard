@@ -1,0 +1,7 @@
+<!--
+[홍석환] 실제 지표 미연결 관점 안내
+네트워크·이상탐지에 운영 수치를 만들지 않고 계약 검토 상태를 표시한다.
+-->
+{% for view,title,description in [('network','네트워크 상태','요청·오류·응답 관측 지표의 실제 집계 계약을 검토 중입니다.'),('anomaly','이상탐지','의심 신호의 집계·판정 계약을 검토 중입니다. 실제 봇 판정이나 운영 조치를 제공하지 않습니다.')] %}
+<section class="mp-view" data-preview-view="{{ view }}" aria-labelledby="{{ view }}-title" hidden><div class="mp-heading"><div><h1 id="{{ view }}-title" tabindex="-1">{{ title }}</h1><p>{{ description }}</p></div><span class="mp-pill mp-proposed">지표 미연결</span></div><section class="mp-card mp-empty-state"><span class="mp-state-symbol" aria-hidden="true">◇</span><h2>구성 검토 중</h2><p>현재 표시 가능한 실제 공개 지표가 없습니다.</p><a class="mp-text-button" href="{{ base_path }}/preview#{{ view }}">검토용 화면 시안 보기 ↗</a></section></section>
+{% endfor %}

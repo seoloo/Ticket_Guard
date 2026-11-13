@@ -1,4 +1,8 @@
-"""Asynchronous, bounded delivery. This is NOT a durable outbox."""
+"""
+[홍석환] 이벤트 생성과 Kafka 비동기 발행
+전송 상태·재시도·중복·청크 분할과 재조립을 관리한다.
+메모리 기반 발행 상태는 영속 송신 보관함을 대신하지 않는다.
+"""
 import atexit
 import base64
 import math

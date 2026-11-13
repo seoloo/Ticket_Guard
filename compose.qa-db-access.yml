@@ -1,3 +1,5 @@
+# [홍석환] QA의 시스템·원본 DB 조회 연결 구성
+# 기존 실행 설정에 읽기 전용 DB 연결과 내부 네트워크 접근을 추가한다.
 # Optional: append LAST, after compose.gateway.yml, qa-db and qa-live.
 # Read-only DB access only; no public ports or Docker socket.
 services:

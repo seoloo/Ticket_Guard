@@ -1,4 +1,8 @@
-"""Demo-only service, protected by one process lock. Never use with multiple workers."""
+"""
+[홍석환] 예매 시뮬레이션 업무 상태 관리
+대기열·보안문자·재고·예매 확정과 시나리오 동작을 메모리에서 관리한다.
+단일 프로세스 잠금을 사용하므로 다중 작업자 운영용 저장소로 사용하지 않는다.
+"""
 import secrets
 import math
 import time

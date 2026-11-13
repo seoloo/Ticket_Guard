@@ -1,4 +1,7 @@
-"""Lossless Kafka transport record; _id encoding matches the previous writer."""
+"""
+[홍석환] 원본 Kafka 전송 정보 보존
+원본 식별자·토픽·파티션·오프셋과 키·본문·헤더를 저장용 BSON으로 변환한다.
+"""
 import hashlib
 import json
 from datetime import datetime, timezone

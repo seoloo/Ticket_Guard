@@ -1,2 +1,4 @@
+# [홍석환] Spark 처리용 Python 의존성
+# MongoDB 연결과 이름 해석에 필요한 패키지 버전을 고정한다.
 pymongo==4.15.5
 dnspython==2.8.0

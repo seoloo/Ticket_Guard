@@ -1,4 +1,7 @@
-"""Run fail with dedicated DB stopped, then recover after starting that DB."""
+"""
+[홍석환] 원본 DB 중단과 복구 검증
+전용 DB의 중단·재시작 상황에서 적재 실패와 소비 복구를 확인한다.
+"""
 import os
 import sys
 import time
